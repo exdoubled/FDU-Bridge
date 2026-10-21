@@ -1,4 +1,4 @@
-# ZJU Connect
+# FDU Connect
 
 > 🚫 **免责声明**
 >
@@ -8,111 +8,73 @@
 
 中文 | [English](README_en.md)
 
-**本程序基于 [EasierConnect](https://github.com/lyc8503/EasierConnect)（现已停止维护）完成，感谢原作者 [lyc8503](https://github.com/lyc8503)。**
+本程序参考 [AkiraSalvare/fdu-connect](https://github.com/AkiraSalvare/fdu-connect) 的复旦适配，基于 [ZJU Connect](https://github.com/Mythologyli/zju-connect) 的 aTrust 实现继续开发，感谢原作者 [AkiraSalvare](https://github.com/AkiraSalvare)、[Mythologyli](https://github.com/Mythologyli) 以及原项目的贡献者。
 
-**QQ 交流群：1037726410**，欢迎使用者加入交流。
+**ZJU Connect 基于 [EasierConnect](https://github.com/lyc8503/EasierConnect)（现已停止维护）完成，感谢原作者 [lyc8503](https://github.com/lyc8503)。**
 
-### 使用方法
+本分支面向复旦大学 aTrust／UIS 登录，新增浏览器回调捕获、选择性分流和 Windows 管理窗口。VPN 协议、本地代理及其他通用能力继承自上游。
 
-#### 使用 GUI 版客户端
+**上游 QQ 交流群：1037726410**，欢迎使用者加入交流。
 
-+ 如果你是来自 ZJU 的用户：
-  + Windows 用户推荐使用 [ZJU Connect for Windows](https://github.com/mythologyli/zju-connect-for-Windows)。
-  + Linux/macOS 用户可以尝试使用 [Chenx Dust](https://github.com/chenx-dust) 开发的客户端 [EZ4Connect](https://github.com/chenx-dust/EZ4Connect)（推荐，支持 aTrust 协议）或 [kowyo](https://github.com/kowyo) 开发的客户端 [hitsz-connect-verge](https://github.com/kowyo/hitsz-connect-verge)。
-    注意请设置服务器地址为 `rvpn.zju.edu.cn:443`。
-+ 如果你是非 ZJU 的用户：
+## 新适配功能
 
-  可以尝试使用 [Chenx Dust](https://github.com/chenx-dust) 开发的客户端 [EZ4Connect](https://github.com/chenx-dust/EZ4Connect)（推荐，支持 aTrust 协议）或 [kowyo](https://github.com/kowyo) 开发的客户端 [hitsz-connect-verge](https://github.com/kowyo/hitsz-connect-verge)。
+- 在独立的 Edge／Chrome 窗口完成 UIS 登录，自动接收认证回调。
+- 按精确域名、域名后缀、IPv4 或网段分流；指定目标走 FDU，其余应用流量交给 Clash 外网节点。
+- 在 Windows 小窗口中切换外网节点，添加、删除规则，分别勾选每条规则是否启用。
+- 保存规则后自动加载，新连接使用新规则；已有连接保留原路径。
 
-#### 直接运行
+## 使用方法
 
-##### 使用 EasyConnect 协议
+### FDU 客户端
 
-+ 如果你是来自 ZJU 的用户：
+Go 版本需满足 [go.mod](go.mod)。首次使用时，将 [config.toml.example](config.toml.example) 另存为 `config.toml`；已有配置可继续使用。
 
-  1. 在 [Release](https://github.com/mythologyli/zju-connect/releases) 页面下载对应平台的最新版本。
+```powershell
+.\fdu-connect.exe -config .\config.toml
+```
 
-  2. 以 macOS 为例，解压出可执行文件 `zju-connect`。
+以上为 Windows 命令。Linux/macOS 使用 `go build -o fdu-connect .` 构建，再运行 `./fdu-connect -config ./config.toml`，按终端提示完成登录。
 
-  3. macOS 需要先解除安全限制。命令行运行：`sudo xattr -rd com.apple.quarantine zju-connect`。
+配置使用 `vpn.fudan.edu.cn:443`，认证类型为 `auth/httpsOauth2`，登录域为 `id.fudan.edu.cn`。Windows 下按弹出的登录窗口完成 UIS 认证，无需把 UIS 密码写入配置。
 
-  4. 命令行运行：`./zju-connect -protocol easyconnect -username <上网账户> -password <密码>`。
+示例默认独立运行，提供本地代理，分流功能保持关闭。启动后，将应用的 SOCKS5 代理设为 `127.0.0.1:1080`，或 HTTP 代理设为 `127.0.0.1:1081`。修改监听地址和端口请参考参数说明。
 
-  5. 此时 `1080` 端口为 Socks5 代理，`1081` 端口为 HTTP 代理。如需更改默认端口，请参考参数说明。
+请显式传入 `-config`：程序的内置默认值仍沿用上游，复旦配置以 [config.toml.example](config.toml.example) 为准。其他学校的用户建议参考原版 [ZJU Connect](https://github.com/Mythologyli/zju-connect)。
 
-+ 如果你是非 ZJU 的用户：
+### 作为服务运行
 
-  其他步骤与上述相同，运行参数请尝试设置为：
+参考上游的[服务运行说明](docs/service.md)，其中的可执行文件路径和配置文件需换成本分支的实际路径。
 
-  `./zju-connect -server <服务器地址> -port <服务器端口> -username xxx -password xxx -disable-zju-config -skip-domain-resource -remote-dns-server auto`
+### Docker 运行
 
-  如果你的服务器需要输入图形验证码，运行参数请尝试设置为：
+参考上游的 [Docker 说明](docs/docker.md)。文中的镜像属于上游，不包含本分支新增功能；运行本分支需从当前源码构建镜像。Windows 浏览器自动捕获和管理窗口不适用于容器。
 
-  `./zju-connect -server <服务器地址> -port <服务器端口> -username xxx -password xxx -disable-zju-config -skip-domain-resource -remote-dns-server auto -disable-multi-line -graph-code-file graph_code.jpg`
+## ⚠️ 警告
 
-  登录时会将图片保存至 `graph_code.jpg` 文件，请查看并手动输入验证码。
+1. 与 Clash TUN 配合使用时，需要正确配置分流并将 VPN 底层连接绑定到物理网卡，避免流量回环，可参考上游的[相关讨论](https://github.com/Mythologyli/zju-connect/issues/57)。
+2. 选择性分流模式下，指定目标走 FDU，其余进入代理的 TCP/UDP 流量交给 `routing.upstream_proxy`。该上游应指向固定使用 `INTERNET` 的 Clash 专用监听，不能再指回 `GLOBAL` 或 FDU。
+3. 规则只决定流量路径，不会扩大学校授予的资源权限。按域名分流需要应用或 Clash 提供域名，只有 IP 的连接请添加 IP 规则。
 
-  *详情见此[链接](https://github.com/Mythologyli/zju-connect/issues/65#issuecomment-2650185322)*
+## ⚠️ TUN 模式注意事项
 
-##### 使用 aTrust 协议
+1. **与 Clash TUN 配合分流时，只开启 Clash 的系统 TUN，FDU 的 `tun_mode` 和 `add_route` 保持关闭。** 本分支使用进程内网络栈访问校内资源，无需额外创建 FDU 虚拟网卡。
+2. 以下说明适用于单独启用 FDU TUN 的通用模式，不能与本分支的选择性分流同时启用。
+3. 单独启用 FDU TUN 需要管理员权限；Windows 系统还需要从 [Wintun 官网](https://www.wintun.net)下载 `wintun.dll` 并放在可执行文件同目录。
+4. aTrust 单独使用 TUN 时，建议配合 `dns-hijack` 和 `fake-ip`，以便正确处理域名资源。
 
-+ 如果你是来自 ZJU 的用户：
+## 参数说明
 
-  其他步骤与 EasyConnect 相同，运行参数请设置为：
+### 通用参数
 
-  `./zju-connect -protocol atrust -username <上网账户> -password <密码> -client-data-file client_data.json`
++ `protocol`: 登录协议，支持 `easyconnect`/`atrust`。内置默认值为 `easyconnect`，复旦示例配置使用 `atrust`
 
-  之后按照提示操作。如果你不希望保存登录状态，可以不填 `-client-data-file` 参数。
-
-+ 如果你是非 ZJU 的用户：
-
-  其他步骤与 ZJU 用户相同，请根据情况指定登录域及协议。
-
-  **如何确定登录域及协议？**
-
-  1. 运行 `./zju-connect -protocol atrust -server <服务器地址> -port <服务器端口> -auth-info`。
-  2. 该命令会获取可用的认证方式，例如
-     ```json
-     [{"loginDomain":"Radius","authType":"auth/psw","authName":"上网账号","loginUrl":""},{"loginDomain":"local","authType":"auth/psw","authName":"IDC运维账号","loginUrl":""},{"loginDomain":"radius93482","authType":"auth/psw","authName":"INTL ID","loginUrl":""}]
-     ```
-     包含三个登录方式。方式一的登录域为 `Radius`，认证类型为 `auth/psw`。如果要使用方式一登录，则需要在运行参数中添加 `-login-domain Radius -auth-type "auth/psw"`。
-  3. 目前支持的认证类型包括 `auth/psw`（密码验证）、`auth/cas`（CAS 验证）、`auth/smsCheckCode`（短信验证码验证）。
-
-#### 作为服务运行
-
-[链接](docs/service.md)
-
-#### Docker 运行
-
-[链接](docs/docker.md)
-
-### 警告
-
-1. 当使用其他开启了 TUN 模式的代理工具，同时配合 zju-connect 作为下游代理时，请注意务必提供正确的分流规则，参考[此 issue](https://github.com/Mythologyli/zju-connect/issues/57)
-
-### TUN 模式注意事项
-
-1. 需要管理员权限运行
-
-2. Windows 系统需要前往 [Wintun 官网](https://www.wintun.net)下载 `wintun.dll` 并放置于可执行文件同目录下
-
-3. EasyConnect 协议下的推荐配置为 `-tun-mode -add-route -dns-hijack`
-
-4. aTrust 协议下的推荐配置为 `-tun-mode -add-route -dns-hijack -fake-ip`。在使用 aTrust 协议时，如果不使用 DNS劫持/Fake IP，直接通过 TUN 网卡的涉及域名的 TCP 流量可能会出错
-
-### 参数说明
-
-#### 通用参数
-
-+ `protocol`: 登录协议，支持 `easyconnect`/`atrust`，默认为 `easyconnect`
-
-+ `server`: VPN 服务端地址，默认为 `rvpn.zju.edu.cn`/`vpn.zju.edu.cn`
++ `server`: VPN 服务端地址。复旦 aTrust 使用 `vpn.fudan.edu.cn`；请显式传入复旦配置，未传配置时仍沿用上游默认值
 
 + `port`: VPN 服务端端口，默认为 `443`
 
-+ `username`: 网络账户。例如：学号
++ `username`: 网络账户，例如学号。复旦 UIS 浏览器登录时可留空
 
-+ `password`: 网络账户密码（敏感信息建议使用环境变量 `ZJU_CONNECT_PASSWORD` 给定）
++ `password`: 网络账户密码。复旦 UIS 浏览器登录时可留空；其他密码认证可使用环境变量 `ZJU_CONNECT_PASSWORD` 给定
 
 + `graph-code-file`: 图形验证码文件路径。默认为空。在 aTrust 模式下，留空时使用浏览器完成验证码，设置路径则登录时会将图形验证码保存至该文件，由用户手动输入 JSON
 
@@ -122,17 +84,17 @@
 
 + `disable-server-config`: 禁用服务端配置，一般不需要加此参数
 
-+ `socks-bind`: SOCKS5 代理监听地址，默认为 `:1080`
++ `socks-bind`: SOCKS5 代理监听地址，内置默认值为 `:1080`，复旦示例配置使用 `127.0.0.1:1080`
 
 + `socks-user`: SOCKS5 代理用户名，不填则不需要认证
 
 + `socks-passwd`: SOCKS5 代理密码，不填则不需要认证
 
-+ `http-bind`: HTTP 代理监听地址，默认为 `:1081`。为 `""` 时不启用 HTTP 代理
++ `http-bind`: HTTP 代理监听地址，内置默认值为 `:1081`，复旦示例配置使用 `127.0.0.1:1081`。为 `""` 时不启用 HTTP 代理
 
 + `shadowsocks-url`: Shadowsocks 服务端 URL。例如：`ss://aes-128-gcm:password@server:port`。格式[参考此处](https://github.com/shadowsocks/go-shadowsocks2)
 
-+ `dial-direct-proxy`: 当 URL 未命中规则，切换到直连时使用代理，常用于与其他代理工具配合的场景，目前仅支持 http 代理。例如：`http://127.0.0.1:7890"`，为 `""` 时不启用
++ `dial-direct-proxy`: 普通模式下未命中 VPN 规则时使用的上游代理，支持 `http://` 和 `socks://`，例如 `http://127.0.0.1:7890`。选择性分流模式请使用 `routing.upstream_proxy`
 
 + `tcp-tunnel-mode`: TCP 隧道模式，默认为 `false`。启用后仅可通过 TCP 隧道代理 TCP 流量。由于只有 aTrust 支持 TCP 隧道，此模式在 EasyConnect 下无效。启用后会禁用 TUN 模式
 
@@ -172,7 +134,7 @@
 
 + `udp-port-forwarding`: UDP 端口转发，格式为 `本地地址-远程地址,本地地址-远程地址,...`，例如 `127.0.0.1:53-10.10.0.21:53`。多个转发用 `,` 分隔
 
-+ `custom-dns`: 指定自定义 DNS 解析结果，格式为 `域名:IP,域名:IP,...`，例如 `www.cc98.org:10.10.98.98,appservice.zju.edu.cn:10.203.8.198`。多个解析用 `,` 分隔
++ `custom-dns`: 指定自定义 DNS 解析结果，格式为 `域名:IP,域名:IP,...`，例如 `host.internal.example:192.0.2.10`。多个解析用 `,` 分隔，请替换为实际资源
 
 + `proxy-all`: 是否代理所有流量，一般不需要加此参数
 
@@ -180,11 +142,11 @@
 
 配置按“内置默认值 < TOML 配置文件 < 环境变量 < 命令行参数”的优先级合并。只有显式提供的命令行参数会覆盖其他来源，例如 `-tun-mode=false` 可以关闭配置文件或环境变量中启用的选项。
 
-配置项均可使用带 `ZJU_CONNECT_` 前缀的大写环境变量设置，例如 `server_address` 对应 `ZJU_CONNECT_SERVER_ADDRESS`，`tun_mode` 对应 `ZJU_CONNECT_TUN_MODE`。集合项使用与命令行参数相同的语法和名称，例如 `ZJU_CONNECT_TCP_PORT_FORWARDING=127.0.0.1:9898-10.10.98.98:80`、`ZJU_CONNECT_CUSTOM_DNS=www.cc98.org:10.10.98.98` 和 `ZJU_CONNECT_CUSTOM_PROXY_DOMAIN=nature.com,science.org`。
+配置项均可使用带 `ZJU_CONNECT_` 前缀的大写环境变量设置，例如 `server_address` 对应 `ZJU_CONNECT_SERVER_ADDRESS`，`tun_mode` 对应 `ZJU_CONNECT_TUN_MODE`。集合项使用与命令行参数相同的语法和名称，例如 `ZJU_CONNECT_TCP_PORT_FORWARDING=127.0.0.1:9898-10.10.98.98:80`、`ZJU_CONNECT_CUSTOM_DNS=host.internal.example:192.0.2.10` 和 `ZJU_CONNECT_CUSTOM_PROXY_DOMAIN=nature.com,science.org`。
 
 旧名称 `disable_zju_dns`、`zju_dns_server` 及其命令行参数和环境变量仍然兼容，但已弃用；请改用 `disable_remote_dns` 和 `remote_dns_server`。
 
-#### EasyConnect 相关参数
+### EasyConnect 相关参数
 
 + `cert-file`: p12 证书文件路径，如果服务器要求证书验证，需要配置此参数
 
@@ -200,21 +162,23 @@
 
 + `twf-id`: twfID 登录，调试用途，一般不需要加此参数
 
-#### aTrust 相关参数
+### aTrust 相关参数
 
-+ `auth-type`: aTrust 登录验证类型，支持 `auth/psw`（密码验证）、`auth/cas`（CAS 验证）、`auth/smsCheckCode`（短信验证码验证），默认为自动检测
++ `auth-type`: aTrust 登录验证类型，支持 `auth/psw`（密码验证）、`auth/cas`（CAS 验证）、`auth/smsCheckCode`（短信验证）和 `auth/httpsOauth2`（浏览器 OAuth2 验证）。复旦 UIS 使用 `auth/httpsOauth2`
 
-+ `login-domain`: 登录域，默认为 `Radius`
++ `login-domain`: 登录域，内置默认值为 `Radius`，复旦 UIS 配置使用 `id.fudan.edu.cn`
 
 + `client-data-file`: 客户端数据文件路径，可用于保存登录状态，避免重复验证
 
 + `cas-ticket`: CAS 验证票据，默认为空，此时进入交互式验证
 
++ `oauth2-code`: 手动提供 OAuth2 回调中的 code；复旦 UIS 自动登录时无需填写
+
 + `phone`: 短信验证码登录时使用的手机号
 
 + `update-best-nodes-interval`: 自动选择最优线路的更新间隔，单位为秒，默认为 `300` 秒。设置为 `0` 则禁用自动选择最优线路
 
-+ `session-refresh-interval`: aTrust SID 刷新间隔，单位为秒，默认为 `1800`。设置为 `0` 则禁用定时刷新。
++ `session-refresh-interval`: aTrust 会话刷新间隔，单位为秒，默认为 `1800`。设置为 `0` 则禁用定时刷新。
 
 + `auth-info`: 仅获取 aTrust 验证信息而不登录，一般不需要加此参数。可用于查看服务端支持的验证方式
 
@@ -230,35 +194,26 @@
 
 + `resource-file`: aTrust 资源文件，调试用途，一般不需要加此参数
 
-### 计划表
+### 选择性分流配置
 
-#### 已完成
+以下为 TOML 配置文件的 `[routing]` 配置项；完整示例见 [config.toml.example](config.toml.example)。
 
-- [x] 代理 TCP 流量
-- [x] 代理 UDP 流量
-- [x] SOCKS5 代理服务
-- [x] HTTP 代理服务
-- [x] Shadowsocks 代理服务
-- [x] 远端 DNS 解析
-- [x] ZJU 规则添加
-- [x] 支持 IPv6 直连
-- [x] DNS 缓存加速
-- [x] 自动选择线路
-- [x] TCP 端口转发功能
-- [x] UDP 端口转发功能
-- [x] 通过配置文件启动
-- [x] 定时保活
-- [x] TUN 模式
-- [x] 自动劫持 DNS
-- [x] 短信验证
-- [x] TOTP 验证
-- [x] 证书验证
-- [x] aTrust 协议支持
-- [x] Fake IP
+需要与 Clash TUN 配合时，再配置专用 SOCKS5 监听、底层网卡和要访问的校园资源，然后启用分流。各人的网卡、监听端口和资源权限不同，示例不预填这些值。小窗口规则需先保存为文件，再将 `rules_file` 指向该文件；建议填写绝对路径。
 
-#### To Do
++ `enabled`: 是否启用选择性分流，默认关闭。需使用 aTrust，并配置 `bind_interface` 或 `auto_detect_interface`，保持 `tun_mode`、`add_route`、`dns_hijack`、`fake_ip` 关闭
 
-### 贡献者
++ `domains`: 精确匹配的域名，不包含协议、端口或路径
+
++ `domain_suffixes`: 域名后缀，同时匹配该域名本身及其子域名
+
++ `ip_cidrs`: IPv4 网段，只填写需要走 FDU 的资源。内联规则中的单个 IP 请写为 `/32`；小窗口规则文件也接受单个 IPv4 地址
+
++ `upstream_proxy`: 启用分流时必填，填写自己的 Clash 专用 SOCKS5 监听地址。必须使用本机回环 IP 和实际端口，该监听需固定转发到外网组；默认留空
+
++ `rules_file`: 可选的 JSON 规则文件路径，设置后替代以上三类内联规则，并在保存后自动加载。可通过 Windows 小窗口管理每条规则的启用状态，新规则对新连接生效
+
+
+### 上游贡献者
 
 <a href="https://github.com/mythologyli/zju-connect/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=mythologyli/zju-connect" />
@@ -266,14 +221,14 @@
 
 ### 感谢
 
++ [Mythologyli/zju-connect](https://github.com/Mythologyli/zju-connect)：本分支的直接上游。
+
++ [AkiraSalvare/fdu-connect](https://github.com/AkiraSalvare/fdu-connect)：复旦适配的参考项目。
+
 + [EasierConnect](https://github.com/lyc8503/EasierConnect)
 
 + [socks2http](https://github.com/zenhack/socks2http)
 
 + [![image](docs/yxvm.png)](https://yxvm.com/)
 
-  [NodeSupport](https://github.com/NodeSeekDev/NodeSupport) 赞助了本项目
-
-### Star History
-
-[![Star History Chart](https://api.star-history.com/image?repos=mythologyli/zju-connect&type=date&legend=top-left)](https://www.star-history.com/?repos=mythologyli%2Fzju-connect&type=date&legend=bottom-right)
+  [NodeSupport](https://github.com/NodeSeekDev/NodeSupport) 赞助了上游项目

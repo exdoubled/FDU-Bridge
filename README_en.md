@@ -1,4 +1,4 @@
-# ZJU Connect
+# FDU Connect
 
 > 🚫 **Disclaimer**
 >
@@ -8,108 +8,75 @@
 
 [中文](README.md) | English
 
-**This program is based on [EasierConnect](https://github.com/lyc8503/EasierConnect) (now Archived), thanks to the original author [lyc8503](https://github.com/lyc8503).**
+This program builds on the aTrust implementation in [ZJU Connect](https://github.com/Mythologyli/zju-connect), with reference to the Fudan adaptation in [AkiraSalvare/fdu-connect](https://github.com/AkiraSalvare/fdu-connect). Thanks to the original authors [AkiraSalvare](https://github.com/AkiraSalvare), [Mythologyli](https://github.com/Mythologyli), and the contributors to the original projects.
 
-**QQ group: 1037726410**, welcome to join the discussion.
+**ZJU Connect is based on [EasierConnect](https://github.com/lyc8503/EasierConnect) (no longer maintained). Thanks to its original author [lyc8503](https://github.com/lyc8503).**
 
-### Usage
+This fork targets Fudan University's aTrust / UIS login. It adds browser callback capture, selective routing, and a Windows management window. VPN protocols, local proxy services, and other general capabilities are inherited from upstream.
 
-#### Use a GUI client
+**Upstream QQ group: 1037726410**, welcome to join the discussion.
 
-+ If you are from ZJU:
-  + Windows users are recommended to use [ZJU Connect for Windows](https://github.com/mythologyli/zju-connect-for-Windows)
-  + Linux/macOS users can try the [EZ4Connect](https://github.com/chenx-dust/EZ4Connect) developed by [Chenx Dust](https://github.com/chenx-dust) (support aTrust) or the [hitsz-connect-verge](https://github.com/kowyo/hitsz-connect-verge) developed by [kowyo](https://github.com/kowyo)
-    Please set the server address to `rvpn.zju.edu.cn:443`
-+ If you are not from ZJU:
+## New adaptation features
 
-  You can try the [EZ4Connect](https://github.com/chenx-dust/EZ4Connect) developed by [Chenx Dust](https://github.com/chenx-dust) (support aTrust) or the [hitsz-connect-verge](https://github.com/kowyo/hitsz-connect-verge) developed by [kowyo](https://github.com/kowyo)
+- Complete UIS login in an isolated Edge / Chrome window and capture the authentication callback automatically.
+- Route selected exact domains, domain suffixes, IPv4 addresses, and subnets through FDU; forward other application traffic to Clash's Internet nodes.
+- Switch Internet nodes, add or remove rules, and enable or disable individual rules in a Windows management window.
+- Reload saved rules automatically. New connections use the updated rules; existing connections keep their original routes.
 
-#### Run Directly
+## Usage
 
-##### Using EasyConnect Protocol
+### FDU client
 
-+ If you are a ZJU user:
-  1. Download the latest version for your platform from the [Release](https://github.com/mythologyli/zju-connect/releases) page.
+Use the Go version required by [go.mod](go.mod). For the first run, save [config.toml.example](config.toml.example) as `config.toml`. Existing configurations can be reused.
 
-  2. Taking macOS as an example, extract the executable file `zju-connect`
+```powershell
+.\fdu-connect.exe -config .\config.toml
+```
 
-  3. macOS users need to remove security restrictions first. Run the following in your terminal: `sudo xattr -rd com.apple.quarantine zju-connect`
+These are Windows commands. On Linux/macOS, build with `go build -o fdu-connect .`, then run `./fdu-connect -config ./config.toml` and follow the terminal prompts to log in.
 
-  4. Run the command: `./zju-connect -protocol easyconnect -username <Account> -password <Password>`
+The configuration uses `vpn.fudan.edu.cn:443`, authentication type `auth/httpsOauth2`, and login domain `id.fudan.edu.cn`. On Windows, complete UIS authentication in the login window. There is no need to store the UIS password in the configuration.
 
-  5. By default, port `1080` is the Socks5 proxy and port `1081` is the HTTP proxy. To change these ports, please refer to the parameter descriptions.
+The example runs independently as a local proxy, with selective routing disabled. Once started, set your application's SOCKS5 proxy to `127.0.0.1:1080`, or its HTTP proxy to `127.0.0.1:1081`. See the argument descriptions to change the listening addresses or ports.
 
-+ If you are a non-ZJU user:
+Pass `-config` explicitly: the program's built-in defaults still follow upstream. Use [config.toml.example](config.toml.example) for Fudan settings. Users from other universities should refer to the original [ZJU Connect](https://github.com/Mythologyli/zju-connect).
 
-  The steps are the same as above, but try setting the running parameters as follows:
+### Run as a service
 
-  `./zju-connect -server <Server Address> -port <Server Port> -username xxx -password xxx -disable-zju-config -skip-domain-resource -remote-dns-server auto`
+Refer to the upstream [service instructions](docs/service_en.md). Replace the executable path and configuration file with the actual paths used by this fork.
 
-  *For details, see this [link](https://github.com/Mythologyli/zju-connect/issues/65#issuecomment-2650185322).*
+### Run in Docker
 
-  If your server requires a graphic captcha, try setting the running parameters as follows:
+Refer to the upstream [Docker instructions](docs/docker_en.md). The images documented there belong to upstream and do not include this fork's additions. To run this fork, build an image from the current source. Windows browser callback capture and the management window are not available in containers.
 
-  `./zju-connect -server <Server Address> -port <Server Port> -username xxx -password xxx -disable-zju-config -skip-domain-resource -remote-dns-server auto -disable-multi-line -graph-code-file graph_code.jpg`
+## ⚠️ Warning
 
-  When logging in, the captcha image will be saved to the `graph_code.jpg` file. Please check it and manually enter the captcha code.
+1. When using Clash TUN, configure routing correctly and bind VPN underlay connections to a physical interface to avoid proxy loops. See the upstream [discussion](https://github.com/Mythologyli/zju-connect/issues/57).
+2. In selective routing mode, selected destinations use FDU; other TCP/UDP traffic entering the proxy is forwarded to `routing.upstream_proxy`. This upstream must be a dedicated Clash listener pinned to `INTERNET`, and must not route back to `GLOBAL` or FDU.
+3. Rules determine traffic routes and do not extend campus resource permissions. Domain routing requires the application or Clash to provide the domain name. Add IP rules for connections that provide only IP addresses.
 
-##### Using aTrust Protocol
+## ⚠️ TUN mode precautions
 
-+ If you are a ZJU user:
-  Other steps are the same as the EasyConnect method, but set the running parameters to:
-  `./zju-connect -protocol atrust -username <Account> -password <Password> -client-data-file client_data.json`
-  Then follow the on-screen prompts. If you do not want to save the login status, you can omit the `-client-data-file` parameter.
+1. **When routing with Clash TUN, enable only Clash's system TUN and keep FDU's `tun_mode` and `add_route` disabled.** This fork uses a userspace network stack to access campus resources without creating another FDU virtual adapter.
+2. The following notes apply to ordinary mode with FDU's own TUN enabled. This mode cannot be combined with this fork's selective routing.
+3. FDU TUN requires administrator privileges. On Windows, download `wintun.dll` from the [Wintun website](https://www.wintun.net) and place it next to the executable.
+4. When using aTrust with FDU's own TUN, enable `dns-hijack` and `fake-ip` to handle domain resources correctly.
 
-+ If you are a non-ZJU user:
-  The steps are the same as for ZJU users; please specify the login protocol according to your situation.
-  **How to determine the Login Domain and Protocol?**
+## Arguments
 
-  1. Fetch available authentication methods: `./zju-connect -protocol atrust -server <Server Address> -port <Server Port> -auth-info`.
-  2. Identify your parameters:
-     The command will return a JSON array of available authentication methods. For example:
-     ```json
-     [{"loginDomain":"Radius","authType":"auth/psw","authName":"上网账号","loginUrl":""},{"loginDomain":"local","authType":"auth/psw","authName":"IDC运维账号","loginUrl":""},{"loginDomain":"radius93482","authType":"auth/psw","authName":"INTL ID","loginUrl":""}]
-     ```
-     In this example, there are three methods. To use the first method (Radius), you must append -login-domain Radius -auth-type "auth/psw" to your execution command.
-  3. Supported Authentication Types: `auth/psw` (password), `auth/cas` (CAS), `auth/smsCheckCode` (SMS verification code).
+### General Arguments
 
-#### Run as a service
++ `protocol`: Login protocol, either `easyconnect` or `atrust`. The built-in default is `easyconnect`; the Fudan example configuration uses `atrust`
 
-[Link](docs/service_en.md)
-
-#### Run in Docker
-
-[Link](docs/docker_en.md)
-
-### Warning
-
-1. When using other proxy tools with TUN mode enabled and zju-connect as a downstream proxy, please be sure to provide the correct network diversion rules, refer to [this issue](https://github.com/Mythologyli/zju-connect/issues/57)
-
-### TUN mode precautions
-
-1. Need to run with administrator privileges
-
-2. Windows system needs to go to [Wintun official website](https://www.wintun.net) to download `wintun.dll` and place it in the same directory as the executable file
-
-3. EasyConnect Protocol: The recommended configuration is: `-tun-mode -add-route -dns-hijack`
-
-4. aTrust Protocol: The recommended configuration is: `-tun-mode -add-route -dns-hijack -fake-ip`. Note: When using the aTrust protocol, direct TCP traffic involving domain names via the TUN interface may fail if DNS Hijacking or Fake IP is not enabled
-
-### Arguments
-
-#### General Arguments
-
-+ `protocol`: Login protocol, supports `easyconnect`/`atrust`, default is `easyconnect`
-
-+ `server`: VPN server address, default is `rvpn.zju.edu.cn`/`vpn.zju.edu.cn`
++ `server`: VPN server address. Fudan aTrust uses `vpn.fudan.edu.cn`. Pass the Fudan configuration explicitly; without it, upstream defaults still apply
 
 + `port`: VPN server port, default is `443`
 
-+ `username`: Network account. For example: student ID
++ `username`: Network account, such as a student ID. Leave blank for Fudan UIS browser login
 
-+ `password`: Network account password. (Sensitive information is recommended to be provided via env `ZJU_CONNECT_PASSWORD`)
++ `password`: Network account password. Leave blank for Fudan UIS browser login. For other password-based authentication, use the `ZJU_CONNECT_PASSWORD` environment variable
 
-+ `graph-code-file`: Graphic captcha file path, default is empty. In aTrust mode, if set, the program will save the captcha image to this file and ask user to input the JSON in terminal.
++ `graph-code-file`: Graphic captcha file path, empty by default. In aTrust mode, leave blank to complete the captcha in a browser. If a path is set, the program saves the captcha image there and prompts for JSON input in the terminal
 
 + `totp-secret`: TOTP secret, can be used to automatically complete TOTP verification. If the server doesn't require TOTP or you want to manually enter the code, leave blank. (Sensitive information is recommended to be provided via env `ZJU_CONNECT_TOTP_SECRET`)
 
@@ -117,21 +84,21 @@
 
 + `disable-server-config`: Disable server configuration, generally no need to add this argument
 
-+ `socks-bind`: SOCKS5 proxy listening address, default is `:1080`
++ `socks-bind`: SOCKS5 proxy listening address. The built-in default is `:1080`; the Fudan example configuration uses `127.0.0.1:1080`
 
 + `socks-user`: SOCKS5 proxy username, leave blank if no authentication is required
 
 + `socks-passwd`: SOCKS5 proxy password, leave blank if no authentication is required
 
-+ `http-bind`: HTTP proxy listening address, default is `:1081`. Set to `""` to disable HTTP proxy
++ `http-bind`: HTTP proxy listening address. The built-in default is `:1081`; the Fudan example configuration uses `127.0.0.1:1081`. Set to `""` to disable the HTTP proxy
 
 + `shadowsocks-url`: Shadowsocks server URL. For example: `ss://aes-128-gcm:password@server:port`. Format [refer to here](https://github.com/shadowsocks/go-shadowsocks2)
 
-+ `dial-direct-proxy`: When a URL does not match rules and switches to direct connection, use a proxy. Typically used in conjunction with other proxy tools, currently supports only HTTP proxy. For example: `http://127.0.0.1:7890`. Set to `""` to disable
++ `dial-direct-proxy`: Upstream proxy for destinations that do not match VPN rules in ordinary mode. Supports `http://` and `socks://`, for example `http://127.0.0.1:7890`. Use `routing.upstream_proxy` in selective routing mode
 
 + `tcp-tunnel-mode`: TCP tunnel mode, default is `false`. When enabled, only TCP traffic can be proxied through the TCP tunnel. Since only aTrust supports TCP tunneling, this mode is ineffective under EasyConnect. Enabling this will disable TUN mode
 
-+ `tun-mode`: TUN mode (experimental). Please read the TUN mode precautions below
++ `tun-mode`: TUN mode (experimental). Read the TUN mode precautions
 
 + `add-route`: Add routes according to the configuration issued by the server when TUN mode is enabled
 
@@ -147,11 +114,11 @@
 
 + `dns-server-bind`: DNS server listening address, default is empty (disabled). For example, set to `127.0.0.1:53`, then you can send DNS requests to `127.0.0.1:53`
 
-+ `local-dns-server`: Local DNS server used to resolve the VPN server hostname, as IP or IP:port; when empty, the system DNS is used, routable DNS addresses are bound to the detected underlay interface, and local DNS stubs keep their loopback route
++ `local-dns-server`: Local DNS server used to resolve the VPN server hostname, as IP or IP:port. Leave blank to use system DNS. Routable DNS addresses are bound to the underlay interface after a successful probe; local DNS stubs keep their loopback route
 
 + `dns-hijack`: Hijack DNS requests when TUN mode is enabled, it's recommended to add this argument when using TUN mode
 
-+ `fake-ip`: Enable Fake IP mode. Works with dns-hijack. Don't enable it if you are using EasyConnect protocol
++ `fake-ip`: Enable Fake IP together with `dns-hijack`. Recommended when using aTrust with TUN mode. Has no effect with the EasyConnect protocol
 
 + `debug-dump`: Whether to enable debugging, generally no need to add this argument
 
@@ -167,7 +134,7 @@
 
 + `udp-port-forwarding`: UDP port forwarding, format is `local address-remote address,local address-remote address,...`, for example `127.0.0.1:53-10.10.0.21:53`. Multiple forwardings are separated by `,`
 
-+ `custom-dns`: Specify custom DNS resolution results, format is `domain:IP,domain:IP,...`, for example `www.cc98.org:10.10.98.98,appservice.zju.edu.cn:10.203.8.198`. Multiple resolutions are separated by `,`
++ `custom-dns`: Custom DNS records in the format `domain:IP,domain:IP,...`, for example `host.internal.example:192.0.2.10`. Separate records with `,` and replace the example with an actual resource
 
 + `proxy-all`: Whether to proxy all traffic, generally no need to add this argument
 
@@ -175,11 +142,11 @@
 
 Configuration sources are merged with the precedence “built-in defaults < TOML file < environment variables < command-line flags”. Only explicitly supplied command-line flags override other sources; for example, `-tun-mode=false` disables a value enabled by the file or environment.
 
-Every configuration key can be set with an uppercase environment variable prefixed by `ZJU_CONNECT_`. For example, `server_address` maps to `ZJU_CONNECT_SERVER_ADDRESS`, and `tun_mode` maps to `ZJU_CONNECT_TUN_MODE`. Collection values use the same names and syntax as command-line flags, for example `ZJU_CONNECT_TCP_PORT_FORWARDING=127.0.0.1:9898-10.10.98.98:80`, `ZJU_CONNECT_CUSTOM_DNS=www.cc98.org:10.10.98.98`, and `ZJU_CONNECT_CUSTOM_PROXY_DOMAIN=nature.com,science.org`.
+Every configuration key can be set with an uppercase environment variable prefixed by `ZJU_CONNECT_`. For example, `server_address` maps to `ZJU_CONNECT_SERVER_ADDRESS`, and `tun_mode` maps to `ZJU_CONNECT_TUN_MODE`. Collection values use the same names and syntax as command-line flags, for example `ZJU_CONNECT_TCP_PORT_FORWARDING=127.0.0.1:9898-10.10.98.98:80`, `ZJU_CONNECT_CUSTOM_DNS=host.internal.example:192.0.2.10`, and `ZJU_CONNECT_CUSTOM_PROXY_DOMAIN=nature.com,science.org`.
 
 The old `disable_zju_dns` and `zju_dns_server` names, including their command-line flags and environment variables, remain supported but are deprecated. Use `disable_remote_dns` and `remote_dns_server` instead.
 
-#### EasyConnect Related Arguments
+### EasyConnect Related Arguments
 
 + `cert-file`: p12 certificate file path, if the server requires certificate verification, this parameter needs to be configured
 
@@ -195,58 +162,68 @@ The old `disable_zju_dns` and `zju_dns_server` names, including their command-li
 
 + `twf-id`: twfID login, for debugging purposes, generally no need to add this argument
 
-#### aTrust Related Arguments
+### aTrust Related Arguments
 
-+ `auth-type`: aTrust login authentication type, supports `auth/psw` (password), `auth/cas` (CAS), `auth/smsCheckCode` (SMS verification code), default is auto detected.
-+ `login-domain`: Login domain, default is `Radius`.
++ `auth-type`: aTrust authentication type. Supports `auth/psw` (password), `auth/cas` (CAS), `auth/smsCheckCode` (SMS verification), and `auth/httpsOauth2` (browser OAuth2 verification). Fudan UIS uses `auth/httpsOauth2`
+
++ `login-domain`: Login domain. The built-in default is `Radius`; the Fudan UIS configuration uses `id.fudan.edu.cn`
+
 + `client-data-file`: Client data file path, used to save login status to avoid repeated verification.
-+ `cas-ticket`: CAS verification ticket, defaults to empty, which triggers interactive verification.
+
++ `cas-ticket`: CAS verification ticket. Empty by default, which triggers interactive verification
+
++ `oauth2-code`: Manually supply the code from the OAuth2 callback. Not required for automatic Fudan UIS login
+
 + `phone`: Phone number used for SMS verification code login.
+
 + `update-best-nodes-interval`: Interval for updating the optimal line automatically, in seconds, default is `300`. Set to `0` to disable automatic optimal line selection.
-+ `session-refresh-interval`: aTrust SID refresh interval in seconds, default `1800`. Set to `0` to disable periodic refresh. The TOML key is `session_refresh_interval`; the environment variable is `ZJU_CONNECT_SESSION_REFRESH_INTERVAL`.
+
++ `session-refresh-interval`: aTrust session refresh interval in seconds, default `1800`. Set to `0` to disable periodic refresh
+
 + `auth-info`: Only get aTrust authentication information without logging in, generally no need to add this argument. Can be used to check supported authentication methods.
+
 + `trust-device`: Trust the current device (requires logged-in `-client-data-file`), does not start the tunnel.
+
 + `untrust-device`: Untrust the current device (requires logged-in `-client-data-file`), does not start the tunnel.
+
 + `sid`: aTrust SID, for debugging purposes, generally no need to add this argument.
+
 + `device-id`: aTrust device ID, for debugging purposes, generally no need to add this argument.
+
 + `sign-key`: aTrust signature key, for debugging purposes, generally no need to add this argument.
+
 + `resource-file`: aTrust resource file, for debugging purposes, generally no need to add this argument.
 
-### Schedule
+### Selective routing configuration
 
-#### Completed
+The following settings belong to the `[routing]` section of the TOML configuration file. See [config.toml.example](config.toml.example) for a complete example.
 
-- [x] Proxy TCP traffic
-- [x] Proxy UDP traffic
-- [x] SOCKS5 proxy service
-- [x] HTTP proxy service
-- [x] Shadowsocks proxy service
-- [x] Remote DNS resolution
-- [x] ZJU rules addition
-- [x] Support IPv6 direct connection
-- [x] DNS cache acceleration
-- [x] Automatic line selection
-- [x] TCP port forwarding
-- [x] UDP port forwarding
-- [x] Start through configuration file
-- [x] Periodic keep-alive
-- [x] TUN mode
-- [x] Automatical DNS hijack
-- [x] SMS verification
-- [x] TOTP verification
-- [x] Certificate verification
-- [x] aTrust protocol support
-- [x] Fake IP
+To use Clash TUN, configure a dedicated SOCKS5 listener, the underlay interface, and the campus resources to access before enabling selective routing. Interface names, listener ports, and resource permissions vary between users, so the example leaves these values empty. For management-window rules, save the file first and point `rules_file` to it; an absolute path is recommended.
 
-#### To Do
++ `enabled`: Enable selective routing, disabled by default. Requires aTrust and either `bind_interface` or `auto_detect_interface`. Keep `tun_mode`, `add_route`, `dns_hijack`, and `fake_ip` disabled
 
-### Contributors
++ `domains`: Exact domain names, without a scheme, port, or path
+
++ `domain_suffixes`: Domain suffixes, matching both the suffix itself and its subdomains
+
++ `ip_cidrs`: IPv4 subnets for resources that should use FDU. Use `/32` for a single IP in inline rules; management-window rules files also accept individual IPv4 addresses
+
++ `upstream_proxy`: Required when selective routing is enabled. Use your own dedicated Clash SOCKS5 listener with a literal loopback IP and its actual port, pinned to an Internet group. Empty by default
+
++ `rules_file`: Optional path to a JSON rules file. When set, it replaces the three inline rule lists above and reloads automatically after saving. Use the Windows management window to enable or disable individual rules. Updated rules apply to new connections
+
+
+### Upstream contributors
 
 <a href="https://github.com/mythologyli/zju-connect/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=mythologyli/zju-connect" />
 </a>
 
-### Thanks
+### Acknowledgements
+
++ [Mythologyli/zju-connect](https://github.com/Mythologyli/zju-connect): direct upstream of this fork.
+
++ [AkiraSalvare/fdu-connect](https://github.com/AkiraSalvare/fdu-connect): reference project for the Fudan adaptation.
 
 + [EasierConnect](https://github.com/lyc8503/EasierConnect)
 
@@ -254,8 +231,4 @@ The old `disable_zju_dns` and `zju_dns_server` names, including their command-li
 
 + [![image](docs/yxvm.png)](https://yxvm.com/)
 
-  [NodeSupport](https://github.com/NodeSeekDev/NodeSupport) sponsored this project
-
-### Star History
-
-[![Star History Chart](https://api.star-history.com/image?repos=mythologyli/zju-connect&type=date&legend=top-left)](https://www.star-history.com/?repos=mythologyli%2Fzju-connect&type=date&legend=bottom-right)
+  [NodeSupport](https://github.com/NodeSeekDev/NodeSupport) sponsored the upstream project
