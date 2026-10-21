@@ -59,9 +59,10 @@ func (s *Session) httpsOauth2CallbackFromCode(loginDomain, code string) string {
 
 func (s *Session) interactiveHttpsOauth2(loginURL string) (string, error) {
 	response, err := s.challengeHandler.HandleExternalLogin(authchallenge.ExternalLoginChallenge{
-		Kind:     authchallenge.ExternalLoginOAuth2,
-		LoginURL: loginURL,
-		Message:  "Please enter the callback URL:",
+		Kind:        authchallenge.ExternalLoginOAuth2,
+		LoginURL:    loginURL,
+		CallbackURL: s.baseURL + "/passport/v1/auth/httpsOauth2",
+		Message:     "Please enter the callback URL:",
 	})
 	if err != nil {
 		return "", err

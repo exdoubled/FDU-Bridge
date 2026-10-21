@@ -76,6 +76,9 @@ func TestInteractiveOAuthUsesExternalLoginChallenge(t *testing.T) {
 			if challenge.Kind != authchallenge.ExternalLoginOAuth2 || challenge.LoginURL != "https://idp.example/oauth" {
 				t.Fatalf("unexpected challenge: %+v", challenge)
 			}
+			if challenge.CallbackURL != "https://vpn.example.com/passport/v1/auth/httpsOauth2" {
+				t.Fatalf("missing expected callback endpoint: %q", challenge.CallbackURL)
+			}
 			return authchallenge.ExternalLoginResponse{
 				CallbackURL: "https://vpn.example.com/passport/v1/auth/httpsOauth2?code=oauth-code",
 			}, nil

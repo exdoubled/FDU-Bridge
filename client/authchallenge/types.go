@@ -66,9 +66,10 @@ const (
 )
 
 type ExternalLoginChallenge struct {
-	Kind     ExternalLoginKind
-	LoginURL string
-	Message  string
+	Kind        ExternalLoginKind
+	LoginURL    string
+	CallbackURL string // Expected callback endpoint, without authorization parameters.
+	Message     string
 }
 
 type ExternalLoginResponse struct {
