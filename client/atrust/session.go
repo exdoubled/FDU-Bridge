@@ -4,11 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/mythologyli/zju-connect/client/atrust/auth"
 	"github.com/mythologyli/zju-connect/log"
 )
+
+func invalidSessionError(code int64, message string) error {
+	return fmt.Errorf("%w (code %d): %s", auth.ErrSessionInvalid, code, message)
+}
+
+func (c *Client) reportInvalidSession(err error) {
+	if c.onSessionInvalid == nil {
+		log.Fatalf("aTrust session failed: %v", err)
+		return
+	}
+	c.setSessionSID("", err)
+	c.onSessionInvalid(err)
+}
 
 func (c *Client) sessionSID() (string, error) {
 	c.sessionMu.RLock()
@@ -39,7 +53,11 @@ func (c *Client) startSessionRefresh(refresh func(context.Context) (auth.LoginRe
 				return
 			}
 			if errors.Is(err, auth.ErrSessionInvalid) {
-				log.Fatalf("aTrust session maintenance failed: %v", err)
+				if c.onSessionInvalid == nil {
+					log.Fatalf("aTrust session maintenance failed: %v", err)
+				}
+				c.reportInvalidSession(err)
+				return
 			}
 			if err != nil {
 				log.Printf("aTrust authConfig refresh failed: %v", err)

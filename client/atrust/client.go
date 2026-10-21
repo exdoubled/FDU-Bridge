@@ -35,6 +35,8 @@ type ClientOptions struct {
 	Session         SessionOptions
 	UnderlayDialer  client.UnderlayDialer
 	TLSKeyLogWriter io.Writer
+	// OnSessionInvalid replaces process exit for an opt-in embedded router.
+	OnSessionInvalid func(error)
 }
 
 type SetupOptions struct {
@@ -57,9 +59,10 @@ type Client struct {
 	ConnectionID string
 	SignKey      string
 
-	sessionMu   sync.RWMutex
-	sessionErr  error
-	refreshDone chan struct{}
+	sessionMu        sync.RWMutex
+	sessionErr       error
+	refreshDone      chan struct{}
+	onSessionInvalid func(error)
 
 	serverAddress   string
 	ipResources     []client.IPResource
@@ -95,14 +98,15 @@ type Client struct {
 func NewClient(options ClientOptions) *Client {
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	return &Client{
-		Username:        options.Session.Username,
-		SID:             options.Session.SID,
-		DeviceID:        options.Session.DeviceID,
-		SignKey:         options.Session.SignKey,
-		underlayDialer:  options.UnderlayDialer,
-		tlsKeyLogWriter: options.TLSKeyLogWriter,
-		lifecycleCtx:    lifecycleCtx,
-		lifecycleCancel: lifecycleCancel,
+		onSessionInvalid: options.OnSessionInvalid,
+		Username:         options.Session.Username,
+		SID:              options.Session.SID,
+		DeviceID:         options.Session.DeviceID,
+		SignKey:          options.Session.SignKey,
+		underlayDialer:   options.UnderlayDialer,
+		tlsKeyLogWriter:  options.TLSKeyLogWriter,
+		lifecycleCtx:     lifecycleCtx,
+		lifecycleCancel:  lifecycleCancel,
 	}
 }
 

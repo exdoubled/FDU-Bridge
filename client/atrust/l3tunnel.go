@@ -62,6 +62,9 @@ func NewL3Tunnel(aTrustClient *Client) (*L3Tunnel, error) {
 			connectionID: aTrustClient.ConnectionID,
 			username:     aTrustClient.Username,
 		}
+		if aTrustClient.onSessionInvalid != nil {
+			info.onSessionInvalid = aTrustClient.reportInvalidSession
+		}
 		dialTLS := func(ctx context.Context, network, address string, config *tls.Config) (*tls.Conn, error) {
 			return dialTLSContext(ctx, aTrustClient.underlayDialer, network, address, tlsConfig(config, aTrustClient.tlsKeyLogWriter))
 		}

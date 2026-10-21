@@ -13,14 +13,17 @@ import (
 	"github.com/mythologyli/zju-connect/log"
 )
 
-func parseIPAuthResponse(data []byte) error {
+func parseIPAuthResponse(data []byte, managed ...bool) error {
 	var response authResponseSID
 	if err := json.Unmarshal(data, &response); err != nil {
 		return fmt.Errorf("failed to parse IP tunnel auth response: %w", err)
 	}
 	if response.Code != 0 {
 		if response.Code == 10000004 || response.Code == 75500002 {
-			log.Fatalf("IP tunnel: aTrust session is invalid (code %d): %s", response.Code, response.Message)
+			if len(managed) == 0 || !managed[0] {
+				log.Fatalf("IP tunnel: aTrust session is invalid (code %d): %s", response.Code, response.Message)
+			}
+			return invalidSessionError(response.Code, response.Message)
 		}
 		return fmt.Errorf("IP tunnel authentication failed (code %d): %s", response.Code, response.Message)
 	}
@@ -37,7 +40,7 @@ func parseIPv4VIPResponse(data []byte) (net.IP, error) {
 	return net.IPv4(data[2], data[3], data[4], data[5]), nil
 }
 
-func readIPTunnelResponses(reader io.Reader) (net.IP, error) {
+func readIPTunnelResponses(reader io.Reader, managed ...bool) (net.IP, error) {
 	method := make([]byte, 2)
 	if _, err := io.ReadFull(reader, method); err != nil {
 		return nil, err
@@ -61,7 +64,7 @@ func readIPTunnelResponses(reader io.Reader) (net.IP, error) {
 	if authHeader[1] != 0 {
 		return nil, fmt.Errorf("IP tunnel authentication status %d", authHeader[1])
 	}
-	if err := parseIPAuthResponse(authPayload); err != nil {
+	if err := parseIPAuthResponse(authPayload, managed...); err != nil {
 		return nil, err
 	}
 
@@ -124,7 +127,7 @@ func (c *Client) getIP(parent context.Context) error {
 	if err := conn.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil {
 		return err
 	}
-	ip, err := readIPTunnelResponses(conn)
+	ip, err := readIPTunnelResponses(conn, c.onSessionInvalid != nil)
 	if err != nil {
 		return err
 	}

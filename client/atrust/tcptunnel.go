@@ -161,14 +161,17 @@ func encodeTCPTunnelDestination(host string, port int, zeroRTT bool) ([]byte, er
 	return binary.BigEndian.AppendUint16(msg, uint16(port)), nil
 }
 
-func parseTCPTunnelAuthResponse(data string) error {
+func parseTCPTunnelAuthResponse(data string, managed ...bool) error {
 	var response tcpTunnelAuthResponse
 	if err := json.Unmarshal([]byte(data), &response); err != nil {
 		return fmt.Errorf("failed to parse tcp tunnel auth response: %w", err)
 	}
 	if response.Code != 0 {
 		if response.Code == 10000004 || response.Code == 75500002 {
-			log.Fatalf("tcp tunnel: aTrust session is invalid (code %d): %s", response.Code, response.Message)
+			if len(managed) == 0 || !managed[0] {
+				log.Fatalf("tcp tunnel: aTrust session is invalid (code %d): %s", response.Code, response.Message)
+			}
+			return invalidSessionError(response.Code, response.Message)
 		}
 		return fmt.Errorf("tcp tunnel authentication failed (code %d): %s", response.Code, response.Message)
 	}
@@ -206,7 +209,7 @@ func waitForTCPConnect(ctx context.Context, conn net.Conn, reader *bufio.Reader)
 	return err
 }
 
-func waitForTCPConnectReply(ctx context.Context, conn net.Conn, reader *bufio.Reader) (reuse bool, err error) {
+func waitForTCPConnectReply(ctx context.Context, conn net.Conn, reader *bufio.Reader, managed ...bool) (reuse bool, err error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -249,7 +252,7 @@ func waitForTCPConnectReply(ctx context.Context, conn net.Conn, reader *bufio.Re
 	}
 	log.DebugPrint("Received protocol response:")
 	log.DebugDumpHex([]byte(response))
-	if err := parseTCPTunnelAuthResponse(response); err != nil {
+	if err := parseTCPTunnelAuthResponse(response, managed...); err != nil {
 		return false, err
 	}
 
@@ -603,7 +606,7 @@ func (c *Client) DialTCP(ctx context.Context, addr *net.TCPAddr) (net.Conn, erro
 		reader:  bufio.NewReader(conn),
 		raw:     !c.tcpTunnelZeroRTT,
 	}
-	reuse, waitErr := waitForTCPConnectReply(ctx, conn, tunnelConn.reader)
+	reuse, waitErr := waitForTCPConnectReply(ctx, conn, tunnelConn.reader, c.onSessionInvalid != nil)
 	clearDeadlineErr := conn.SetReadDeadline(time.Time{})
 	if waitErr != nil {
 		_ = conn.Close()

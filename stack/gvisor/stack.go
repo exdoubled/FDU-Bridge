@@ -41,6 +41,10 @@ type Endpoint struct {
 	client clientpkg.Client
 
 	l3Conn io.ReadWriteCloser
+	// Set before Start publishes the stack; legacy Run retains its behavior.
+	onError     func(error)
+	outbound    chan []byte
+	outboundCtx context.Context
 
 	dispatcher stack.NetworkDispatcher
 }
@@ -93,8 +97,19 @@ func (ep *Endpoint) SetOnCloseAction(func()) {}
 
 // WritePackets is called when get packets from gVisor stack. Then it sends them to VPN server
 func (ep *Endpoint) WritePackets(list stack.PacketBufferList) (int, tcpip.Error) {
-	for _, packetBuffer := range list.AsSlice() {
+	for i, packetBuffer := range list.AsSlice() {
 		buf := joinPacketSlices(packetBuffer.AsSlices())
+		if ep.outbound != nil {
+			// Managed mode never waits for an L3 node/reconnect inside a stack callback.
+			select {
+			case <-ep.outboundCtx.Done():
+				return i, &tcpip.ErrAborted{}
+			case ep.outbound <- buf:
+				continue
+			default:
+				return i, &tcpip.ErrNoBufferSpace{}
+			}
+		}
 
 		if ep.l3Conn != nil {
 			n, err := ep.l3Conn.Write(buf)
@@ -103,7 +118,6 @@ func (ep *Endpoint) WritePackets(list stack.PacketBufferList) (int, tcpip.Error)
 					log.Printf("%v", err)
 					continue
 				}
-
 				// Server-initiated SHUTDOWN: known terminal state from
 				// sangfor (cmd 0x08). No point retrying; run the registered
 				// cleanup hooks (DNS revert, tun device close, etc.) and
@@ -251,6 +265,70 @@ func (s *Stack) Run() {
 		s.endpoint.dispatcher.DeliverNetworkPacket(header.IPv4ProtocolNumber, packetBuffer)
 		packetBuffer.DecRef()
 	}
+}
+
+// Start is the managed alternative to Run: tunnel errors are reported to the
+// caller, never panicked or turned into a process exit. Call before dialing.
+func (s *Stack) Start(ctx context.Context) (<-chan error, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	conn, err := s.endpoint.client.NewL3Conn()
+	if err != nil {
+		cancel()
+		s.gvisorStack.Close()
+		return nil, err
+	}
+	s.endpoint.l3Conn = conn
+	s.endpoint.outbound = make(chan []byte, 256)
+	s.endpoint.outboundCtx = ctx
+	failed := make(chan error, 1)
+	s.endpoint.onError = func(err error) {
+		select {
+		case failed <- err:
+		default:
+		}
+		cancel()
+		conn.Close()
+	}
+	writerDone := make(chan struct{})
+	go func() {
+		defer close(writerDone)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case packet := <-s.endpoint.outbound:
+				if _, err := conn.Write(packet); err != nil {
+					if errors.Is(err, clientpkg.ErrResourceNotFound) {
+						continue
+					}
+					s.endpoint.onError(err)
+					return
+				}
+			}
+		}
+	}()
+	stop := context.AfterFunc(ctx, func() { conn.Close() })
+	go func() {
+		defer func() { cancel(); conn.Close(); <-writerDone; s.gvisorStack.Close(); stop() }()
+		buf := make([]byte, maxInboundPacketSize)
+		for {
+			n, err := conn.Read(buf)
+			if err != nil {
+				if ctx.Err() != nil {
+					err = ctx.Err()
+				}
+				select {
+				case failed <- err:
+				default:
+				}
+				return
+			}
+			packet := makeInboundPacketBuffer(buf, n)
+			s.endpoint.dispatcher.DeliverNetworkPacket(header.IPv4ProtocolNumber, packet)
+			packet.DecRef()
+		}
+	}()
+	return failed, nil
 }
 
 func makeInboundPacketBuffer(buf []byte, n int) *stack.PacketBuffer {

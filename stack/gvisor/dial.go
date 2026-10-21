@@ -15,11 +15,15 @@ func (s *Stack) DialTCP(ctx context.Context, addr *net.TCPAddr) (net.Conn, error
 		return s.endpoint.client.DialTCP(ctx, addr)
 	}
 
-	return gonet.DialTCP(s.gvisorStack, tcpip.FullAddress{
+	target := tcpip.FullAddress{
 		NIC:  NICID,
 		Port: uint16(addr.Port),
 		Addr: tcpip.AddrFromSlice(addr.IP),
-	}, header.IPv4ProtocolNumber)
+	}
+	if s.endpoint.onError != nil {
+		return gonet.DialContextTCP(ctx, s.gvisorStack, target, header.IPv4ProtocolNumber)
+	}
+	return gonet.DialTCP(s.gvisorStack, target, header.IPv4ProtocolNumber)
 }
 
 func (s *Stack) DialUDP(ctx context.Context, addr *net.UDPAddr) (net.Conn, error) {
