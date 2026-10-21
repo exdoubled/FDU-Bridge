@@ -6,6 +6,35 @@ import (
 	"testing"
 )
 
+func TestSelectiveRoutingTOMLAndEnvironment(t *testing.T) {
+	file := writeConfig(t, `
+protocol = "atrust"
+auto_detect_interface = true
+socks_bind = "127.0.0.1:1080"
+http_bind = "127.0.0.1:1081"
+[routing]
+enabled = true
+domains = ["campus.invalid"]
+domain_suffixes = ["lab.invalid"]
+ip_cidrs = ["10.20.26.253/32"]
+upstream_proxy = "socks5://127.0.0.1:7902"
+`)
+	opts, _, err := loadStartupOptions([]string{"--config", file}, func() []string { return []string{"ZJU_CONNECT_ROUTING_UPSTREAM_PROXY=socks5://127.0.0.1:7903"} })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !opts.Config.Routing.Enabled || len(opts.Config.Routing.Domains) != 1 || len(opts.Config.Routing.DomainSuffixes) != 1 || len(opts.Config.Routing.IPCIDRs) != 1 || opts.Config.Routing.UpstreamProxy != "socks5://127.0.0.1:7903" {
+		t.Fatalf("routing config not loaded: %+v", opts.Config.Routing)
+	}
+	options, _, err := loadStartupOptions(nil, func() []string { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if options.Config.Routing.Enabled {
+		t.Fatal("selective routing must be opt-in")
+	}
+}
+
 func TestSessionRefreshConfiguration(t *testing.T) {
 	file := writeConfig(t, "session_refresh_interval = 900\n")
 	for _, tt := range []struct {

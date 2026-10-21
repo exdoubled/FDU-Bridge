@@ -18,6 +18,7 @@ import (
 	"github.com/knadh/koanf/v2"
 	"github.com/mythologyli/zju-connect/client/atrust"
 	"github.com/mythologyli/zju-connect/configs"
+	"github.com/mythologyli/zju-connect/routing"
 	"github.com/spf13/pflag"
 )
 
@@ -205,6 +206,9 @@ func loadStartupOptions(args []string, environ func() []string) (startupOptions,
 		EnvironFunc: func() []string { return envValues },
 		TransformFunc: func(key, value string) (string, any) {
 			key = strings.ToLower(strings.TrimPrefix(key, envPrefix))
+			if strings.HasPrefix(key, "routing_") {
+				key = "routing." + strings.TrimPrefix(key, "routing_")
+			}
 			if key == "config" || isCollectionEnvKey(key) {
 				return "", nil
 			}
@@ -505,7 +509,7 @@ func validateConfig(cfg configs.Config) error {
 			return fmt.Errorf("ZJU Connect: %s is not a valid domain", domain)
 		}
 	}
-	return nil
+	return routing.Validate(cfg)
 }
 
 func validateConnectConfig(cfg configs.Config) error {

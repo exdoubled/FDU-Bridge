@@ -69,6 +69,10 @@ func (d *Dialer) dialDirectHost(ctx context.Context, network, hostAddr string) (
 }
 
 func (d *Dialer) DialIPPort(ctx context.Context, network, ipAddr string) (net.Conn, error) {
+	return d.dialIPPort(ctx, network, ipAddr, false)
+}
+
+func (d *Dialer) dialIPPort(ctx context.Context, network, ipAddr string, strictVPN bool) (net.Conn, error) {
 	hostAddr := ""
 	if _, hostAddrOK := ctx.Value(resolve.ContextKeyResolveHost).(string); hostAddrOK {
 		// hostAddr doesn't have port field at now
@@ -82,6 +86,9 @@ func (d *Dialer) DialIPPort(ctx context.Context, network, ipAddr string) (net.Co
 
 	// If addr is IPv6, use direct connection
 	if len(parts) > 2 {
+		if strictVPN {
+			return nil, errors.New("campus VPN does not support IPv6 destinations")
+		}
 		return d.dialDirectIP(ctx, network, ipAddr, hostAddr)
 	}
 
@@ -101,11 +108,14 @@ func (d *Dialer) DialIPPort(ctx context.Context, network, ipAddr string) (net.Co
 	if pureIp := net.ParseIP(ip); pureIp != nil {
 		target = &net.IPAddr{IP: pureIp}
 	} else {
+		if strictVPN {
+			return nil, errors.New("campus VPN requires a resolved IP")
+		}
 		log.Printf("Illegal situation, host is not pure IP format: %s", ip)
 		return d.dialDirectIP(ctx, network, ipAddr, hostAddr)
 	}
 
-	if d.alwaysUseVPN {
+	if d.alwaysUseVPN || strictVPN {
 		useVPN = true
 	}
 
@@ -146,7 +156,7 @@ func (d *Dialer) DialIPPort(ctx context.Context, network, ipAddr string) (net.Co
 	// Skipped when IPResources are unavailable (parse_resource=false), since
 	// we have no whitelist to enforce. An empty but non-nil slice still means
 	// resources were parsed and no IP destinations are allowed.
-	if useVPN && !matchedResource && d.ipResources != nil {
+	if useVPN && !matchedResource && (d.ipResources != nil || strictVPN) {
 		log.Printf("ACL: refusing %s/%s — not in sangfor IPResources whitelist (would trigger tunnel SHUTDOWN)", ipAddr, network)
 		return nil, ErrACLDenied
 	}
@@ -173,6 +183,32 @@ func (d *Dialer) DialIPPort(ctx context.Context, network, ipAddr string) (net.Co
 	} else {
 		return d.dialDirectIP(ctx, network, ipAddr, hostAddr)
 	}
+}
+
+// DialVPN never falls back to DIRECT/proxy, including DNS errors and missing ACLs.
+func (d *Dialer) DialVPN(ctx context.Context, network, addr string) (net.Conn, error) {
+	if network != "tcp" && network != "udp" {
+		return nil, errors.New("campus VPN only supports TCP/UDP")
+	}
+	host, port, err := net.SplitHostPort(addr)
+	n, portErr := strconv.Atoi(port)
+	if err != nil || portErr != nil || n < 1 || n > 65535 {
+		return nil, errors.New("invalid campus destination: " + addr)
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		if d.resolver == nil {
+			return nil, errors.New("campus DNS unavailable")
+		}
+		ctx, ip, err = d.resolver.Resolve(ctx, host)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if ip.To4() == nil {
+		return nil, errors.New("campus VPN does not support IPv6 destinations")
+	}
+	return d.dialIPPort(ctx, network, net.JoinHostPort(ip.String(), port), true)
 }
 
 func matchDomainResourceForTunnel(resources []client.DomainResource, network string, port int) (client.DomainResource, bool) {

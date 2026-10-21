@@ -25,6 +25,7 @@ type Resolver struct {
 	dnsResource       map[string][]net.IP
 	dnsResourceCursor sync.Map
 	useRemoteDNS      bool
+	vpnOnly           bool
 
 	dnsCache *cache.Cache
 
@@ -146,6 +147,9 @@ func (r *Resolver) Resolve(ctx context.Context, host string) (resCtx context.Con
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx, nil, ctx.Err()
+			}
+			if r.vpnOnly {
+				return ctx, nil, err
 			}
 			log.Printf("Resolve IPv4 addr failed using remote DNS: %s, using secondary DNS instead", host)
 			return r.ResolveWithSecondaryDNS(ctx, host)
@@ -343,6 +347,9 @@ func (r *Resolver) RemoteTCPResolver() (*net.Resolver, error) {
 }
 
 func (r *Resolver) ResolveWithSecondaryDNS(ctx context.Context, host string) (context.Context, net.IP, error) {
+	if r.vpnOnly {
+		return ctx, nil, errors.New("campus DNS unavailable; secondary/system DNS disabled for selected destinations")
+	}
 	if targets, err := r.secondaryResolver.LookupIP(ctx, "ip4", host); err != nil {
 		log.Printf("Resolve IPv4 addr failed using secondary DNS: %s. Try IPv6 addr", host)
 
@@ -375,6 +382,14 @@ func (r *Resolver) Close() {
 		}
 		r.tcpLock.Unlock()
 	})
+}
+
+// NewVPNResolver retains cached/static/server answers but never falls back to
+// an unbound secondary/system resolver. Configure before publishing to callers.
+func NewVPNResolver(stack stack.Stack, remoteDNSServer string, ttl uint64, domainResources client.DomainResources, dnsResource map[string][]net.IP, useRemoteDNS bool) *Resolver {
+	r := NewResolver(stack, remoteDNSServer, "", ttl, domainResources, dnsResource, useRemoteDNS && net.ParseIP(remoteDNSServer).To4() != nil)
+	r.vpnOnly = true
+	return r
 }
 
 func NewResolver(stack stack.Stack, remoteDNSServer, secondaryDNSServer string, ttl uint64, domainResources client.DomainResources, dnsResource map[string][]net.IP, useRemoteDNS bool) *Resolver {

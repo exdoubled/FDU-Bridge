@@ -12,12 +12,10 @@ import (
 	"runtime"
 	"strconv"
 	"syscall"
-	"time"
 
 	"github.com/containers/winquit/pkg/winquit"
 	"github.com/mythologyli/zju-connect/client"
 	atrustclient "github.com/mythologyli/zju-connect/client/atrust"
-	"github.com/mythologyli/zju-connect/client/atrust/auth"
 	easyconnectclient "github.com/mythologyli/zju-connect/client/easyconnect"
 	"github.com/mythologyli/zju-connect/configs"
 	"github.com/mythologyli/zju-connect/dial"
@@ -53,6 +51,13 @@ func main() {
 			log.Printf("Initial ZJU-Connect failed: %s", err)
 		}
 		os.Exit(1)
+	}
+	if conf.Routing.Enabled {
+		if err := runSelective(conf); err != nil {
+			log.Printf("FDU routing stopped: %v", err)
+			os.Exit(1)
+		}
+		return
 	}
 	underlayDialer, underlayErr := underlay.New(underlay.Options{
 		InterfaceName:  conf.BindInterface,
@@ -149,21 +154,9 @@ func main() {
 			log.Printf("Client data will be saved to %s", conf.ClientDataFile)
 		}
 
-		var loginMethod auth.LoginMethod
-		if conf.SID == "" || conf.DeviceID == "" || resourceData == nil {
-			loginMethod, err = auth.NewLoginMethod(auth.LoginMethodOptions{
-				AuthType:      conf.AuthType,
-				Username:      conf.Username,
-				Password:      conf.Password,
-				Phone:         conf.Phone,
-				Domain:        conf.LoginDomain,
-				GraphCodeFile: conf.GraphCodeFile,
-				CASTicket:     conf.CasTicket,
-				OAuth2Code:    conf.OAuth2Code,
-			})
-			if err != nil {
-				log.Fatalf("Configure aTrust login: %v", err)
-			}
+		setupOptions, err := aTrustSetupOptions(conf, resourceData, clientData)
+		if err != nil {
+			log.Fatalf("Configure aTrust login: %v", err)
 		}
 
 		vpnClient = atrustclient.NewClient(atrustclient.ClientOptions{
@@ -177,25 +170,8 @@ func main() {
 			TLSKeyLogWriter: tlsKeyLogWriter,
 		})
 
-		var saveClientDataFunc func(data []byte) error
-		if conf.ClientDataFile != "" {
-			saveClientDataFunc = func(data []byte) error {
-				return os.WriteFile(conf.ClientDataFile, data, 0600)
-			}
-		}
-
 		log.Printf("VPN protocol: %s", conf.Protocol)
-		clientData, err = vpnClient.(*atrustclient.Client).Setup(atrustclient.SetupOptions{
-			ServerAddress:            conf.ServerAddress,
-			ServerPort:               conf.ServerPort,
-			LoginMethod:              loginMethod,
-			TOTPSecret:               conf.TOTPSecret,
-			ClientData:               clientData,
-			ResourceData:             resourceData,
-			BestNodesRefreshInterval: time.Duration(conf.UpdateBestNodesInterval) * time.Second,
-			SessionRefreshInterval:   time.Duration(conf.SessionRefreshInterval) * time.Second,
-			SaveClientData:           saveClientDataFunc,
-		})
+		clientData, err = vpnClient.(*atrustclient.Client).Setup(setupOptions)
 		if err != nil {
 			vpnClient.(*atrustclient.Client).Close()
 			_ = underlayDialer.Close()

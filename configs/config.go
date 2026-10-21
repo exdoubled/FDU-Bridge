@@ -37,6 +37,7 @@ type Config struct {
 	DebugTLSLogFile     string                 `koanf:"debug_tls_log_file"`
 	BindInterface       string                 `koanf:"bind_interface"`
 	AutoDetectInterface bool                   `koanf:"auto_detect_interface"`
+	Routing             RoutingConfig          `koanf:"routing"`
 
 	// EasyConnect fields
 	CertFile           string   `koanf:"cert_file"`
@@ -60,6 +61,16 @@ type Config struct {
 	ResourceFile            string `koanf:"resource_file"`
 	UpdateBestNodesInterval int    `koanf:"update_best_nodes_interval"`
 	SessionRefreshInterval  int    `koanf:"session_refresh_interval"`
+}
+
+// RoutingConfig is opt-in; it does not alter the legacy proxy behavior.
+type RoutingConfig struct {
+	Enabled        bool     `koanf:"enabled"`
+	Domains        []string `koanf:"domains"`
+	DomainSuffixes []string `koanf:"domain_suffixes"`
+	IPCIDRs        []string `koanf:"ip_cidrs"`
+	UpstreamProxy  string   `koanf:"upstream_proxy"`
+	RulesFile      string   `koanf:"rules_file"`
 }
 
 type SinglePortForwarding struct {

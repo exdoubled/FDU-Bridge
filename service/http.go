@@ -60,8 +60,12 @@ type httpProxy struct {
 }
 
 func newHTTPProxy(dialer *dial.Dialer) *httpProxy {
+	return newHTTPProxyWithDial(dialer.Dial)
+}
+
+func newHTTPProxyWithDial(dialContext client.DialContextFunc) *httpProxy {
 	proxy := &httpProxy{
-		dialContext: dialer.Dial,
+		dialContext: dialContext,
 		tunnels:     make(map[*httpTunnel]struct{}),
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
