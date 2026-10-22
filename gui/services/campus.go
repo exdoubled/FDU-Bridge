@@ -118,6 +118,7 @@ func (b *Backend) startCampus(ctx context.Context, done chan struct{}, approved 
 		err = b.waitForCampus(ctx)
 	}
 	cleanCancel := err == context.Canceled
+	cleanupComplete := false
 	if err != nil {
 		b.clashBusy.Lock()
 		detachErr := b.detachCampus()
@@ -129,6 +130,8 @@ func (b *Backend) startCampus(ctx context.Context, done chan struct{}, approved 
 			} else if !stopped {
 				err = errors.Join(err, errors.New("VPN 尚未退出，可再次停用或强制结束"))
 				cleanCancel = false
+			} else {
+				cleanupComplete = true
 			}
 		} else {
 			err = errors.Join(err, fmt.Errorf("出口恢复失败，已保留 VPN 以免留下失效路由：%w", detachErr))
@@ -148,6 +151,9 @@ func (b *Backend) startCampus(ctx context.Context, done chan struct{}, approved 
 		}
 	}
 	b.cancel = nil
+	if cleanupComplete {
+		b.startDone = nil
+	}
 	close(done)
 	b.mu.Unlock()
 	if err != nil && !cleanCancel {
@@ -326,9 +332,11 @@ func (b *Backend) disconnect(force bool) (bool, error) {
 	}
 	b.clashBusy.Lock()
 	defer b.clashBusy.Unlock()
-	if err := b.detachCampus(); err != nil {
-		b.connectionProblem("error", "恢复 Clash 出口失败，VPN 暂未关闭："+err.Error())
-		return false, err
+	if startedHere {
+		if err := b.detachCampus(); err != nil {
+			b.connectionProblem("error", "恢复 Clash 出口失败，VPN 暂未关闭："+err.Error())
+			return false, err
+		}
 	}
 	var stopped bool
 	var err error
@@ -342,6 +350,7 @@ func (b *Backend) disconnect(force bool) (bool, error) {
 		b.mu.Lock()
 		b.state, b.problem, b.coverage = "stopped", "", ""
 		b.connectedAt = time.Time{}
+		b.startDone = nil
 		b.mu.Unlock()
 		b.emit(EventChanged, "clash")
 		b.publish()

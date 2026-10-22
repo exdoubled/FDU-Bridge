@@ -53,6 +53,12 @@ func TestDisconnectCancelsPreparationBeforeWaiting(t *testing.T) {
 	if err != nil || !stopped || ctx.Err() == nil {
 		t.Fatalf("cancellation did not finish: stopped=%v, error=%v", stopped, err)
 	}
+	// A later quit must remain possible after the user has closed Clash.
+	b.conn = &clash.Connection{API: forbiddenAPI{t}}
+	b.campus = &clash.CampusAttachment{Root: b.Dir, ProviderPath: filepath.Join(b.Dir, "previous.yaml")}
+	if stopped, err := b.Disconnect(); err != nil || !stopped {
+		t.Fatalf("a completed disable tried to detach again: %v", err)
+	}
 }
 
 func TestAppliedRequiresFDUAndClashAcknowledgements(t *testing.T) {
