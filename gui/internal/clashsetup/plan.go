@@ -23,17 +23,19 @@ import (
 )
 
 type Request struct {
-	Operation     string         `json:"operation"`
-	Values        map[string]any `json:"values"`
-	Campus        bool           `json:"campus"`
-	CampusURL     string         `json:"-"`
-	ClashMode     string         `json:"clash_mode"`
-	Outside       string         `json:"outside"`
-	Mode          string         `json:"mode"`
-	Root          string         `json:"root"`
-	Config        string         `json:"config"`
-	Directory     string         `json:"directory"`
-	OccupiedPorts []int          `json:"occupied_ports"`
+	Operation        string         `json:"operation"`
+	Values           map[string]any `json:"values"`
+	Campus           bool           `json:"campus"`
+	CampusURL        string         `json:"-"`
+	ClashMode        string         `json:"clash_mode"`
+	Outside          string         `json:"outside"`
+	Mode             string         `json:"mode"`
+	Root             string         `json:"root"`
+	RuntimeFile      string         `json:"runtime_file,omitempty"`
+	RuntimeOverrides map[string]any `json:"-"`
+	Config           string         `json:"config"`
+	Directory        string         `json:"directory"`
+	OccupiedPorts    []int          `json:"occupied_ports"`
 }
 
 type Change struct {
@@ -50,6 +52,8 @@ type Plan struct {
 	Mode          string            `json:"mode"`
 	Profile       string            `json:"profile"`
 	ProfileUID    string            `json:"profile_uid"`
+	RuntimeFile   string            `json:"runtime_file,omitempty"`
+	RuntimeHash   string            `json:"runtime_hash,omitempty"`
 	Config        string            `json:"config"`
 	Rules         string            `json:"rules"`
 	SocksPort     int               `json:"socks_port"`
@@ -277,8 +281,23 @@ func Prepare(r Request) (Plan, error) {
 }
 
 func prepare(r Request, campusEnabled bool) (Plan, error) {
+	if r.RuntimeFile != "" {
+		r.Campus, r.Mode = true, "clash-first"
+		if r.CampusURL == "" {
+			return Plan{}, errors.New("缺少本机校园规则接口")
+		}
+	}
 	p := Plan{Campus: r.Campus, Inputs: map[string]string{}, Files: []Change{}}
 	var err error
+	if r.RuntimeFile != "" {
+		r.RuntimeFile, err = filepath.Abs(r.RuntimeFile)
+		if err != nil {
+			return p, err
+		}
+		if r.Root == "" {
+			r.Root = filepath.Dir(r.RuntimeFile)
+		}
+	}
 	for _, target := range []*string{&r.Root, &r.Config, &r.Directory} {
 		if *target == "" {
 			return p, errors.New("请选择 Clash 配置目录和 FDU 配置文件")
@@ -289,24 +308,35 @@ func prepare(r Request, campusEnabled bool) (Plan, error) {
 		}
 	}
 	metaPath := filepath.Join(r.Root, "profiles.yaml")
-	meta, err := document(metaPath, &p)
-	if err != nil {
-		return p, err
-	}
+	var meta, runtime map[string]any
 	var active map[string]any
-	for _, entry := range list(meta, "items") {
-		item, ok := entry.(map[string]any)
-		if ok && item["uid"] == meta["current"] {
-			active = item
-			break
-		}
-	}
-	if active == nil || (active["type"] != "remote" && active["type"] != "local") {
-		return p, errors.New("请先在 Clash 中选择一个订阅")
-	}
-	p.Profile, p.ProfileUID = text(active["name"]), text(active["uid"])
 	runtimePath := filepath.Join(r.Root, "clash-verge.yaml")
-	runtime, err := document(runtimePath, &p)
+	if r.RuntimeFile != "" {
+		runtimePath = r.RuntimeFile
+		runtime, err = runtimeDocument(runtimePath, &p)
+		if err == nil {
+			for key, value := range r.RuntimeOverrides {
+				runtime[key] = value
+			}
+		}
+	} else {
+		meta, err = document(metaPath, &p)
+		if err != nil {
+			return p, err
+		}
+		for _, entry := range list(meta, "items") {
+			item, ok := entry.(map[string]any)
+			if ok && item["uid"] == meta["current"] {
+				active = item
+				break
+			}
+		}
+		if active == nil || (active["type"] != "remote" && active["type"] != "local") {
+			return p, errors.New("请先在 Clash 中选择一个订阅")
+		}
+		p.Profile, p.ProfileUID = text(active["name"]), text(active["uid"])
+		runtime, err = document(runtimePath, &p)
+	}
 	if err != nil {
 		return p, err
 	}
@@ -319,7 +349,7 @@ func prepare(r Request, campusEnabled bool) (Plan, error) {
 	}
 	if r.Campus {
 		p.ClashMode = strings.ToLower(strings.TrimSpace(text(runtime["mode"])))
-		if r.ClashMode != "" {
+		if r.ClashMode != "" || r.RuntimeFile != "" {
 			p.ClashMode = strings.ToLower(strings.TrimSpace(r.ClashMode))
 		}
 		if p.ClashMode != "global" && p.ClashMode != "rule" {
@@ -334,12 +364,14 @@ func prepare(r Request, campusEnabled bool) (Plan, error) {
 		}
 		p.Mode = r.Mode
 	}
-	verge, err := document(filepath.Join(r.Root, "verge.yaml"), &p)
-	if err != nil {
-		return p, err
+	if r.RuntimeFile == "" {
+		verge, err := document(filepath.Join(r.Root, "verge.yaml"), &p)
+		if err != nil {
+			return p, err
+		}
+		p.SystemProxy, _ = verge["enable_system_proxy"].(bool)
+		p.ProxyGuard, _ = verge["enable_proxy_guard"].(bool)
 	}
-	p.SystemProxy, _ = verge["enable_system_proxy"].(bool)
-	p.ProxyGuard, _ = verge["enable_proxy_guard"].(bool)
 	p.MixedPort = number(runtime["mixed-port"])
 	if p.MixedPort == 0 {
 		p.MixedPort = number(runtime["port"])
@@ -582,6 +614,9 @@ func prepare(r Request, campusEnabled bool) (Plan, error) {
 			break
 		}
 	}
+	if r.RuntimeFile != "" {
+		firstNode = runtimeFirstNode(runtime, unsafe)
+	}
 	if firstNode == "" {
 		return p, errors.New("当前订阅中未找到可用的外网节点")
 	}
@@ -601,6 +636,12 @@ func prepare(r Request, campusEnabled bool) (Plan, error) {
 		group["proxies"] = choices
 	}
 	groupCheck := func(n map[string]any) bool { return n["type"] == "select" }
+	if r.RuntimeFile != "" {
+		group = runtimeInternet(runtime, group, firstNode, r.Outside, unsafe)
+		groupCheck = func(n map[string]any) bool {
+			return n["type"] == "select" && n["include-all-proxies"] == true && strings.HasPrefix(text(n["exclude-filter"]), "^(FDU|FDU-ROUTER|GLOBAL|INTERNET")
+		}
+	}
 	exit := "INTERNET"
 	if p.Mode == "fdu-first" {
 		exit = "GLOBAL"
@@ -625,6 +666,9 @@ func prepare(r Request, campusEnabled bool) (Plan, error) {
 		if err := upsert(runtime, target.key, target.entry, target.check); err != nil {
 			return p, err
 		}
+		if r.RuntimeFile != "" {
+			continue
+		}
 		path, data, err := extension(meta, active, target.kind, r.Root, &p)
 		if err != nil {
 			return p, err
@@ -642,20 +686,30 @@ func prepare(r Request, campusEnabled bool) (Plan, error) {
 		}
 	}
 	if r.Campus {
-		if err := planCampus(r, meta, active, runtime, campusEnabled, &p); err != nil {
+		var err error
+		if r.RuntimeFile != "" {
+			err = planRuntimeCampus(r, runtime, campusEnabled, &p)
+		} else {
+			err = planCampus(r, meta, active, runtime, campusEnabled, &p)
+		}
+		if err != nil {
 			return p, err
 		}
 	}
-	if err := plannedYAML(metaPath, meta, &p); err != nil {
-		return p, err
+	if r.RuntimeFile == "" {
+		if err := plannedYAML(metaPath, meta, &p); err != nil {
+			return p, err
+		}
 	}
 	out, err := yaml.Marshal(runtime)
 	if err != nil {
 		return p, err
 	}
 	p.Payload = string(out)
-	if err := planned(runtimePath, out, &p); err != nil {
-		return p, err
+	if r.RuntimeFile == "" {
+		if err := planned(runtimePath, out, &p); err != nil {
+			return p, err
+		}
 	}
 	return p, nil
 }
