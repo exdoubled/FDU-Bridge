@@ -1,4 +1,4 @@
-# FDU Connect
+# FDU Bridge
 
 > 🚫 **Disclaimer**
 >
@@ -12,21 +12,48 @@ This program builds on the aTrust implementation in [ZJU Connect](https://github
 
 **ZJU Connect is based on [EasierConnect](https://github.com/lyc8503/EasierConnect) (no longer maintained). Thanks to its original author [lyc8503](https://github.com/lyc8503).**
 
-This fork targets Fudan University's aTrust / UIS login. It adds browser callback capture, selective routing, and a desktop management window (Windows, macOS, Linux). VPN protocols, local proxy services, and other general capabilities are inherited from upstream.
-
-**Upstream QQ group: 1037726410**, welcome to join the discussion.
+This fork targets Fudan University's login system. It adds browser callback capture, selective routing, and a desktop management window (Windows, macOS, Linux). VPN protocols, local proxy services, and other general capabilities are inherited from upstream.
 
 ## New adaptation features
 
-- Complete UIS login in an isolated Edge / Chrome / Chromium window and capture the authentication callback automatically.
+- Complete UIS login in an isolated compatible browser window, preferring a supported default browser, and capture the authentication callback automatically.
 - Route selected exact domains, domain suffixes, IPv4 addresses, and subnets through FDU; other traffic entering Clash follows its existing outside settings.
 - Manage login, connection start/stop, logs, Internet nodes, individual rule switches, and all client settings in the desktop GUI on Windows, macOS, and Linux.
-- Add Fudan campus access to an existing Clash setup with one switch, automatically following global/rule mode and subscription changes while preserving outside settings.
+- Add Fudan campus access to Clash Verge Rev with one switch, detect standard and portable installations, follow global/rule mode and subscription changes, update TUN coverage information, and restore the outside exit when disabled.
 - Reload saved rules automatically. New connections use the updated rules; existing connections keep their original routes.
 
 ## Usage
 
-### Windows GUI
+1. Download the package for your system from [Releases](https://github.com/exdoubled/FDU-Bridge/releases) and extract it.
+2. Open **Clash Verge Rev**, select a working subscription and outside node, and keep global or rule mode enabled.
+3. Launch the program listed below, enable **campus access (校内访问)** on Home, confirm the first-use prompt, and complete Fudan UIS login in the browser window.
+4. Use your applications normally. In **Campus Resources (校内资源)**, add domains or IPs, select their switches, and click **Save (保存)**. Selected resources use FDU; other traffic follows Clash.
+
+| System | Program |
+| --- | --- |
+| Windows | `FDU-Connect-GUI.exe` |
+| macOS | `FDU Connect.app` |
+| Linux | `fdu-connect-gui` |
+
+Keep the extracted files together. Go, Node.js and a separate core launch are unnecessary. In global mode, switch outside exits on FDU's **Outside Nodes (外网节点)** page; in rule mode, continue managing nodes in Clash.
+
+Enable **Clash TUN** to cover applications routed through its TUN. Without TUN, only applications using Clash's proxy are covered. If campus access fails, check **Coverage (覆盖范围)** on Home first. Disable campus access on Home when finished.
+
+<details>
+<summary>Runtime requirements and common issues</summary>
+
+- Automatic integration currently supports Clash Verge Rev. Clash Party, FlClash and other clients are not yet supported. If detection fails, select the directory containing `profiles.yaml`, `verge.yaml` and `clash-verge.yaml` in Settings.
+- Automatic UIS login requires Edge, Chrome, Chromium or Brave. A compatible default browser is preferred; otherwise an installed compatible browser is used. The GUI does not require pasting a callback URL.
+- Windows requires WebView2 Runtime. The macOS app is not notarized; the first launch may require right-clicking it in Finder and choosing Open. Linux requires GTK 4 and WebKitGTK 6.0.
+- Before enabling campus access, the GUI automatically selects available local proxy ports if configured ports are occupied. See **Diagnostics (诊断)** for other errors.
+- Windows normally stores configuration beside the program, falling back to `%APPDATA%\FDU Connect` if that directory is not writable; an established per-user directory continues to be used. macOS uses `~/Library/Application Support/FDU Connect`. Linux uses `$XDG_CONFIG_HOME/fdu-connect`, or `~/.config/fdu-connect` when unset. Keep your configuration and login state when upgrading. Closing the window may leave FDU in the tray; exit FDU before replacing its executables.
+
+</details>
+
+<details>
+<summary>Build from source and other launch methods (developers)</summary>
+
+### Build the Windows GUI
 
 Install the Go version required by [gui/go.mod](gui/go.mod), Node.js, and pnpm, then run from the repository root:
 
@@ -34,13 +61,11 @@ Install the Go version required by [gui/go.mod](gui/go.mod), Node.js, and pnpm, 
 .\build.ps1
 ```
 
-Start Clash Verge Rev and select a subscription, then open `dist\FDU-Connect-GUI.exe` and enable campus access on Home. After first-use confirmation, the GUI saves the default configuration, backs up and integrates Clash, and opens UIS login in a browser. Selected resources use FDU; other traffic follows Clash. Manage individual resources or paste a URL to add one. Advanced VPN settings and diagnostics remain available.
-
-The build script produces both the GUI and its `fdu-connect.exe` core. Keep them in the same directory; the core does not need a separate build or launch. Configuration, rules, and login state stay in this directory and survive rebuilds. Exit programs running from that directory before building. Use `./build.ps1 -Test` to also run the existing tests.
+The build script produces `dist\FDU-Connect-GUI.exe` and its `fdu-connect.exe` core; keep them in the same directory. Exit programs running from the output directory before building, or use `-OutputDirectory` to choose another directory. Use `./build.ps1 -Test` to also run the existing tests.
 
 Use `./build.ps1 -Package` to create a portable Windows x64 ZIP containing only the GUI, core, example configuration, and license. Personal configurations and login caches are excluded. The first Clash import carries over the example routing rules; existing rule files are preserved.
 
-### macOS / Linux GUI
+### Build the macOS / Linux GUI
 
 The same Go, Node.js, and pnpm are required. macOS also needs the Xcode command line tools (`xcode-select --install`); Debian/Ubuntu also need:
 
@@ -53,7 +78,7 @@ Run `bash build.sh` from the repository root; `--test` and `--package` work as o
 - macOS produces `dist/FDU Connect.app` for both Apple silicon and Intel. The app is not notarized, so open it the first time by right-clicking it in Finder and choosing Open.
 - Linux produces `dist/fdu-connect-gui` and the core `dist/fdu-connect`; keep them in the same directory.
 
-Configuration, rules, and login state live in `~/Library/Application Support/FDU Connect` (macOS) or `~/.config/fdu-connect` (Linux). Enable campus access as on Windows; the GUI leaves system proxies, bypass lists and Clash TUN unchanged. Without TUN, only application traffic entering Clash is covered. Some Linux desktops hide tray icons, so closing the window quits by default on Linux; enable "minimize to tray" in Settings to change it.
+Enable campus access as on Windows; the GUI leaves system proxies, bypass lists and Clash TUN unchanged. Some Linux desktops hide tray icons, so closing the window quits by default on Linux; enable "minimize to tray" in Settings to change it.
 
 ### Command-line core (optional)
 
@@ -65,7 +90,7 @@ Use the Go version required by [go.mod](go.mod). For the first run, save [config
 
 These are Windows commands. On Linux/macOS, build with `go build -o fdu-connect .`, then run `./fdu-connect -config ./config.toml` and follow the terminal prompts to log in.
 
-The configuration uses `vpn.fudan.edu.cn:443`, authentication type `auth/httpsOauth2`, and login domain `id.fudan.edu.cn`. On Windows, complete UIS authentication in the login window. There is no need to store the UIS password in the configuration.
+The configuration uses `vpn.fudan.edu.cn:443`, authentication type `auth/httpsOauth2`, and login domain `id.fudan.edu.cn`. With a compatible browser installed, UIS callbacks can be captured automatically; otherwise follow the terminal prompts. There is no need to store the UIS password in the configuration.
 
 The example runs independently as a local proxy, with selective routing disabled. Once started, set your application's SOCKS5 proxy to `127.0.0.1:1080`, or its HTTP proxy to `127.0.0.1:1081`. See the argument descriptions to change the listening addresses or ports.
 
@@ -77,7 +102,9 @@ Refer to the upstream [service instructions](docs/service_en.md). Replace the ex
 
 ### Run in Docker
 
-Refer to the upstream [Docker instructions](docs/docker_en.md). The images documented there belong to upstream and do not include this fork's additions. To run this fork, build an image from the current source. Windows browser callback capture and the management window are not available in containers.
+Refer to the upstream [Docker instructions](docs/docker_en.md). The images documented there belong to upstream and do not include this fork's additions. To run this fork, build an image from the current source. Desktop browser callback capture and the management window are not available in containers.
+
+</details>
 
 ## ⚠️ Warning
 
