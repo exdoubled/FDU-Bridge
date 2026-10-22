@@ -17,6 +17,7 @@ import (
 	"github.com/mythologyli/zju-connect/client"
 	atrustclient "github.com/mythologyli/zju-connect/client/atrust"
 	"github.com/mythologyli/zju-connect/client/atrust/auth"
+	"github.com/mythologyli/zju-connect/client/authchallenge"
 	"github.com/mythologyli/zju-connect/configs"
 	"github.com/mythologyli/zju-connect/dial"
 	"github.com/mythologyli/zju-connect/internal/keylog"
@@ -57,6 +58,8 @@ func runSelective(c configs.Config) error {
 		select {
 		case <-done:
 			cancel()
+		case <-authchallenge.GUIStop():
+			cancel()
 		case <-ctx.Done():
 		}
 	}()
@@ -78,6 +81,7 @@ func serveSelective(ctx context.Context, c configs.Config, dial client.DialConte
 	defer proxies.Close()
 	log.Printf("Selective router ready: SOCKS=%s HTTP=%s; ordinary traffic uses the configured Clash upstream", proxies.SocksAddr(), proxies.HTTPAddr())
 	if err = connect(ctx); err != nil && ctx.Err() == nil {
+		authchallenge.GUIState("campus-unavailable")
 		log.Printf("Campus VPN unavailable: %v; ordinary Internet forwarding remains available", err)
 	}
 	<-ctx.Done()
@@ -171,6 +175,7 @@ func runSelectiveVPN(ctx context.Context, c configs.Config, u *underlay.Dialer, 
 	})
 	defer router.SetVPN(nil)
 	log.Println("Campus VPN ready; only configured destinations use FDU")
+	authchallenge.GUIState("connected")
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

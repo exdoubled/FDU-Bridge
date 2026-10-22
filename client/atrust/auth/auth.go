@@ -330,7 +330,7 @@ func (s *Session) Login(method LoginMethod, opts LoginOptions) (LoginResult, err
 	s.totpSecret = opts.TOTPSecret
 	s.challengeHandler = opts.ChallengeHandler
 	if s.challengeHandler == nil {
-		s.challengeHandler = authchallenge.NewCLIHandler(authchallenge.CLIOptions{})
+		s.challengeHandler = authchallenge.DefaultHandler()
 	}
 	s.env = base64.StdEncoding.EncodeToString([]byte(`{"deviceId":"` + opts.DeviceID + `"}`))
 

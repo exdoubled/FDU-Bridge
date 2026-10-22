@@ -94,7 +94,7 @@ func NewClient(options Options) *Client {
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	challengeHandler := options.ChallengeHandler
 	if challengeHandler == nil {
-		challengeHandler = authchallenge.NewCLIHandler(authchallenge.CLIOptions{})
+		challengeHandler = authchallenge.DefaultHandler()
 	}
 	c := &Client{
 		server:            options.Server,

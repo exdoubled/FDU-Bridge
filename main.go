@@ -16,6 +16,7 @@ import (
 	"github.com/containers/winquit/pkg/winquit"
 	"github.com/mythologyli/zju-connect/client"
 	atrustclient "github.com/mythologyli/zju-connect/client/atrust"
+	"github.com/mythologyli/zju-connect/client/authchallenge"
 	easyconnectclient "github.com/mythologyli/zju-connect/client/easyconnect"
 	"github.com/mythologyli/zju-connect/configs"
 	"github.com/mythologyli/zju-connect/dial"
@@ -36,6 +37,7 @@ import (
 var conf configs.Config
 
 func main() {
+	guiStop := authchallenge.GUIStop()
 	if exitCode := initialize(os.Args[1:]); exitCode >= 0 {
 		os.Exit(exitCode)
 	}
@@ -403,11 +405,15 @@ func main() {
 		}
 	}
 
+	authchallenge.GUIState("connected")
 	if runtime.GOOS == "windows" {
 		done := make(chan os.Signal, 1)
 		signal.Notify(done, syscall.SIGINT)
 		winquit.SimulateSigTermOnQuit(done)
-		<-done
+		select {
+		case <-done:
+		case <-guiStop:
+		}
 	} else {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
