@@ -9,6 +9,7 @@ export {
   ClashOverview,
   CoreStatus,
   RulesView,
+  RulesImport,
 } from "../../bindings/github.com/mythologyli/zju-connect/gui/services";
 export { Document as RuleDocument, Kind as RuleKind } from "../../bindings/github.com/mythologyli/zju-connect/gui/internal/rules";
 export type { ApplyState } from "../../bindings/github.com/mythologyli/zju-connect/gui/internal/rules";

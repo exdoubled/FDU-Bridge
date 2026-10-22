@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, RefreshCw, Route, Search, Trash2 } from "lucide-react";
-import { RuleKind, RulesService, errorText, type ApplyState } from "../lib/api";
-import { addRule, cloneDraft, emptyDraft, filterRows, removeRules, rows, sameDraft, setEnabled, typeLabels, type Draft, type RuleType } from "../lib/rulesDraft";
+import { Download, Plus, RefreshCw, Route, Search, Trash2, Upload } from "lucide-react";
+import { RuleKind, RulesService, errorText, type ApplyState, type RulesImport } from "../lib/api";
+import { addRule, cloneDraft, counts, emptyDraft, filterRows, mergeDraft, removeRules, rows, sameDraft, setEnabled, typeLabels, type Draft, type RuleType } from "../lib/rulesDraft";
 import { useStore } from "../store";
 import { Empty, Spinner, Switch } from "../components/ui";
 
@@ -24,7 +24,9 @@ export function Rules() {
   const [query, setQuery] = useState("");
   const [saving, setSaving] = useState(false);
   const [adding, setAdding] = useState(false);
-  const busy = saving || adding;
+  const [transferring, setTransferring] = useState(false);
+  const [preview, setPreview] = useState<RulesImport | null>(null);
+  const busy = saving || adding || transferring || preview !== null;
 
   const dirty = saved !== null && !sameDraft(draft, saved);
   useEffect(() => setDirty("rules", dirty), [dirty, setDirty]);
@@ -48,7 +50,7 @@ export function Rules() {
 
   // Reload when another page changes the rules file, but never over an unsaved draft.
   useEffect(() => {
-    if (!dirty) load();
+    if (!dirty && !preview && !transferring) load();
   }, [load, versions.settings, versions.clash]);
 
   useEffect(() => {
@@ -104,11 +106,46 @@ export function Rules() {
     load();
   };
 
+  const importRules = async () => {
+    if (busy) return;
+    setTransferring(true);
+    try {
+      setPreview(await RulesService.Import());
+    } catch (e) {
+      fail(e);
+    } finally {
+      setTransferring(false);
+    }
+  };
+
+  const applyImport = async (replace: boolean) => {
+    if (!preview) return;
+    if (replace && !(await confirm({ title: "替换当前校内资源？", message: "当前草稿（包括未保存的修改）将被导入的资源及启用状态替换。点击保存后才生效。", confirm: "替换草稿", danger: true }))) return;
+    setDraft((current) => replace ? cloneDraft(preview.document) : mergeDraft(current, preview.document));
+    setPreview(null);
+  };
+
+  const exportRules = async () => {
+    if (busy) return;
+    setTransferring(true);
+    try {
+      if (await RulesService.Export(draft)) toast("success", "已导出当前草稿及启用状态");
+    } catch (e) {
+      fail(e);
+    } finally {
+      setTransferring(false);
+    }
+  };
+
+  const imported = preview ? counts(preview.document) : null;
+
   return (
     <>
       <header className="page-head">
         <h1 className="page-title" title={path}>校内资源</h1>
         <div className="page-actions">
+          <button className="btn" onClick={importRules} disabled={busy || saved === null}><Upload size={15} />导入</button>
+          <button className="btn" onClick={exportRules} disabled={busy || saved === null}><Download size={15} />导出</button>
           <button className="btn icon-btn" onClick={reload} disabled={busy} aria-label="重新读取" title="重新读取"><RefreshCw size={15} /></button>
         </div>
       </header>
@@ -117,6 +154,19 @@ export function Rules() {
           <Empty icon={Route} title="无法读取校内资源" action={<button className="btn" onClick={load}>重试</button>}>{loadError}</Empty>
         ) : (
           <div className="stack">
+            {preview && imported && (
+              <section className="card" style={{ padding: 14 }} aria-label="导入预览">
+                <div className="muted" style={{ marginBottom: 10, overflowWrap: "anywhere" }}>
+                  <strong title={preview.name}>{preview.name}</strong>：{imported.total} 条（启用 {imported.enabled}，停用 {imported.disabled}）。合并保留现有条目的启用状态，保存后生效。
+                </div>
+                <div className="toolbar">
+                  <button className="btn primary" onClick={() => applyImport(false)}>合并到草稿</button>
+                  <button className="btn" onClick={() => applyImport(true)}>替换草稿…</button>
+                  <span className="spacer" />
+                  <button className="btn" onClick={() => setPreview(null)}>取消</button>
+                </div>
+              </section>
+            )}
             <section className="card" style={{ padding: 14 }}>
               <form className="toolbar" onSubmit={(e) => { e.preventDefault(); add(); }}>
                 <select className="select" style={{ width: 140 }} value={type} disabled={busy} onChange={(e) => { setType(e.target.value as RuleType); setAddError(""); }}>

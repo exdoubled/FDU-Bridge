@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -73,6 +74,13 @@ func TestExportRefusesManagedPathsAndInvalidDrafts(t *testing.T) {
 	d.Disabled.Domains = []string{"missing.cn"}
 	if err := ExportFile(managed, d, nil); err == nil {
 		t.Fatal("export accepted invalid draft")
+	}
+	d = Empty()
+	for i := 0; i < 12000; i++ {
+		d.Domains = append(d.Domains, fmt.Sprintf("resource-%05d.fudan.edu.cn", i))
+	}
+	if err := ExportFile(managed, d, nil); err == nil {
+		t.Fatal("export accepted oversized draft")
 	}
 	if after, _ := os.ReadFile(managed); string(after) != "private-state" {
 		t.Fatal("refused export changed managed state")

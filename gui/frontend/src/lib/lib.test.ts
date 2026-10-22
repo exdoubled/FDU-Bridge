@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addRule, counts, emptyDraft, filterRows, removeRules, rows, sameDraft, setEnabled } from "./rulesDraft";
+import { addRule, counts, emptyDraft, filterRows, mergeDraft, removeRules, rows, sameDraft, setEnabled } from "./rulesDraft";
 import { availability, getValue, parseList, prepareForSave, setValue, tableRows } from "./settingsForm";
 import { formatUptime, stateLabel, stateTone } from "./status";
 
@@ -36,6 +36,19 @@ describe("rules draft", () => {
     b = setEnabled(setEnabled(b, "domain", "b.cn", false), "domain", "a.cn", false);
     expect(sameDraft(a, b)).toBe(true);
     expect(sameDraft(a, emptyDraft())).toBe(false);
+  });
+
+  it("merges typed entries while keeping the current draft switches and edits", () => {
+    const current = { ...emptyDraft(), domains: ["lab.fudan.edu.cn", "draft.cn"], domain_suffixes: ["lab.fudan.edu.cn"],
+      disabled: { domains: ["lab.fudan.edu.cn"], domain_suffixes: [], ip_cidrs: [] } };
+    const imported = { ...emptyDraft(), domains: ["lab.fudan.edu.cn", "new.cn"], domain_suffixes: ["lab.fudan.edu.cn", "new.cn"], ip_cidrs: ["10.0.0.0/8"],
+      disabled: { domains: ["new.cn"], domain_suffixes: ["lab.fudan.edu.cn"], ip_cidrs: ["10.0.0.0/8"] } };
+    const merged = mergeDraft(current, imported);
+    expect(merged.domains).toEqual(["lab.fudan.edu.cn", "draft.cn", "new.cn"]);
+    expect(merged.disabled).toEqual({ domains: ["lab.fudan.edu.cn", "new.cn"], domain_suffixes: [], ip_cidrs: ["10.0.0.0/8"] });
+    expect(merged.domain_suffixes).toEqual(["lab.fudan.edu.cn", "new.cn"]);
+    expect(current.domains).toEqual(["lab.fudan.edu.cn", "draft.cn"]);
+    expect(imported.disabled.domain_suffixes).toEqual(["lab.fudan.edu.cn"]);
   });
 });
 

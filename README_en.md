@@ -21,6 +21,8 @@ A desktop campus-network tool for Fudan University. With a Clash/Mihomo client, 
 4. Enable **campus access (校内访问)** on Home, confirm the first-use prompt, and complete UIS login in the browser window.
 5. In **Campus Resources (校内资源)**, add domains or IPs, enable entries, and save.
 
+Campus Resources can import/export JSON with every entry and its enabled state. Preview an import, then merge or replace the current draft; click **Save (保存)** to apply it. Merge keeps the current draft's switches for existing entries. Export includes unsaved edits and excludes login information.
+
 | System | Program |
 | --- | --- |
 | Windows | `FDU-Connect-GUI.exe` |
