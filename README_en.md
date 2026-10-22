@@ -27,15 +27,13 @@ This fork targets Fudan University's login system. It adds browser callback capt
 1. Download the package for your system from [Releases](https://github.com/exdoubled/FDU-Bridge/releases) and extract it.
 2. Open **Clash Verge Rev**, select a working subscription and outside node, and keep global or rule mode enabled.
 3. Launch the program listed below, enable **campus access (校内访问)** on Home, confirm the first-use prompt, and complete Fudan UIS login in the browser window.
-4. Use your applications normally. In **Campus Resources (校内资源)**, add domains or IPs, select their switches, and click **Save (保存)**. Selected resources use FDU; other traffic follows Clash.
+4. Use your applications normally. In **Campus Resources (校内资源)**, add domains or IPs, select their switches, and click **Save (保存)**. Selected resources use FDU; other traffic follows Clash. In global mode, switch outside nodes in this app; in rule mode, switch nodes in Clash. Change global/rule mode and the TUN switch in Clash; this app follows mode changes and updates coverage information.
 
 | System | Program |
 | --- | --- |
 | Windows | `FDU-Connect-GUI.exe` |
 | macOS | `FDU Connect.app` |
 | Linux | `fdu-connect-gui` |
-
-Keep the extracted files together. Go, Node.js and a separate core launch are unnecessary. In global mode, switch outside exits on FDU's **Outside Nodes (外网节点)** page; in rule mode, continue managing nodes in Clash.
 
 Enable **Clash TUN** to cover applications routed through its TUN. Without TUN, only applications using Clash's proxy are covered. If campus access fails, check **Coverage (覆盖范围)** on Home first. Disable campus access on Home when finished.
 
