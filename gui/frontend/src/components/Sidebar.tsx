@@ -1,6 +1,7 @@
 import { Globe, House, Route, ScrollText, Settings } from "lucide-react";
 import { useStore, type Page } from "../store";
 import { stateLabel, stateTone } from "../lib/status";
+import { UpdateControl } from "./UpdateControl";
 
 const items: { page: Page; label: string; icon: typeof House }[] = [
   { page: "home", label: "首页", icon: House },
@@ -28,6 +29,7 @@ export function Sidebar() {
         </button>
       ))}
       <div className="sidebar-foot">
+        <UpdateControl />
         <span className={`dot ${tone === "off" ? "" : tone}`} />
         <span className="ellipsis">{stateLabel(status)}</span>
       </div>

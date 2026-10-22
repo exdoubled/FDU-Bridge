@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/mythologyli/zju-connect/gui/internal/core"
+	"github.com/mythologyli/zju-connect/gui/internal/updates"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -50,6 +51,12 @@ func (s *CoreService) Respond(answer map[string]any) error {
 func (s *CoreService) RunTool(action string) error {
 	s.b.clashBusy.Lock()
 	defer s.b.clashBusy.Unlock()
+	s.b.mu.Lock()
+	updating := s.b.updating
+	s.b.mu.Unlock()
+	if updating || updates.StartupPending() {
+		return errors.New("正在安装更新")
+	}
 	if !core.Tools[action] {
 		return errors.New("不支持的客户端操作")
 	}

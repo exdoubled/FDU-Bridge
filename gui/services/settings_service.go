@@ -13,6 +13,12 @@ type SettingsService struct{ b *Backend }
 func NewSettingsService(b *Backend) *SettingsService { return &SettingsService{b} }
 
 func (s *SettingsService) editable() error {
+	s.b.mu.Lock()
+	updating := s.b.updating
+	s.b.mu.Unlock()
+	if updating {
+		return errors.New("正在安装更新")
+	}
 	status := s.b.Status()
 	if status.Running || status.Starting || status.Stopping {
 		return errEditingLocked
