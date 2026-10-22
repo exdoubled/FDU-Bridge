@@ -1,0 +1,58 @@
+:root {
+  --font: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  --mono: "Cascadia Mono", "Consolas", "Microsoft YaHei UI", monospace;
+
+  --bg: #f4f5f7;
+  --sidebar: #ffffff;
+  --card: #ffffff;
+  --card-hover: #f7f8fa;
+  --field: #f4f5f7;
+  --border: rgba(15, 23, 42, 0.08);
+  --border-strong: rgba(15, 23, 42, 0.16);
+  --text: #1c1f26;
+  --text-2: #5b6271;
+  --text-3: #8b92a0;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-soft: rgba(37, 99, 235, 0.1);
+  --accent-text: #1d4ed8;
+  --success: #16a34a;
+  --success-soft: rgba(22, 163, 74, 0.12);
+  --warning: #d97706;
+  --warning-soft: rgba(217, 119, 6, 0.12);
+  --danger: #dc2626;
+  --danger-soft: rgba(220, 38, 38, 0.1);
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.04);
+  --shadow-pop: 0 12px 32px rgba(15, 23, 42, 0.16), 0 2px 6px rgba(15, 23, 42, 0.08);
+  --scrim: rgba(15, 23, 42, 0.32);
+  --radius: 12px;
+  --radius-sm: 8px;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #18191c;
+  --sidebar: #1f2024;
+  --card: #232428;
+  --card-hover: #2a2b30;
+  --field: #2c2d32;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --text: #e8e9ec;
+  --text-2: #a5a9b3;
+  --text-3: #767b86;
+  --accent: #4f8cff;
+  --accent-hover: #6b9fff;
+  --accent-soft: rgba(79, 140, 255, 0.16);
+  --accent-text: #8fb4ff;
+  --success: #34c26b;
+  --success-soft: rgba(52, 194, 107, 0.16);
+  --warning: #f0a83a;
+  --warning-soft: rgba(240, 168, 58, 0.16);
+  --danger: #f26666;
+  --danger-soft: rgba(242, 102, 102, 0.16);
+  --shadow: none;
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --scrim: rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}

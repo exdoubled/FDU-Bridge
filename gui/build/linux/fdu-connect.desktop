@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=FDU Connect
+Comment=复旦大学 VPN 与分流管理
+Exec=fdu-connect-gui
+Icon=fdu-connect
+Terminal=false
+Categories=Network;
+StartupWMClass=fdu-connect-gui
