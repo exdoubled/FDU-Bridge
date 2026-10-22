@@ -33,23 +33,24 @@ const (
 
 // CoreStatus is everything the home page and tray need to describe the connection.
 type CoreStatus struct {
-	State       string `json:"state"`
-	Running     bool   `json:"running"`
-	Connected   bool   `json:"connected"`
-	External    bool   `json:"external"`
-	Stopping    bool   `json:"stopping"`
-	Tool        string `json:"tool"`
-	Server      string `json:"server"`
-	Protocol    string `json:"protocol"`
-	Socks       string `json:"socks"`
-	HTTP        string `json:"http"`
-	ConnectedAt int64  `json:"connectedAt"`
-	Admin       bool   `json:"admin"`
-	Saved       bool   `json:"saved"` // a saved config exists, so Connect can run
-	Starting    bool   `json:"starting"`
-	Enabled     bool   `json:"enabled"`
-	Coverage    string `json:"coverage"`
-	Problem     string `json:"problem"`
+	State        string `json:"state"`
+	Running      bool   `json:"running"`
+	Connected    bool   `json:"connected"`
+	External     bool   `json:"external"`
+	Stopping     bool   `json:"stopping"`
+	Tool         string `json:"tool"`
+	Server       string `json:"server"`
+	Protocol     string `json:"protocol"`
+	Socks        string `json:"socks"`
+	HTTP         string `json:"http"`
+	ConnectedAt  int64  `json:"connectedAt"`
+	Admin        bool   `json:"admin"`
+	Saved        bool   `json:"saved"` // a saved config exists, so Connect can run
+	Starting     bool   `json:"starting"`
+	Enabled      bool   `json:"enabled"`
+	Coverage     string `json:"coverage"`
+	Problem      string `json:"problem"`
+	AuthRequired bool   `json:"authRequired"`
 }
 
 func init() {
@@ -94,6 +95,8 @@ type Backend struct {
 	enabled      bool
 	coverage     string
 	problem      string
+	authRequired bool
+	freshLogin   bool
 	campus       *clash.CampusAttachment
 	campusOwned  bool // this GUI imported a configuration that still needs cleanup
 	cancel       context.CancelFunc
@@ -275,19 +278,43 @@ func (b *Backend) watchExternal() {
 
 func (b *Backend) onCoreState(state string) {
 	b.mu.Lock()
-	if b.follow && state == "connected" && !b.enabled {
-		b.state = "enabling"
-	} else if !b.starting && !b.enabled {
-		b.state = state
-	} else if state == "authentication" || state == "campus-unavailable" {
-		b.state = state
-	} else if state == "connected" && b.starting {
-		b.state = "enabling"
+	switch state {
+	case "auth-required":
+		if !b.stopping {
+			b.authRequired, b.enabled = true, false
+			b.state, b.problem = state, "登录已失效，请重新登录"
+		}
+	case "reconnecting", "authentication", "campus-unavailable":
+		b.enabled, b.state = false, state
+		if state == "authentication" {
+			b.authRequired, b.problem = false, ""
+		} else if state == "reconnecting" {
+			b.problem = "正在等待网络恢复并自动重连"
+		} else {
+			b.problem = "校内连接不可用，请检查诊断或重新登录"
+		}
+	case "stopped":
+		if b.authRequired && !b.stopping {
+			b.state = "auth-required"
+		} else if !b.starting && !b.enabled {
+			b.state = state
+		}
+	default:
+		if state == "connected" {
+			b.authRequired = false
+		}
+		if b.follow && state == "connected" && !b.enabled {
+			b.state = "enabling"
+		} else if !b.starting && !b.enabled {
+			b.state = state
+		} else if state == "connected" && b.starting {
+			b.state = "enabling"
+		}
 	}
 	if state != "connected" {
 		b.connectedAt = time.Time{}
 	}
-	if state == "stopped" || state == "tool-finished" {
+	if state == "stopped" || state == "tool-finished" || state == "auth-required" || state == "campus-unavailable" || state == "reconnecting" || state == "connected" {
 		b.challenge = nil
 	}
 	b.mu.Unlock()
@@ -332,7 +359,7 @@ func (b *Backend) Status() CoreStatus {
 	defer b.mu.Unlock()
 	status := CoreStatus{State: b.state, Running: running, Connected: connected && b.enabled, External: b.external,
 		Stopping: b.stopping, Tool: tool, Admin: sysproc.IsAdmin(), Starting: b.starting,
-		Enabled: b.enabled, Coverage: b.coverage, Problem: b.problem}
+		Enabled: b.enabled, Coverage: b.coverage, Problem: b.problem, AuthRequired: b.authRequired}
 	if !b.connectedAt.IsZero() {
 		status.ConnectedAt = b.connectedAt.UnixMilli()
 	}

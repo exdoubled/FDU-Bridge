@@ -100,6 +100,10 @@ func (b *Backend) previewConnect() (ConnectPreview, error) {
 
 // connect returns before browser authentication so the same switch can cancel it.
 func (b *Backend) connect(approved bool) error {
+	return b.connectWithLogin(approved, false)
+}
+
+func (b *Backend) connectWithLogin(approved, fresh bool) error {
 	b.clashBusy.Lock()
 	defer b.clashBusy.Unlock()
 	if b.runtime.Running() || b.runtime.ExternalRunning() {
@@ -118,6 +122,7 @@ func (b *Backend) connect(approved bool) error {
 	done := make(chan struct{})
 	b.cancel, b.startDone = cancel, done
 	b.starting, b.enabled, b.state, b.problem = true, false, "preparing", ""
+	b.authRequired, b.freshLogin = false, fresh
 	b.follow, b.followTarget, b.followRetry = true, nil, time.Time{}
 	b.mu.Unlock()
 	b.publish()
@@ -220,6 +225,8 @@ func (b *Backend) startCampus(ctx context.Context, done chan struct{}, approved 
 		b.connectedAt = time.Time{}
 		if cleanCancel && !running {
 			b.state, b.problem = "stopped", ""
+		} else if b.authRequired {
+			b.state, b.problem = "auth-required", "登录已失效，请重新登录"
 		} else {
 			b.state, b.problem = "error", err.Error()
 		}
@@ -319,7 +326,7 @@ func (b *Backend) prepareCampus(ctx context.Context, approved bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return b.runtime.Start(plan.Config, loaded.Values, "")
+	return b.startVPN(plan.Config, loaded.Values)
 }
 
 func (b *Backend) waitForCampus(ctx context.Context) error {
@@ -464,6 +471,7 @@ func (b *Backend) disconnect(force bool) (bool, error) {
 	b.mu.Lock()
 	wanted := b.follow
 	b.follow = false
+	b.authRequired, b.freshLogin = false, false
 	startedHere := b.startDone != nil
 	b.mu.Unlock()
 	if !startedHere && !b.runtime.Running() {
@@ -520,6 +528,7 @@ func (b *Backend) disconnect(force bool) (bool, error) {
 	}
 	if stopped && err == nil {
 		b.mu.Lock()
+		b.authRequired, b.freshLogin = false, false
 		b.state, b.problem, b.coverage = "stopped", "", ""
 		if deferred {
 			b.problem = "Clash 接入待下次启用时恢复"
@@ -566,10 +575,15 @@ func (b *Backend) refreshCampus() {
 		if !b.runtime.Running() {
 			b.mu.Lock()
 			b.follow, b.startDone = false, nil
+			required := b.authRequired
 			b.mu.Unlock()
-			b.connectionProblem("paused", "本地校园代理已退出")
+			if required {
+				b.waitingForVPN()
+			} else {
+				b.connectionProblem("paused", "本地校园代理已退出")
+			}
 		} else if !b.runtime.Connected() {
-			b.connectionProblem("paused", "等待校园 VPN 恢复连接")
+			b.waitingForVPN()
 		} else {
 			b.mu.Lock()
 			b.enabled, b.state, b.problem = true, "connected", ""
@@ -593,11 +607,18 @@ func (b *Backend) refreshCampus() {
 			b.campusOwned = false
 			b.mu.Unlock()
 		}
-		b.connectionProblem("paused", errors.Join(errors.New("校园 VPN 已退出"), detachErr).Error())
+		b.mu.Lock()
+		required := b.authRequired
+		b.mu.Unlock()
+		if required {
+			b.connectionProblem("auth-required", errors.Join(errors.New("登录已失效，请重新登录"), detachErr).Error())
+		} else {
+			b.connectionProblem("paused", errors.Join(errors.New("校园 VPN 已退出"), detachErr).Error())
+		}
 		return
 	}
 	if !b.runtime.Connected() {
-		b.connectionProblem("paused", "等待校园 VPN 恢复连接")
+		b.waitingForVPN()
 		return
 	}
 	var target clash.CampusTarget

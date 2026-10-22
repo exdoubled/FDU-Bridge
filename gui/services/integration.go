@@ -239,5 +239,5 @@ func (b *Backend) prepareProxy(ctx context.Context, approved bool) error {
 		return err
 	}
 	b.emit(EventChanged, "settings")
-	return b.runtime.Start(saved.Path, saved.Values, "")
+	return b.startVPN(saved.Path, saved.Values)
 }

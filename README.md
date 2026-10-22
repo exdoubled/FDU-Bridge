@@ -68,6 +68,7 @@ Clash 通过 TUN、系统代理或应用代理接收流量；FDU Bridge 负责 U
 
 - **运行要求**：Windows 需要 WebView2 Runtime；macOS 应用未经公证，首次打开需在 Finder 中右键选择“打开”；Linux 需要 GTK 4 和 WebKitGTK 6.0。
 - **登录浏览器**：UIS 自动登录需要 Edge、Chrome、Chromium 或 Brave，优先使用兼容的默认浏览器，无需粘贴回调地址。
+- **断线与登录过期**：Clash 分流连接会自动重试暂时性断线；会话过期时暂停重试，点击首页的**重新登录**重新认证。手动停用后停止重试，保留规则和设置。
 - **自动识别失败**：改用手动接入；客户端不具备所需能力时改用仅本地代理。
 - **端口被占用**：自动／手动接入会在启用前改用空闲端口；仅本地代理需自行调整监听端口。其他错误见**诊断**页。
 - **配置目录**：Windows 通常在程序目录，不可写时使用 `%APPDATA%\FDU Connect`（已有用户目录继续沿用）；macOS 为 `~/Library/Application Support/FDU Connect`；Linux 为 `$XDG_CONFIG_HOME/fdu-connect`，未设置时为 `~/.config/fdu-connect`。

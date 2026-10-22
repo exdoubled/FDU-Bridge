@@ -88,6 +88,9 @@ func (r *Runtime) PID() uint32 {
 func (r *Runtime) Tool() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if !r.runningLocked() {
+		return ""
+	}
 	return r.tool
 }
 
@@ -149,7 +152,16 @@ func (r *Runtime) preflight(values map[string]any) error {
 
 // Start launches the core for config. action is "" to connect or one of Tools.
 func (r *Runtime) Start(config string, values map[string]any, action string) error {
-	stdout, stderr, done, err := r.launch(config, values, action)
+	return r.start(config, values, action, false)
+}
+
+// StartFresh requests a new aTrust login without deleting saved settings or cookies.
+func (r *Runtime) StartFresh(config string, values map[string]any) error {
+	return r.start(config, values, "", true)
+}
+
+func (r *Runtime) start(config string, values map[string]any, action string, fresh bool) error {
+	stdout, stderr, done, err := r.launch(config, values, action, fresh)
 	if err != nil {
 		return err
 	}
@@ -194,7 +206,7 @@ func (r *Runtime) Start(config string, values map[string]any, action string) err
 }
 
 // launch validates and starts the child under the lock; callbacks run only after it returns.
-func (r *Runtime) launch(config string, values map[string]any, action string) (*os.File, *os.File, chan struct{}, error) {
+func (r *Runtime) launch(config string, values map[string]any, action string, fresh bool) (*os.File, *os.File, chan struct{}, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.runningLocked() {
@@ -227,11 +239,14 @@ func (r *Runtime) launch(config string, values map[string]any, action string) (*
 	hideConsole(cmd)
 	for _, entry := range os.Environ() {
 		upper := strings.ToUpper(entry)
-		if !strings.HasPrefix(upper, "ZJU_CONNECT_") && !strings.HasPrefix(upper, "FDU_CONNECT_GUI=") {
+		if !strings.HasPrefix(upper, "ZJU_CONNECT_") && !strings.HasPrefix(upper, "FDU_CONNECT_GUI=") && !strings.HasPrefix(upper, "FDU_CONNECT_GUI_RELOGIN=") {
 			cmd.Env = append(cmd.Env, entry)
 		}
 	}
 	cmd.Env = append(append(cmd.Env, "FDU_CONNECT_GUI=1"), r.Env...)
+	if fresh {
+		cmd.Env = append(cmd.Env, "FDU_CONNECT_GUI_RELOGIN=1")
+	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, nil, nil, err

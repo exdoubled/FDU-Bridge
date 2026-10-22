@@ -26,7 +26,7 @@ interface PendingConfirm extends ConfirmOptions {
 const idleStatus: CoreStatus = {
   state: "idle", running: false, starting: false, enabled: false, connected: false, external: false, stopping: false, tool: "",
   server: "", protocol: "", socks: "", http: "", connectedAt: 0, admin: false, saved: false,
-  coverage: "", problem: "",
+  coverage: "", problem: "", authRequired: false,
 };
 
 interface Store {
