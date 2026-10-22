@@ -17,10 +17,18 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-if ! [[ "$version" =~ ^(dev|v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]]; then
+prerelease_identifier='(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
+semver_pattern="^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-${prerelease_identifier}(\.${prerelease_identifier})*)?$"
+if [ "$version" != dev ] && ! [[ "$version" =~ $semver_pattern ]]; then
   echo "version must be dev or vX.Y.Z[-suffix]" >&2
   exit 2
 fi
+base_version="$version"
+if [ "$version" = dev ]; then
+  base_version="$(git -C "$root" describe --tags --match 'v*' --abbrev=0 2>/dev/null)" || base_version=""
+  [[ "$base_version" =~ $semver_pattern ]] || base_version=""
+fi
+gui_flags="-s -w -X github.com/mythologyli/zju-connect/gui/internal/updates.Version=$version -X github.com/mythologyli/zju-connect/gui/internal/updates.BaseVersion=$base_version"
 mkdir -p "$output"
 output="$(cd "$output" && pwd)"
 plain_version="${version#v}"
@@ -52,7 +60,7 @@ core_flags="-X main.zjuConnectVersion=$version"
 case "$(uname -s)" in
   Linux)
     arch="$(go env GOARCH)"
-    go build -tags production -trimpath -ldflags "-s -w" -o "$output/fdu-connect-gui" .
+    go build -tags production -trimpath -ldflags "$gui_flags" -o "$output/fdu-connect-gui" .
     (cd "$root" && CGO_ENABLED=0 go build -trimpath -ldflags "$core_flags" -o "$output/fdu-connect" .)
     cp "$root/config.toml.example" "$output/"
     echo "$output/fdu-connect-gui"
@@ -74,7 +82,7 @@ case "$(uname -s)" in
     # One universal bundle for Apple silicon and Intel Macs.
     work="$(mktemp -d)"
     for arch in arm64 amd64; do
-      CGO_ENABLED=1 GOARCH="$arch" go build -tags production -trimpath -ldflags "-s -w" -o "$work/gui-$arch" .
+      CGO_ENABLED=1 GOARCH="$arch" go build -tags production -trimpath -ldflags "$gui_flags" -o "$work/gui-$arch" .
       (cd "$root" && CGO_ENABLED=0 GOARCH="$arch" go build -trimpath -ldflags "$core_flags" -o "$work/core-$arch" .)
     done
     app="$output/FDU Connect.app"

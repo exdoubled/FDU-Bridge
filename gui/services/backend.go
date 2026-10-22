@@ -18,6 +18,7 @@ import (
 	"github.com/mythologyli/zju-connect/gui/internal/core"
 	"github.com/mythologyli/zju-connect/gui/internal/settings"
 	"github.com/mythologyli/zju-connect/gui/internal/sysproc"
+	"github.com/mythologyli/zju-connect/gui/internal/updates"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -72,6 +73,7 @@ type Backend struct {
 	runtime    *core.Runtime
 	workspace  *settings.Workspace
 	conn       *clash.Connection
+	updater    *UpdateService
 	autoTarget *clash.ClientTarget // accessed under clashBusy, never persisted with credentials
 
 	mu           sync.Mutex
@@ -88,6 +90,7 @@ type Backend struct {
 	pending      []string
 	challenge    map[string]any
 	starting     bool
+	updating     bool
 	enabled      bool
 	coverage     string
 	problem      string
@@ -141,6 +144,10 @@ func (b *Backend) Start(autoConnect bool) {
 	go b.watchExternal()
 	if autoConnect && b.config.AutoConnect && b.config.CampusConsent {
 		go func() {
+			if err := updates.AwaitStartup(); err != nil {
+				b.appendLog("更新尚未确认，已跳过自动连接：" + err.Error())
+				return
+			}
 			if b.runtime.ExternalRunning() {
 				b.appendLog("检测到其他 FDU 正在运行，已跳过自动连接。")
 				return
@@ -352,6 +359,9 @@ var errEditingLocked = errors.New("请先断开本程序启动的 FDU")
 
 // Shutdown follows the same detach-before-stop order as the power switch.
 func (b *Backend) Shutdown() {
+	if b.updater != nil {
+		b.updater.stop()
+	}
 	defer b.conn.Close()
 	if stopped, err := b.Disconnect(); err != nil {
 		b.appendLog("退出时清理失败：" + err.Error())

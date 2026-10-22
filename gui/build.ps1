@@ -8,6 +8,18 @@
 $ErrorActionPreference = 'Stop'
 $wailsVersion = 'v3.0.0-beta.34'
 $root = Split-Path -Parent $PSScriptRoot
+$prereleaseIdentifier = '(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
+$semverPattern = '\Av(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-' + $prereleaseIdentifier + '(\.' + $prereleaseIdentifier + ')*)?\z'
+if ($Version -cne 'dev' -and $Version -cnotmatch $semverPattern) { throw 'Version must be dev or vX.Y.Z[-suffix].' }
+$baseVersion = $Version
+if ($Version -eq 'dev') {
+    $baseVersion = ''
+    try {
+        $tag = (& git -C $root describe --tags --match 'v*' --abbrev=0 2>$null | Out-String).Trim()
+        if ($LASTEXITCODE -eq 0 -and $tag -cmatch $semverPattern) { $baseVersion = $tag }
+    } catch { } # A development checkout may have no reachable version tag or Git installation.
+}
+$guiFlags = "-H windowsgui -s -w -X github.com/mythologyli/zju-connect/gui/internal/updates.Version=$Version -X github.com/mythologyli/zju-connect/gui/internal/updates.BaseVersion=$baseVersion"
 $output = if ($OutputDirectory) { $OutputDirectory } else { Join-Path $root 'dist' }
 New-Item -ItemType Directory -Path $output -Force | Out-Null
 $output = (Resolve-Path -LiteralPath $output).Path
@@ -59,7 +71,7 @@ try {
         [IO.File]::WriteAllText($resourceInfo, ($versionInfo | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
     }
     Invoke-Checked 'Windows resources' { & $wails generate syso -arch amd64 -icon build/windows/icon.ico -manifest build/windows/app.exe.manifest -info $resourceInfo -out rsrc_windows_amd64.syso }
-    Invoke-Checked 'GUI build' { go build -tags production -trimpath -ldflags '-H windowsgui -s -w' -o (Join-Path $output 'FDU-Connect-GUI.exe') . }
+    Invoke-Checked 'GUI build' { go build -tags production -trimpath -ldflags $guiFlags -o (Join-Path $output 'FDU-Connect-GUI.exe') . }
 } finally { Pop-Location }
 
 Push-Location $root

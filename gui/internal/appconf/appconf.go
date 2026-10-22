@@ -12,11 +12,12 @@ import (
 )
 
 type Config struct {
-	Theme       string `json:"theme"` // system, light or dark
-	AutoStart   bool   `json:"autoStart"`
-	AutoConnect bool   `json:"autoConnect"`
-	CloseToTray bool   `json:"closeToTray"`
-	ClashDir    string `json:"clashDir"`
+	Theme        string `json:"theme"` // system, light or dark
+	AutoStart    bool   `json:"autoStart"`
+	AutoConnect  bool   `json:"autoConnect"`
+	CloseToTray  bool   `json:"closeToTray"`
+	CheckUpdates bool   `json:"checkUpdates"`
+	ClashDir     string `json:"clashDir"`
 	// FduConfig is the core config Clash integration targets; it may live outside the GUI directory.
 	FduConfig string `json:"fduConfig"`
 	// ConfigPath is the GUI-owned config the settings page saves and connections use.
@@ -92,7 +93,7 @@ func DataDir(executableDir string) string {
 
 func (s *Store) defaults() Config {
 	// Many Linux desktops hide tray icons, so a hidden window would look like a crash there.
-	return Config{Theme: "system", CloseToTray: runtime.GOOS != "linux", ClashDir: DefaultClashDir()}
+	return Config{Theme: "system", CloseToTray: runtime.GOOS != "linux", CheckUpdates: true, ClashDir: DefaultClashDir()}
 }
 
 func (s *Store) Load() Config {

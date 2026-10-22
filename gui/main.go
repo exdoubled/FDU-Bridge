@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 
 	"github.com/mythologyli/zju-connect/gui/internal/appconf"
+	"github.com/mythologyli/zju-connect/gui/internal/updates"
 	"github.com/mythologyli/zju-connect/gui/services"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -32,6 +33,9 @@ var trayOff []byte
 var trayTemplate []byte
 
 func main() {
+	if updates.RunHelper() {
+		return
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		log.Fatal(err)
@@ -58,6 +62,7 @@ func main() {
 			application.NewService(services.NewRulesService(backend)),
 			application.NewService(services.NewSettingsService(backend)),
 			application.NewService(services.NewAppService(backend)),
+			application.NewService(services.NewUpdateService(backend)),
 		},
 		Assets: application.AssetOptions{Handler: application.AssetFileServerFS(assets)},
 		SingleInstance: &application.SingleInstanceOptions{
