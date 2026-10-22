@@ -13,6 +13,7 @@ import (
 	"github.com/mythologyli/zju-connect/gui/internal/appconf"
 	"github.com/mythologyli/zju-connect/gui/internal/clash"
 	"github.com/mythologyli/zju-connect/gui/internal/fsx"
+	"github.com/mythologyli/zju-connect/gui/internal/updates"
 )
 
 type ConnectPreview struct {
@@ -105,7 +106,7 @@ func (b *Backend) connect(approved bool) error {
 		return errors.New("已有 FDU 在运行，请先关闭后再启用")
 	}
 	b.mu.Lock()
-	if b.starting || b.stopping {
+	if b.starting || b.stopping || b.updating || updates.StartupPending() {
 		b.mu.Unlock()
 		return errBusy
 	}
