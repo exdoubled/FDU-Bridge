@@ -44,11 +44,13 @@ function Shell() {
     if (Object.values(d).some(Boolean) && !(await confirm({ title: "退出并丢弃修改？", message: "有未保存的修改，退出后会丢失。", confirm: "退出", danger: true }))) return;
     if ((s.running || s.starting) && !(await confirm({ title: "关闭校内访问并退出？", message: "退出前会先关闭校内访问。", confirm: "关闭并退出" }))) return;
     try {
-      if (!(await AppService.QuitApp(false)) && (await confirm({ title: "断开超时", message: "FDU 尚未退出，强制结束并退出？", confirm: "强制退出", danger: true }))) {
+      if (!(await AppService.QuitApp(false)) && (await confirm({ title: "断开超时", message: "强制结束 FDU 并退出？未恢复的 Clash 接入会保留待下次处理。", confirm: "强制退出", danger: true }))) {
         await AppService.QuitApp(true);
       }
     } catch (e) {
-      fail(e);
+      if (await confirm({ title: "接入未恢复", message: "强制退出可能影响当前代理。保留记录并退出 FDU？下次启用时再尝试恢复。", confirm: "强制退出", danger: true })) {
+        try { await AppService.QuitApp(true); } catch (error) { fail(error); }
+      } else { fail(e); }
     }
   }), [confirm, fail]);
 

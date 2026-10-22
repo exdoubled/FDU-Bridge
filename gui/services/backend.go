@@ -68,10 +68,11 @@ type Backend struct {
 	OnState func(CoreStatus)               // tray hook
 	Quit    func(force bool) (bool, error) // set by main; stops the core then exits
 
-	conf      *appconf.Store
-	runtime   *core.Runtime
-	workspace *settings.Workspace
-	conn      *clash.Connection
+	conf       *appconf.Store
+	runtime    *core.Runtime
+	workspace  *settings.Workspace
+	conn       *clash.Connection
+	autoTarget *clash.ClientTarget // accessed under clashBusy, never persisted with credentials
 
 	mu           sync.Mutex
 	config       appconf.Config
@@ -91,6 +92,7 @@ type Backend struct {
 	coverage     string
 	problem      string
 	campus       *clash.CampusAttachment
+	campusOwned  bool // this GUI imported a configuration that still needs cleanup
 	cancel       context.CancelFunc
 	startDone    chan struct{}
 	follow       bool // the user's switch stays on while Clash changes or restarts
@@ -375,15 +377,18 @@ func (b *Backend) currentPlan() *clash.Plan {
 	return b.plan
 }
 
-func (b *Backend) picker() *clash.Picker {
-	root, _ := b.campusRoot()
-	p := &clash.Picker{ClashDir: root, Campus: true}
+func (b *Backend) picker() (*clash.Picker, error) {
+	root, err := b.campusRoot()
+	if err != nil {
+		return nil, err
+	}
+	p := &clash.Picker{ClashDir: root, Campus: true, API: b.conn.Controller(root)}
 	if a := b.campusAttachment(); a != nil {
 		p.Unsafe = clash.UnsafeSet(clash.Plan{UnsafeNodes: a.UnsafeNodes})
 	} else if plan := b.currentPlan(); plan != nil {
 		p.Front, p.Unsafe = plan.Mode == "fdu-first", clash.UnsafeSet(*plan)
 	}
-	return p
+	return p, nil
 }
 
 func (b *Backend) currentView() *settings.View {
