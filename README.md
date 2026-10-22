@@ -22,6 +22,18 @@
 - 一键为现有 Clash Verge Rev 添加复旦内网，支持识别普通和便携安装，自动跟随全局／规则模式及订阅切换，更新 TUN 覆盖提示，停用时恢复出口。
 - 保存规则后自动加载，新连接使用新规则；已有连接保留原路径。
 
+## TODO
+
+- [x] 适配 Clash Verge Rev ，覆盖首次接入、模式／订阅切换及异常恢复。
+- [ ] 完善升级与目录迁移，处理旧配置冲突，支持移除 FDU 接入。
+- [ ] 增加校内网址自检，检查规则命中及通过 Clash 的访问结果。
+- [ ] 验证并完善断网、网络切换和休眠唤醒后的连接恢复。
+- [ ] 完善登录过期处理，提供重新登录入口。
+- [ ] 支持校内规则导入／导出。
+- [ ] 适配 FlClash、Clash Party 桌面版。
+- [ ] 适配 Sparkle、Clash Nyanpasu、ClashX.Meta。
+- [ ] 公布按客户端版本和操作系统验证的兼容列表。
+
 ## 使用方法
 
 1. 从 [Releases](https://github.com/exdoubled/FDU-Bridge/releases) 下载对应系统的压缩包并解压。
@@ -47,6 +59,21 @@
 - Windows 的配置通常保存在程序目录；目录不可写时使用 `%APPDATA%\FDU Connect`，已有用户目录继续沿用。macOS 使用 `~/Library/Application Support/FDU Connect`；Linux 使用 `$XDG_CONFIG_HOME/fdu-connect`，未设置时使用 `~/.config/fdu-connect`。升级时保留自己的配置和登录状态；只关闭窗口可能仍驻留托盘，覆盖程序前请先退出 FDU。
 
 </details>
+
+## 工作原理
+
+FDU Bridge 是配合 Clash 使用的独立桌面程序。Clash 负责通过 TUN、系统代理或应用手动代理接收流量，FDU 核心负责 UIS 认证、aTrust 校园隧道和指定资源的转发。
+
+启用时，GUI 备份配置，通过 Clash Verge Rev 的配置覆写和本地控制接口加入 `FDU-ROUTER` 节点、校园规则及专用回流入口。进入 Clash 的流量按当前模式处理：
+
+| Clash 模式 | 指定的校内资源 | 其他流量 |
+| --- | --- | --- |
+| 全局 | Clash → FDU 核心 → aTrust 隧道 → 校内资源 | Clash → FDU 核心 → Clash 专用回流入口 → `INTERNET` 所选出口 |
+| 规则 | Clash 校园规则 → FDU 核心 → aTrust 隧道 → 校内资源 | 沿用 Clash 原有规则与节点，可代理、直连或拒绝 |
+
+全局模式的回流入口固定使用 `INTERNET`，避免再次进入 `GLOBAL` 形成循环。GUI 自动跟随模式和订阅变化，停用时先恢复外网出口，再关闭校园连接。
+
+默认接入使用用户态网络栈，无需创建额外的 FDU 虚拟网卡；登录与 VPN 底层连接绑定物理网卡，避免被 Clash TUN 再次接管。只有进入 Clash 的流量才受上述分流控制，系统代理绕过的地址仍可能直连。
 
 <details>
 <summary>从源码构建及其他运行方式（开发者）</summary>

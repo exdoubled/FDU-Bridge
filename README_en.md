@@ -22,6 +22,18 @@ This fork targets Fudan University's login system. It adds browser callback capt
 - Add Fudan campus access to Clash Verge Rev with one switch, detect standard and portable installations, follow global/rule mode and subscription changes, update TUN coverage information, and restore the outside exit when disabled.
 - Reload saved rules automatically. New connections use the updated rules; existing connections keep their original routes.
 
+## TODO
+
+- [x] Integrate Clash Verge Rev, covering first use, mode/subscription changes, and recovery after failures.
+- [ ] Improve upgrades and directory migration, handle conflicts with existing configurations, and support removing the FDU integration.
+- [ ] Add campus URL checks to show matching rules and access results through Clash.
+- [ ] Verify and improve connection recovery after outages, network changes, and waking from sleep.
+- [ ] Improve expired-session handling and provide a login action.
+- [ ] Support importing and exporting campus rules.
+- [ ] Integrate FlClash and Clash Party desktop clients.
+- [ ] Integrate Sparkle, Clash Nyanpasu, and ClashX.Meta.
+- [ ] Publish a compatibility list verified by client version and operating system.
+
 ## Usage
 
 1. Download the package for your system from [Releases](https://github.com/exdoubled/FDU-Bridge/releases) and extract it.
@@ -47,6 +59,21 @@ Enable **Clash TUN** to cover applications routed through its TUN. Without TUN, 
 - Windows normally stores configuration beside the program, falling back to `%APPDATA%\FDU Connect` if that directory is not writable; an established per-user directory continues to be used. macOS uses `~/Library/Application Support/FDU Connect`. Linux uses `$XDG_CONFIG_HOME/fdu-connect`, or `~/.config/fdu-connect` when unset. Keep your configuration and login state when upgrading. Closing the window may leave FDU in the tray; exit FDU before replacing its executables.
 
 </details>
+
+## How it works
+
+FDU Bridge is a standalone desktop companion to Clash. Clash receives application traffic through TUN, the system proxy, or per-application proxy settings. The FDU core handles UIS authentication, the aTrust campus tunnel, and forwarding for selected resources.
+
+When enabled, the GUI backs up the configuration and uses Clash Verge Rev's configuration overrides and local control interface to add the `FDU-ROUTER` node, campus rules, and a dedicated return listener. Traffic entering Clash follows the current mode:
+
+| Clash mode | Selected campus resources | Other traffic |
+| --- | --- | --- |
+| Global | Clash → FDU core → aTrust tunnel → campus resource | Clash → FDU core → dedicated Clash return listener → exit selected in `INTERNET` |
+| Rule | Clash campus rules → FDU core → aTrust tunnel → campus resource | Existing Clash rules and node selections, including proxy, direct, or reject actions |
+
+In global mode, the return listener is pinned to `INTERNET`, avoiding a loop back through `GLOBAL`. The GUI follows mode and subscription changes automatically. Disabling campus access restores the outside exit before closing the campus connection.
+
+The default integration uses a userspace network stack without creating an additional FDU virtual adapter. Login and VPN underlay connections are bound to a physical interface to avoid being captured again by Clash TUN. This routing applies only to traffic entering Clash; addresses bypassed by the system proxy may still connect directly.
 
 <details>
 <summary>Build from source and other launch methods (developers)</summary>
