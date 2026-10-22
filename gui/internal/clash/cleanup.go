@@ -207,7 +207,10 @@ func (c *Connection) RemoveCampus(a CampusAttachment, values map[string]any) (st
 	}
 	changes := []cleanupChange{}
 	inputs := map[string]string{}
-	read := func(path string) (map[string]any, error) {
+	for path, hash := range p.Inputs {
+		inputs[path] = hash
+	}
+	readFile := func(path string) ([]byte, error) {
 		// All writes are scoped to a selected client or the private GUI feed.
 		for dir := path; ; dir = filepath.Dir(dir) {
 			info, e := os.Lstat(dir)
@@ -226,6 +229,13 @@ func (c *Connection) RemoveCampus(a CampusAttachment, values map[string]any) (st
 			return nil, e
 		}
 		inputs[path] = fsx.Hash(raw)
+		return raw, nil
+	}
+	read := func(path string) (map[string]any, error) {
+		raw, e := readFile(path)
+		if e != nil {
+			return nil, e
+		}
 		var m map[string]any
 		e = yaml.Unmarshal(raw, &m)
 		if e == nil && m == nil {
@@ -256,6 +266,17 @@ func (c *Connection) RemoveCampus(a CampusAttachment, values map[string]any) (st
 		return "", err
 	}
 	sourceInstalled := containsRuntimeFDU(runtime)
+	for key, value := range runtimeOverrides(live, api) {
+		runtime[key] = value
+	}
+	rollbackPayload := p.Payload
+	if sourceInstalled || a.RuntimeFile == "" {
+		raw, e := yaml.Marshal(runtime)
+		if e != nil {
+			return "", e
+		}
+		rollbackPayload = string(raw)
+	}
 	if err = removeCampusParts(runtime, expected, ""); err != nil {
 		return "", err
 	}
@@ -280,7 +301,7 @@ func (c *Connection) RemoveCampus(a CampusAttachment, values map[string]any) (st
 		}
 		options, _ := active["option"].(map[string]any)
 		removed := map[string]bool{}
-		for _, kind := range []string{"proxies", "groups", "merge", "rules"} {
+		for _, kind := range []string{"proxies", "groups", "merge", "rules", "script"} {
 			uid, _ := options[kind].(string)
 			if uid == "" {
 				continue
@@ -296,14 +317,6 @@ func (c *Connection) RemoveCampus(a CampusAttachment, values map[string]any) (st
 				return "", errors.New("订阅扩展归属不明确")
 			}
 			path := filepath.Join(a.Root, "profiles", file)
-			m, e := read(path)
-			if e != nil {
-				return "", e
-			}
-			if e = removeCampusParts(m, expected, kind); e != nil {
-				return "", e
-			}
-			owned := entry["name"] == "FDU "+kind && entry["desc"] == "Managed by FDU node and rule manager" && strings.HasPrefix(uid, "fdu-") && file == uid+".yaml"
 			shared := false
 			for _, item := range items {
 				other, ok := item.(map[string]any)
@@ -313,6 +326,38 @@ func (c *Connection) RemoveCampus(a CampusAttachment, values map[string]any) (st
 				option, _ := other["option"].(map[string]any)
 				shared = shared || option[kind] == uid
 			}
+			if kind == "script" {
+				raw, e := readFile(path)
+				if e != nil {
+					return "", e
+				}
+				script, _, e := renderExportPatch(p)
+				if e != nil {
+					return "", e
+				}
+				if strings.TrimSpace(string(raw)) != strings.TrimSpace(script) {
+					if strings.Contains(string(raw), "FDU-ROUTER") || strings.Contains(string(raw), "FDU-CAMPUS") || strings.Contains(string(raw), "FDU Bridge") {
+						return "", errors.New("FDU 脚本已被修改，无法确认归属，未移除")
+					}
+					continue
+				}
+				delete(options, kind)
+				if !shared {
+					removed[uid] = true
+					if e = queue(path, nil, true); e != nil {
+						return "", e
+					}
+				}
+				continue
+			}
+			m, e := read(path)
+			if e != nil {
+				return "", e
+			}
+			if e = removeCampusParts(m, expected, kind); e != nil {
+				return "", e
+			}
+			owned := entry["name"] == "FDU "+kind && entry["desc"] == "Managed by FDU node and rule manager" && strings.HasPrefix(uid, "fdu-") && file == uid+".yaml"
 			remove := owned && !shared && emptyExtension(m)
 			if remove {
 				delete(options, kind)
@@ -369,6 +414,13 @@ func (c *Connection) RemoveCampus(a CampusAttachment, values map[string]any) (st
 	if err = check(); err != nil {
 		return "", err
 	}
+	var current map[string]any
+	if err = api.Do("GET", "/configs", nil, &current); err != nil {
+		return "", err
+	}
+	if !reflect.DeepEqual(runtimeOverrides(live, api), runtimeOverrides(current, api)) {
+		return "", ErrClashChanging
+	}
 	var written []cleanupChange
 	reloadAttempted := false
 	for _, change := range changes {
@@ -397,49 +449,12 @@ func (c *Connection) RemoveCampus(a CampusAttachment, values map[string]any) (st
 			err = errors.New("Clash 未确认移除 FDU 配置")
 		}
 		if err == nil {
-			for name, previous := range selections.Proxies {
-				if previous.Type != "Selector" || name == "INTERNET" {
-					continue
-				}
-				target := previous.Now
-				if target == "FDU-ROUTER" || target == "INTERNET" {
-					target = outside
-				}
-				current := after.Proxies[name]
-				if current == nil || current.Type != "Selector" || !contains(current.All, target) || after.Proxies[target] == nil {
-					err = fmt.Errorf("无法保留 %s 的外网选择", name)
-					break
-				}
-				if current.Now != target {
-					if err = api.Do("PUT", "/proxies/"+url.PathEscape(name), map[string]string{"name": target}, nil); err != nil {
-						break
-					}
-				}
-			}
+			err = restoreCleanupSelections(api, selections.Proxies, outside, true)
 		}
 		if err == nil {
-			var verified proxyResponse
 			var config map[string]any
 			if err = api.Do("GET", "/configs", nil, &config); err == nil && (!reflect.DeepEqual(live["tun"], config["tun"]) || live["mode"] != config["mode"]) {
 				err = errors.New("Clash 模式或 TUN 状态已变化")
-			}
-			if err == nil {
-				err = api.Do("GET", "/proxies", nil, &verified)
-			}
-			if err == nil {
-				for name, previous := range selections.Proxies {
-					if previous.Type != "Selector" || name == "INTERNET" {
-						continue
-					}
-					target := previous.Now
-					if target == "FDU-ROUTER" || target == "INTERNET" {
-						target = outside
-					}
-					if verified.Proxies[name] == nil || verified.Proxies[name].Now != target {
-						err = fmt.Errorf("Clash 未确认保留 %s 的选择", name)
-						break
-					}
-				}
 			}
 		}
 		if err == nil {
@@ -464,11 +479,49 @@ func (c *Connection) RemoveCampus(a CampusAttachment, values map[string]any) (st
 		}
 	}
 	if reloadAttempted && len(failures) == 0 && check() == nil {
-		if e := api.Do("PUT", "/configs?force=true", map[string]string{"payload": p.Payload}, nil); e != nil {
+		if e := api.Do("PUT", "/configs?force=true", map[string]string{"payload": rollbackPayload}, nil); e != nil {
 			failures = append(failures, "Clash 恢复未确认："+e.Error())
-		} else if e = restoreCampusSelections(api, selections.Proxies, text(live["mode"]), UnsafeSet(p)); e != nil {
+		} else if e = restoreCleanupSelections(api, selections.Proxies, "", false); e != nil {
 			failures = append(failures, e.Error())
 		}
 	}
 	return "", fmt.Errorf("移除未完成：%w；已保留恢复记录和备份 %s\n%s", err, backup, strings.Join(failures, "\n"))
+}
+
+// Reloads may reset user selectors. Restore all of them, and verify the result.
+// Only a successful removal substitutes the Internet exit for deleted FDU nodes.
+func restoreCleanupSelections(api API, saved Proxies, outside string, removed bool) error {
+	var response proxyResponse
+	if err := api.Do("GET", "/proxies", nil, &response); err != nil {
+		return err
+	}
+	wanted := map[string]string{}
+	for name, previous := range saved {
+		if previous.Type != "Selector" || removed && name == "INTERNET" {
+			continue
+		}
+		target := previous.Now
+		if removed && (target == "FDU-ROUTER" || target == "INTERNET") {
+			target = outside
+		}
+		current := response.Proxies[name]
+		if current == nil || current.Type != "Selector" || !contains(current.All, target) || response.Proxies[target] == nil {
+			return fmt.Errorf("无法保留 %s 的选择", name)
+		}
+		wanted[name] = target
+		if current.Now != target {
+			if err := api.Do("PUT", "/proxies/"+url.PathEscape(name), map[string]string{"name": target}, nil); err != nil {
+				return err
+			}
+		}
+	}
+	if err := api.Do("GET", "/proxies", nil, &response); err != nil {
+		return err
+	}
+	for name, target := range wanted {
+		if response.Proxies[name] == nil || response.Proxies[name].Now != target {
+			return fmt.Errorf("Clash 未确认保留 %s 的选择", name)
+		}
+	}
+	return nil
 }

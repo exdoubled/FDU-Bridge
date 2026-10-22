@@ -12,6 +12,28 @@ import (
 // ExportPatch exports the same node, provider and listener used by the managed integration.
 // It persists only GUI-owned feed data; installing the extension is an explicit user action.
 func (c *Connection) ExportPatch(plan Plan) (string, string, error) {
+	script, fragment, err := renderExportPatch(plan)
+	if err != nil {
+		return "", "", err
+	}
+	feed, err := c.campusFeed()
+	if err != nil {
+		return "", "", err
+	}
+	feed.url(plan.ProviderPath)
+	if err = feed.save(); err != nil {
+		return "", "", err
+	}
+	if _, err = os.Stat(plan.ProviderPath); os.IsNotExist(err) {
+		err = fsx.AtomicWrite(plan.ProviderPath, []byte("payload: []\n"))
+	}
+	if err != nil {
+		return "", "", err
+	}
+	return script, fragment, nil
+}
+
+func renderExportPatch(plan Plan) (string, string, error) {
 	var runtime map[string]any
 	if err := yaml.Unmarshal([]byte(plan.Payload), &runtime); err != nil {
 		return "", "", err
@@ -38,20 +60,6 @@ func (c *Connection) ExportPatch(plan Plan) (string, string, error) {
 		return "", "", errors.New("缺少校园规则接口")
 	}
 	patch["rule-providers"] = map[string]any{"FDU-CAMPUS": providers["FDU-CAMPUS"]}
-	feed, err := c.campusFeed()
-	if err != nil {
-		return "", "", err
-	}
-	feed.url(plan.ProviderPath)
-	if err = feed.save(); err != nil {
-		return "", "", err
-	}
-	if _, err = os.Stat(plan.ProviderPath); os.IsNotExist(err) {
-		err = fsx.AtomicWrite(plan.ProviderPath, []byte("payload: []\n"))
-	}
-	if err != nil {
-		return "", "", err
-	}
 	data, err := json.Marshal(patch)
 	if err != nil {
 		return "", "", err
