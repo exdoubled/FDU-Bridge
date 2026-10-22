@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { ChevronRight, FileText, FolderOpen, Layers, Palette, Plug, RefreshCw, Upload, Wrench } from "lucide-react";
+import { ChevronRight, FileText, FolderOpen, Layers, Palette, RefreshCw, Upload, Wrench } from "lucide-react";
 import { AppService, ClashService, CoreService, SettingsService, type SettingsView } from "../lib/api";
 import { advancedOrder, availability, fieldsOf, getValue, prepareForSave, primaryGroups, setValue, type Values } from "../lib/settingsForm";
 import { useStore } from "../store";
 import { Banner, Empty, Segmented, Spinner, Switch } from "../components/ui";
 import { SettingRow } from "../components/SettingField";
+import { IntegrationSettings } from "../components/IntegrationSettings";
 
 function PathSetting({ label, path, onBrowse, disabled }: { label: string; path?: string; onBrowse: () => void; disabled: boolean }) {
   return (
@@ -33,14 +34,14 @@ export function Settings() {
   const [values, setValues] = useState<Values>({});
   const [baseline, setBaseline] = useState("");
   const [saving, setSaving] = useState(false);
-  const [clashBusy, setClashBusy] = useState(false);
+  const [integrationDirty, setIntegrationDirty] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const locked = status.running || status.starting || status.stopping;
   // Only real edits block navigation; an untouched draft stays in the backend until saved.
   const edited = !!view && JSON.stringify(values) !== baseline;
   const dirty = edited || !!view?.dirty;
 
-  useEffect(() => setDirty("settings", edited), [edited, setDirty]);
+  useEffect(() => setDirty("settings", edited || integrationDirty), [edited, integrationDirty, setDirty]);
   useEffect(() => () => setDirty("settings", false), [setDirty]);
 
   const show = useCallback((next: SettingsView | null) => {
@@ -113,25 +114,12 @@ export function Settings() {
     }
   };
 
-  const inspect = async () => {
-    setClashBusy(true);
-    try {
-      setOverview(await ClashService.Inspect());
-    } catch (e) {
-      fail(e);
-    } finally {
-      setClashBusy(false);
-    }
-  };
-
-  const pickPaths = async (which: "clash" | "config") => {
+  const pickConfig = async () => {
     if (!overview) return;
     try {
-      const picked = which === "clash"
-        ? await AppService.PickFolder("选择含 profiles.yaml 的 Clash Verge 配置目录", overview.clashDir)
-        : await AppService.PickConfig("选择 FDU 配置文件");
+      const picked = await AppService.PickConfig("选择 FDU 配置文件");
       if (!picked) return;
-      setOverview(await ClashService.SetPaths(which === "clash" ? picked : overview.clashDir, which === "config" ? picked : overview.fduConfig));
+      setOverview(await ClashService.SetPaths("", picked));
     } catch (e) {
       fail(e);
     }
@@ -160,18 +148,7 @@ export function Settings() {
       </header>
       <div className="page-body">
         <div className="stack">
-          <section className="card section" id="clash" style={{ padding: 0 }}>
-            <div className="section-head"><Plug size={16} />现有 Clash</div>
-            <PathSetting label="Clash Verge 配置目录" path={overview?.clashDir} onBrowse={() => pickPaths("clash")} disabled={!overview || locked} />
-            <div style={{ padding: "6px 20px 16px" }}>
-              {!overview ? <span className="muted">正在检查…</span> : overview.ready ? (
-                <dl className="kv"><dt>当前订阅</dt><dd>{overview.profile}</dd></dl>
-              ) : <Banner tone="warning">{overview.error}</Banner>}
-              <div className="row" style={{ marginTop: 14, justifyContent: "flex-end" }}>
-                <button className="btn" onClick={inspect} disabled={clashBusy}>{clashBusy ? <Spinner /> : <RefreshCw size={15} />}检查连接</button>
-              </div>
-            </div>
-          </section>
+          <IntegrationSettings onDirtyChange={setIntegrationDirty} />
 
           <section className="card section" style={{ padding: 0 }}>
             <div className="section-head"><Palette size={16} />外观与启动</div>
@@ -208,7 +185,7 @@ export function Settings() {
               {!view ? (
                 <Empty icon={FileText} title="无法读取 VPN 配置">可导入现有的 FDU 配置</Empty>
               ) : <>
-                <PathSetting label="VPN 配置文件" path={overview?.fduConfig} onBrowse={() => pickPaths("config")} disabled={!overview || locked} />
+                <PathSetting label="VPN 配置文件" path={overview?.fduConfig} onBrowse={pickConfig} disabled={!overview || locked} />
                 {[...primaryGroups.map(({ group }) => group), ...advancedOrder].map((group) => {
                   const groupFields = fieldsOf(fields, group).filter((field) => field.key !== "tun_mode" && field.key !== "routing.enabled");
                   if (!groupFields.length) return null;

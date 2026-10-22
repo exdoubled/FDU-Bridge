@@ -146,11 +146,13 @@ func (t *tray) confirm(title, message string, yes func()) {
 func (t *tray) quit() {
 	ok, err := t.backend.Quit(false)
 	if err != nil {
-		t.showError(err)
+		t.confirm("接入未恢复", "强制退出可能影响当前代理。保留记录并退出 FDU？下次启用时再尝试恢复。", func() {
+			go func() { _, err := t.backend.Quit(true); t.showError(err) }()
+		})
 		return
 	}
 	if !ok {
-		t.confirm("退出", "FDU 尚未退出，强制结束本程序启动的进程并退出？", func() {
+		t.confirm("退出", "强制结束 FDU 并退出？未恢复的 Clash 接入会保留待下次处理。", func() {
 			go func() {
 				_, err := t.backend.Quit(true)
 				t.showError(err)

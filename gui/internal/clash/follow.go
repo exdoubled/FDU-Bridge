@@ -24,7 +24,7 @@ func campusPlanCurrent(api API, root string, plan Plan) error {
 	if err := api.Do("GET", "/configs", nil, &live); err != nil {
 		return err
 	}
-	match, err := campusProfile(CampusAttachment{Root: root, ProfileUID: plan.ProfileUID})
+	match, err := campusProfile(CampusAttachment{Root: root, ProfileUID: plan.ProfileUID, RuntimeFile: plan.RuntimeFile, RuntimeHash: plan.RuntimeHash})
 	if err != nil {
 		return err
 	}
@@ -47,6 +47,16 @@ func (c *Connection) CurrentCampus(root string) (CampusTarget, error) {
 	}
 	if err = api.Do("GET", "/proxies", nil, &response); err != nil {
 		return target, err
+	}
+	if file := c.RuntimePath(); file != "" {
+		raw, readErr := fsx.ReadBounded(file, 8*1024*1024)
+		if readErr != nil {
+			return target, readErr
+		}
+		target.ProfileUID = "runtime-" + fsx.Hash([]byte(file+"\x00"+fsx.Hash(raw)))
+		target.Mode, target.Revision = strings.ToLower(text(live["mode"])), fsx.Hash(raw)
+		target.Installed = response.Proxies["GLOBAL"] != nil && response.Proxies["INTERNET"] != nil && response.Proxies["FDU-ROUTER"] != nil
+		return target, nil
 	}
 	raw, err := fsx.ReadBounded(filepath.Join(root, "profiles.yaml"), 8*1024*1024)
 	if err != nil {

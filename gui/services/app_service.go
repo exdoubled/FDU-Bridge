@@ -34,6 +34,10 @@ func (s *AppService) PickConfig(title string) (string, error) {
 	return s.b.App.Dialog.OpenFile().SetTitle(title).AddFilter("FDU TOML 配置", "*.toml;*.example").AddFilter("所有文件", "*.*").PromptForSingleSelection()
 }
 
+func (s *AppService) PickRuntimeConfig() (string, error) {
+	return s.b.App.Dialog.OpenFile().SetTitle("选择客户端实际使用的运行配置").AddFilter("Mihomo 运行配置", "*.yaml;*.yml").PromptForSingleSelection()
+}
+
 // OpenURL only opens web pages, so a challenge payload cannot launch local programs.
 func (s *AppService) OpenURL(raw string) error {
 	u, err := url.Parse(raw)

@@ -120,6 +120,10 @@ func planCampus(r Request, meta, active, runtime map[string]any, enabled bool, p
 	if err := plannedYAML(rulesPath, rules, p); err != nil {
 		return err
 	}
+	return planCampusRules(enabled, p)
+}
+
+func planCampusRules(enabled bool, p *Plan) error {
 	raw, err := read(p.Rules, p)
 	if err != nil {
 		return err

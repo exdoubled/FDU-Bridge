@@ -23,9 +23,46 @@ type ConnectPreview struct {
 
 func (b *Backend) campusRoot() (string, error) {
 	b.mu.Lock()
-	root := b.config.ClashDir
+	settings, root := b.config.Integration, b.config.ClashDir
 	b.mu.Unlock()
-	return appconf.ResolveClashDir(root)
+	if settings.Mode == "proxy" {
+		b.conn.ConfigureTarget("", nil)
+		return "", nil
+	}
+	preferred := settings.RuntimeFile
+	if settings.Mode == "manual" {
+		target, err := clash.ManualTarget(preferred, settings.Controller, settings.Secret)
+		if err != nil {
+			return "", err
+		}
+		b.conn.ConfigureTarget(target.RuntimeFile, target.Controller)
+		return target.Root, nil
+	}
+	var target clash.ClientTarget
+	var err error
+	if b.runtime.Running() && b.autoTarget != nil {
+		var clients []clash.ClientTarget
+		clients, err = clash.DiscoverClients()
+		if err == nil {
+			target, err = followingClient(*b.autoTarget, clients)
+		}
+	} else {
+		target, err = b.automaticTarget(preferred, root)
+	}
+	if err != nil {
+		return "", err
+	}
+	if target.Kind == "verge" {
+		b.conn.ConfigureTarget("", nil)
+	} else {
+		if b.runtime.Running() && b.autoTarget != nil {
+			b.conn.ConfigureFollowingTarget(target.RuntimeFile, target.Controller)
+		} else {
+			b.conn.ConfigureTarget(target.RuntimeFile, target.Controller)
+		}
+	}
+	b.autoTarget = &target
+	return target.Root, nil
 }
 
 func (b *Backend) previewConnect() (ConnectPreview, error) {
@@ -34,6 +71,12 @@ func (b *Backend) previewConnect() (ConnectPreview, error) {
 	view := b.currentView()
 	if view == nil {
 		return ConnectPreview{}, errors.New("未找到默认 VPN 配置，请在高级设置中导入")
+	}
+	if b.proxyOnly() {
+		b.mu.Lock()
+		consent := b.config.CampusConsent
+		b.mu.Unlock()
+		return ConnectPreview{NeedsConsent: !consent, Profile: "本地代理", Message: "启动本地校园代理，不操作其他客户端。请在应用或代理客户端中设置 SOCKS5/HTTP 代理与分流规则。"}, nil
 	}
 	root, err := b.campusRoot()
 	if err != nil {
@@ -106,7 +149,16 @@ func (b *Backend) rememberCampus(a clash.CampusAttachment) error {
 	if err != nil {
 		return err
 	}
-	return fsx.AtomicWrite(filepath.Join(b.Dir, "campus-session.json"), raw)
+	if err := fsx.AtomicWrite(filepath.Join(b.Dir, "campus-session.json"), raw); err != nil {
+		return err
+	}
+	b.mu.Lock()
+	settings := b.config.Integration
+	b.mu.Unlock()
+	if a.RuntimeFile != "" && (settings.Mode == "" || settings.Mode == "auto") && settings.RuntimeFile != "" && settings.RuntimeFile != a.RuntimeFile {
+		return b.saveConfig(func(c *appconf.Config) { c.Integration.RuntimeFile = a.RuntimeFile })
+	}
+	return nil
 }
 
 func (b *Backend) campusAttachment() *clash.CampusAttachment {
@@ -119,6 +171,12 @@ func (b *Backend) campusAttachment() *clash.CampusAttachment {
 	return &a
 }
 
+func (b *Backend) ownsCampus() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.campusOwned
+}
+
 func (b *Backend) startCampus(ctx context.Context, done chan struct{}, approved bool) {
 	err := b.prepareCampus(ctx, approved)
 	if err == nil {
@@ -128,7 +186,10 @@ func (b *Backend) startCampus(ctx context.Context, done chan struct{}, approved 
 	cleanupComplete := false
 	if err != nil {
 		b.clashBusy.Lock()
-		detachErr := b.detachCampus()
+		var detachErr error
+		if b.ownsCampus() || b.runtime.Running() {
+			_, detachErr = b.detachForStop(false)
+		}
 		b.clashBusy.Unlock()
 		if detachErr == nil {
 			if stopped, stopErr := b.runtime.Stop(8 * time.Second); stopErr != nil {
@@ -141,7 +202,11 @@ func (b *Backend) startCampus(ctx context.Context, done chan struct{}, approved 
 				cleanupComplete = true
 			}
 		} else {
-			err = errors.Join(err, fmt.Errorf("出口恢复失败，已保留 VPN 以免留下失效路由：%w", detachErr))
+			message := "接入恢复未完成：%w"
+			if b.runtime.Running() {
+				message = "出口恢复失败，已保留 VPN 以免留下失效路由：%w"
+			}
+			err = errors.Join(err, fmt.Errorf(message, detachErr))
 			cleanCancel = false
 		}
 	}
@@ -161,6 +226,7 @@ func (b *Backend) startCampus(ctx context.Context, done chan struct{}, approved 
 	b.cancel = nil
 	if cleanupComplete {
 		b.startDone = nil
+		b.campusOwned = false
 	}
 	close(done)
 	b.mu.Unlock()
@@ -176,12 +242,19 @@ func (b *Backend) prepareCampus(ctx context.Context, approved bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if b.proxyOnly() {
+		return b.prepareProxy(ctx, approved)
+	}
 	if approved {
 		if err := b.saveConfig(func(c *appconf.Config) { c.CampusConsent = true }); err != nil {
 			return err
 		}
 	}
 	// Recovery only happens after an explicit enable, never merely on opening the app.
+	root, err := b.campusRoot()
+	if err != nil {
+		return err
+	}
 	if a := b.campusAttachment(); a != nil {
 		if err := b.detachCampus(); err != nil {
 			return err
@@ -190,10 +263,6 @@ func (b *Backend) prepareCampus(ctx context.Context, approved bool) error {
 	view := b.currentView()
 	if view == nil {
 		return errors.New("未找到 VPN 配置")
-	}
-	root, err := b.campusRoot()
-	if err != nil {
-		return err
 	}
 	values, err := availableProxyPorts(view.Values)
 	if err != nil {
@@ -224,6 +293,9 @@ func (b *Backend) prepareCampus(ctx context.Context, approved bool) error {
 	if err != nil {
 		return err
 	}
+	b.mu.Lock()
+	b.campusOwned = true
+	b.mu.Unlock()
 	if err := b.rememberCampus(attachment); err != nil {
 		return err
 	}
@@ -268,6 +340,13 @@ func (b *Backend) waitForCampus(ctx context.Context) error {
 			readySince = time.Time{}
 			continue
 		}
+		if b.proxyOnly() {
+			b.mu.Lock()
+			b.enabled, b.state, b.problem, b.coverage = true, "connected", "", "仅覆盖指向本地 FDU 代理的连接；分流由外部应用管理"
+			b.connectedAt = time.Now()
+			b.mu.Unlock()
+			return nil
+		}
 		if readySince.IsZero() {
 			readySince = time.Now()
 		}
@@ -285,7 +364,14 @@ func (b *Backend) waitForCampus(ctx context.Context) error {
 			b.clashBusy.Unlock()
 			return err
 		}
-		target, targetErr := b.conn.CurrentCampus(a.Root)
+		var target clash.CampusTarget
+		var targetErr error
+		if b.conn.RuntimePath() != "" {
+			_, targetErr = b.campusRoot()
+		}
+		if targetErr == nil {
+			target, targetErr = b.conn.CurrentCampus(a.Root)
+		}
 		if targetErr != nil || (target.Mode != "global" && target.Mode != "rule") {
 			b.clashBusy.Unlock()
 			b.connectionProblem("enabling", "等待 Clash 的全局或规则模式就绪")
@@ -335,7 +421,7 @@ func (b *Backend) waitForCampus(ctx context.Context) error {
 
 func (b *Backend) detachCampus() error {
 	a := b.campusAttachment()
-	if a == nil {
+	if a == nil || (!a.Active && !b.ownsCampus()) {
 		return nil
 	}
 	next, err := b.conn.DeactivateCampus(*a)
@@ -346,13 +432,36 @@ func (b *Backend) detachCampus() error {
 		return err
 	}
 	b.mu.Lock()
-	b.enabled = false
+	b.enabled, b.campusOwned = false, false
 	b.mu.Unlock()
 	return nil
 }
 
+// A missing controller cannot confirm restoration. Keep the journal pending,
+// but do not make the lifetime of our child depend on another application.
+func (b *Backend) detachForStop(force bool) (bool, error) {
+	if !force {
+		if err := b.detachCampus(); err == nil {
+			return false, nil
+		} else if !errors.Is(err, clash.ErrControllerUnavailable) {
+			return false, err
+		}
+	}
+	a := b.campusAttachment()
+	if a == nil || (!a.Active && !b.ownsCampus()) {
+		return false, nil
+	}
+	a.Active = true
+	if err := b.rememberCampus(*a); err != nil {
+		return false, err
+	}
+	b.appendLog("Clash 接入尚未恢复，已保留记录；下次启用时重试。")
+	return true, nil
+}
+
 func (b *Backend) disconnect(force bool) (bool, error) {
 	b.mu.Lock()
+	wanted := b.follow
 	b.follow = false
 	startedHere := b.startDone != nil
 	b.mu.Unlock()
@@ -377,9 +486,26 @@ func (b *Backend) disconnect(force bool) (bool, error) {
 	}
 	b.clashBusy.Lock()
 	defer b.clashBusy.Unlock()
-	if startedHere {
-		if err := b.detachCampus(); err != nil {
-			b.connectionProblem("error", "恢复 Clash 出口失败，VPN 暂未关闭："+err.Error())
+	owned := b.ownsCampus()
+	if !owned && !b.runtime.Running() {
+		b.mu.Lock()
+		b.startDone = nil
+		b.mu.Unlock()
+		return true, nil
+	}
+	deferred := false
+	if startedHere || owned {
+		var err error
+		deferred, err = b.detachForStop(force)
+		if err != nil {
+			b.mu.Lock()
+			b.follow = wanted
+			b.mu.Unlock()
+			message := "恢复 Clash 接入失败，尚有配置待恢复："
+			if b.runtime.Running() {
+				message = "恢复 Clash 出口失败，VPN 暂未关闭："
+			}
+			b.connectionProblem("error", message+err.Error())
 			return false, err
 		}
 	}
@@ -394,8 +520,12 @@ func (b *Backend) disconnect(force bool) (bool, error) {
 	if stopped && err == nil {
 		b.mu.Lock()
 		b.state, b.problem, b.coverage = "stopped", "", ""
+		if deferred {
+			b.problem = "Clash 接入待下次启用时恢复"
+		}
 		b.connectedAt = time.Time{}
 		b.startDone = nil
+		b.campusOwned = false
 		b.mu.Unlock()
 		b.emit(EventChanged, "clash")
 		b.publish()
@@ -431,15 +561,35 @@ func (b *Backend) refreshCampus() {
 		return
 	}
 	defer b.clashBusy.Unlock()
+	if b.proxyOnly() {
+		if !b.runtime.Running() {
+			b.mu.Lock()
+			b.follow, b.startDone = false, nil
+			b.mu.Unlock()
+			b.connectionProblem("paused", "本地校园代理已退出")
+		} else if !b.runtime.Connected() {
+			b.connectionProblem("paused", "等待校园 VPN 恢复连接")
+		} else {
+			b.mu.Lock()
+			b.enabled, b.state, b.problem = true, "connected", ""
+			if b.connectedAt.IsZero() {
+				b.connectedAt = time.Now()
+			}
+			b.mu.Unlock()
+			b.publish()
+		}
+		return
+	}
 	a := b.campusAttachment()
 	if a == nil {
 		return
 	}
 	if !b.runtime.Running() {
-		detachErr := b.detachCampus()
+		_, detachErr := b.detachForStop(false)
 		if detachErr == nil {
 			b.mu.Lock()
 			b.follow, b.startDone = false, nil
+			b.campusOwned = false
 			b.mu.Unlock()
 		}
 		b.connectionProblem("paused", errors.Join(errors.New("校园 VPN 已退出"), detachErr).Error())
@@ -449,7 +599,14 @@ func (b *Backend) refreshCampus() {
 		b.connectionProblem("paused", "等待校园 VPN 恢复连接")
 		return
 	}
-	target, err := b.conn.CurrentCampus(a.Root)
+	var target clash.CampusTarget
+	var err error
+	if b.conn.RuntimePath() != "" {
+		_, err = b.campusRoot()
+	}
+	if err == nil {
+		target, err = b.conn.CurrentCampus(a.Root)
+	}
 	if err != nil {
 		b.connectionProblem("paused", "等待 Clash 就绪："+err.Error())
 		return

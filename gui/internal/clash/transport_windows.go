@@ -4,11 +4,16 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
 	"strings"
 
 	"github.com/Microsoft/go-winio"
 	"golang.org/x/sys/windows"
 )
+
+func controllerMissing(err error) bool {
+	return errors.Is(err, os.ErrNotExist) || errors.Is(err, windows.WSAECONNREFUSED)
+}
 
 func dialPipe(ctx context.Context, path string) (net.Conn, error) {
 	return winio.DialPipeContext(ctx, path)

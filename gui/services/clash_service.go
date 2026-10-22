@@ -64,6 +64,9 @@ func overview(root, config string, plan *clash.Plan, err error) ClashOverview {
 }
 
 func (s *ClashService) inspect() (ClashOverview, *clash.Plan) {
+	if s.b.proxyOnly() {
+		return ClashOverview{Ready: true, Profile: "仅本地代理", Mode: "proxy", FduConfig: s.b.workspace.Target, Files: []string{}}, nil
+	}
 	root, config, pathErr := s.paths()
 	if pathErr != nil {
 		return overview(root, config, nil, pathErr), nil
@@ -88,7 +91,16 @@ func (s *ClashService) Inspect() (ClashOverview, error) {
 }
 
 func (s *ClashService) Nodes() (clash.NodeState, error) {
-	return s.b.picker().Load()
+	s.b.clashBusy.Lock()
+	defer s.b.clashBusy.Unlock()
+	if s.b.proxyOnly() {
+		return clash.NodeState{Choices: []string{}, Types: map[string]string{}, Problem: "仅本地代理：请在外部客户端选择出口"}, nil
+	}
+	picker, err := s.b.picker()
+	if err != nil {
+		return clash.NodeState{}, err
+	}
+	return picker.Load()
 }
 
 func (s *ClashService) SelectNode(name string) (clash.NodeState, error) {
@@ -96,7 +108,14 @@ func (s *ClashService) SelectNode(name string) (clash.NodeState, error) {
 		return clash.NodeState{}, err
 	}
 	defer s.b.clashBusy.Unlock()
-	state, err := s.b.picker().Select(name)
+	if s.b.proxyOnly() {
+		return clash.NodeState{}, errors.New("仅本地代理：请在外部客户端选择出口")
+	}
+	picker, err := s.b.picker()
+	if err != nil {
+		return clash.NodeState{}, err
+	}
+	state, err := picker.Select(name)
 	if err == nil {
 		s.b.emit(EventChanged, "node")
 	}
@@ -126,10 +145,12 @@ func (s *ClashService) SetPaths(clashDir, fduConfig string) (ClashOverview, erro
 		s.b.setView(view)
 	}
 	if err := s.b.saveConfig(func(c *appconf.Config) {
-		if c.ClashDir != clashDir {
+		if clashDir != "" && c.ClashDir != clashDir {
 			c.CampusConsent = false
 		}
-		c.ClashDir = clashDir
+		if clashDir != "" {
+			c.ClashDir = clashDir
+		}
 	}); err != nil {
 		return ClashOverview{}, err
 	}
@@ -140,6 +161,11 @@ func (s *ClashService) SetPaths(clashDir, fduConfig string) (ClashOverview, erro
 
 // Cached returns the overview of the last inspection without touching any file.
 func (s *ClashService) Cached() ClashOverview {
+	s.b.clashBusy.Lock()
+	defer s.b.clashBusy.Unlock()
+	if s.b.proxyOnly() {
+		return ClashOverview{Ready: true, Profile: "仅本地代理", Mode: "proxy", FduConfig: s.b.workspace.Target, Files: []string{}}
+	}
 	root, config, err := s.paths()
 	if err != nil {
 		return overview(root, config, nil, err)
