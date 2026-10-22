@@ -1,4 +1,7 @@
-# Standalone Fudan aTrust / UIS preset. Copy to config.toml and run with -config config.toml.
+# Public Fudan aTrust / UIS preset, shared by all desktop release packages.
+# Desktop: open Clash Verge Rev, launch FDU Connect, and enable campus access.
+# The GUI creates its own config and rules, detects Clash's ports, and starts UIS login.
+# Standalone CLI: copy to config.toml and run with -config config.toml.
 # Complete UIS login in the browser on Windows, or follow the terminal prompts elsewhere.
 # Set your application's proxy to the local SOCKS5 or HTTP address below.
 # Optional Clash selective routing is disabled until its prerequisites are configured.
@@ -31,8 +34,8 @@ fake_ip = false
 debug_dump = false
 debug_pcap_file = "" # Reconstruct encrypted VPN underlay TCP traffic in this PCAP file (debug only)
 debug_tls_log_file = "" # Export TLS session secrets in NSS key log format (debug only)
-bind_interface = "" # Optional physical interface name; leave empty for ordinary system routing.
-auto_detect_interface = false # With another TUN enabled, use true or specify bind_interface above.
+bind_interface = "" # Leave empty for automatic selection; a manually set name overrides auto-detection.
+auto_detect_interface = true # Automatically choose the physical network interface, including with Clash TUN enabled.
 
 # Port forwarding
 # The addresses below are documentation examples; replace them with allowed resources.
@@ -79,11 +82,27 @@ resource_file = ""
 # Before enabling: configure a dedicated local Clash SOCKS5 listener for Internet traffic,
 # fill upstream_proxy below, and set auto_detect_interface = true or bind_interface above.
 # Keep tun_mode, add_route, dns_hijack, fake_ip and dns_server_bind disabled/empty.
-# Add only your own permitted campus resources; no destinations are selected by default.
+# Example destinations for selective routing; keep only the resources you need.
 [routing]
 enabled = false
-domains = [] # Exact ASCII hostnames, without scheme, path or port.
-domain_suffixes = [] # Includes the suffix itself and its subdomains.
-ip_cidrs = [] # IPv4 CIDRs; use /32 for a single host, e.g. "192.0.2.10/32" (replace before use).
+# Exact ASCII hostnames, without scheme, path or port.
+domains = [
+    "ehall.fudan.edu.cn",
+    "gsportal.fudan.edu.cn",
+    "icourse.fudan.edu.cn",
+    "libdbnav.fudan.edu.cn",
+    "library.fudan.edu.cn",
+    "visa.fudan.edu.cn",
+    "pilot.studyblockchain.space"
+]
+domain_suffixes = ["fdu.edu.cn"] # Includes the suffix itself and its subdomains.
+# IPv4 CIDRs; use /32 for a single host.
+ip_cidrs = [
+    "10.0.0.0/8",
+    "175.186.248.18/32",
+    "175.186.248.2/32",
+    "175.186.248.53/32",
+    "202.120.224.6/32"
+]
 upstream_proxy = "" # Required when enabled: socks5://loopback-IP:port of your dedicated Clash listener, never GLOBAL/FDU.
 rules_file = "" # Optional existing JSON rules file; use the manager's actual path. Replaces the three inline lists.

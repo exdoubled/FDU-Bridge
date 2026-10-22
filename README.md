@@ -12,20 +12,48 @@
 
 **ZJU Connect 基于 [EasierConnect](https://github.com/lyc8503/EasierConnect)（现已停止维护）完成，感谢原作者 [lyc8503](https://github.com/lyc8503)。**
 
-本分支面向复旦大学 aTrust／UIS 登录，新增浏览器回调捕获、选择性分流和 Windows 管理窗口。VPN 协议、本地代理及其他通用能力继承自上游。
-
-**上游 QQ 交流群：1037726410**，欢迎使用者加入交流。
+本分支面向复旦大学 aTrust／UIS 登录，新增浏览器回调捕获、选择性分流和桌面管理窗口（Windows、macOS、Linux）。VPN 协议、本地代理及其他通用能力继承自上游。
 
 ## 新适配功能
 
-- 在独立的 Edge／Chrome 窗口完成 UIS 登录，自动接收认证回调。
-- 按精确域名、域名后缀、IPv4 或网段分流；指定目标走 FDU，其余应用流量交给 Clash 外网节点。
-- 在 Windows 小窗口中切换外网节点，添加、删除规则，分别勾选每条规则是否启用。
+- 在独立的 Edge／Chrome／Chromium 窗口完成 UIS 登录，自动接收认证回调。
+- 按精确域名、域名后缀、IPv4 或网段分流；指定目标走 FDU，其余进入 Clash 的流量沿用外网设置，流量在本应用启用后为：Clash -> FduConnect -> Clash -> 外网。
+- 桌面 GUI 集成登录、连接启停、日志、外网节点、逐条规则开关及全部客户端设置，支持 Windows、macOS 和 Linux。
+- 一键为现有 Clash （目前仅支持 Clash Verge Rev，后续会陆续适配）添加复旦内网，自动跟随全局／规则 / TUN 模式和订阅切换，保留外网设置，停用时恢复出口。
 - 保存规则后自动加载，新连接使用新规则；已有连接保留原路径。
 
 ## 使用方法
 
-### FDU 客户端
+### Windows GUI
+
+安装 [gui/go.mod](gui/go.mod) 要求的 Go 版本、Node.js 和 pnpm，在仓库根目录运行：
+
+```powershell
+.\build.ps1
+```
+
+先启动 Clash Verge Rev 并选择订阅，再双击 `dist\FDU-Connect-GUI.exe`，在首页开启校内访问。首次确认后自动保存默认配置、备份并接入 Clash，然后在浏览器完成 UIS 登录。指定资源走 FDU，其他流量沿用 Clash；校内资源支持逐条开关，也可粘贴网址添加。高级 VPN 设置和诊断保留在窗口内。
+
+构建脚本会同时生成 GUI 和 `fdu-connect.exe` 核心，两者需放在同一目录，无需单独构建或启动核心。配置、规则与登录状态保存在该目录，重新构建会保留；构建前先退出该目录中的程序。运行 `./build.ps1 -Test` 可同时执行现有测试。
+
+运行 `./build.ps1 -Package` 可生成 Windows x64 便携压缩包，仅包含 GUI、核心、示例配置和许可证，不会收录个人配置或登录缓存。首次导入 Clash 时会带入示例中的分流规则，已有规则文件保持原样。
+
+### macOS／Linux GUI
+
+需要与 Windows 相同的 Go、Node.js 和 pnpm。macOS 另需 Xcode 命令行工具（`xcode-select --install`）；Debian／Ubuntu 另需：
+
+```bash
+sudo apt install build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev
+```
+
+在仓库根目录运行 `bash build.sh`，可加 `--test`、`--package`，含义与 Windows 相同。
+
+- macOS 生成 `dist/FDU Connect.app`，同时支持 Apple 芯片和 Intel。应用未经公证，首次打开需在 Finder 中右键选择“打开”。
+- Linux 生成 `dist/fdu-connect-gui` 和核心 `dist/fdu-connect`，两者需放在同一目录。
+
+配置、规则与登录状态保存在 `~/Library/Application Support/FDU Connect`（macOS）或 `~/.config/fdu-connect`（Linux）。启用流程与 Windows 相同，不改系统代理、绕过列表或 Clash TUN。不开 TUN 时，仅接管进入 Clash 的应用流量。部分 Linux 桌面默认不显示托盘图标，因此 Linux 上关闭窗口默认直接退出，可在设置中改为最小化到托盘。
+
+### 命令行核心（可选）
 
 Go 版本需满足 [go.mod](go.mod)。首次使用时，将 [config.toml.example](config.toml.example) 另存为 `config.toml`；已有配置可继续使用。
 
@@ -52,7 +80,7 @@ Go 版本需满足 [go.mod](go.mod)。首次使用时，将 [config.toml.example
 ## ⚠️ 警告
 
 1. 与 Clash TUN 配合使用时，需要正确配置分流并将 VPN 底层连接绑定到物理网卡，避免流量回环，可参考上游的[相关讨论](https://github.com/Mythologyli/zju-connect/issues/57)。
-2. 选择性分流模式下，指定目标走 FDU，其余进入代理的 TCP/UDP 流量交给 `routing.upstream_proxy`。该上游应指向固定使用 `INTERNET` 的 Clash 专用监听，不能再指回 `GLOBAL` 或 FDU。
+2. GUI 自动接入当前全局或规则模式，无需手动选择前置模式或导入节点。全局模式下可在 GUI 切换外网节点；规则模式下沿用 Clash 现有规则和节点。停用时先恢复外网出口，再关闭 VPN。不开 Clash TUN 时，系统代理绕过的内网地址不会进入代理，需要自行调整绕过规则。
 3. 规则只决定流量路径，不会扩大学校授予的资源权限。按域名分流需要应用或 Clash 提供域名，只有 IP 的连接请添加 IP 规则。
 
 ## ⚠️ TUN 模式注意事项
@@ -198,7 +226,7 @@ Go 版本需满足 [go.mod](go.mod)。首次使用时，将 [config.toml.example
 
 以下为 TOML 配置文件的 `[routing]` 配置项；完整示例见 [config.toml.example](config.toml.example)。
 
-需要与 Clash TUN 配合时，再配置专用 SOCKS5 监听、底层网卡和要访问的校园资源，然后启用分流。各人的网卡、监听端口和资源权限不同，示例不预填这些值。小窗口规则需先保存为文件，再将 `rules_file` 指向该文件；建议填写绝对路径。
+GUI 会自动生成专用监听和规则文件，并自动检测底层网卡；在“校内资源”中管理域名和 IP 即可。以下配置供手动使用命令行核心时参考。
 
 + `enabled`: 是否启用选择性分流，默认关闭。需使用 aTrust，并配置 `bind_interface` 或 `auto_detect_interface`，保持 `tun_mode`、`add_route`、`dns_hijack`、`fake_ip` 关闭
 
@@ -206,11 +234,11 @@ Go 版本需满足 [go.mod](go.mod)。首次使用时，将 [config.toml.example
 
 + `domain_suffixes`: 域名后缀，同时匹配该域名本身及其子域名
 
-+ `ip_cidrs`: IPv4 网段，只填写需要走 FDU 的资源。内联规则中的单个 IP 请写为 `/32`；小窗口规则文件也接受单个 IPv4 地址
++ `ip_cidrs`: IPv4 网段，只填写需要走 FDU 的资源。内联规则中的单个 IP 请写为 `/32`；GUI 规则文件也接受单个 IPv4 地址
 
 + `upstream_proxy`: 启用分流时必填，填写自己的 Clash 专用 SOCKS5 监听地址。必须使用本机回环 IP 和实际端口，该监听需固定转发到外网组；默认留空
 
-+ `rules_file`: 可选的 JSON 规则文件路径，设置后替代以上三类内联规则，并在保存后自动加载。可通过 Windows 小窗口管理每条规则的启用状态，新规则对新连接生效
++ `rules_file`: 可选的 JSON 规则文件路径，设置后替代以上三类内联规则，并在保存后自动加载。可通过桌面 GUI 管理每条规则的启用状态，新规则对新连接生效
 
 
 ### 上游贡献者

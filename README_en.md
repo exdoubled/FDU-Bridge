@@ -12,20 +12,50 @@ This program builds on the aTrust implementation in [ZJU Connect](https://github
 
 **ZJU Connect is based on [EasierConnect](https://github.com/lyc8503/EasierConnect) (no longer maintained). Thanks to its original author [lyc8503](https://github.com/lyc8503).**
 
-This fork targets Fudan University's aTrust / UIS login. It adds browser callback capture, selective routing, and a Windows management window. VPN protocols, local proxy services, and other general capabilities are inherited from upstream.
+This fork targets Fudan University's aTrust / UIS login. It adds browser callback capture, selective routing, and a desktop management window (Windows, macOS, Linux). VPN protocols, local proxy services, and other general capabilities are inherited from upstream.
 
 **Upstream QQ group: 1037726410**, welcome to join the discussion.
 
 ## New adaptation features
 
-- Complete UIS login in an isolated Edge / Chrome window and capture the authentication callback automatically.
-- Route selected exact domains, domain suffixes, IPv4 addresses, and subnets through FDU; forward other application traffic to Clash's Internet nodes.
-- Switch Internet nodes, add or remove rules, and enable or disable individual rules in a Windows management window.
+- Complete UIS login in an isolated Edge / Chrome / Chromium window and capture the authentication callback automatically.
+- Route selected exact domains, domain suffixes, IPv4 addresses, and subnets through FDU; other traffic entering Clash follows its existing outside settings.
+- Manage login, connection start/stop, logs, Internet nodes, individual rule switches, and all client settings in the desktop GUI on Windows, macOS, and Linux.
+- Add Fudan campus access to an existing Clash setup with one switch, automatically following global/rule mode and subscription changes while preserving outside settings.
 - Reload saved rules automatically. New connections use the updated rules; existing connections keep their original routes.
 
 ## Usage
 
-### FDU client
+### Windows GUI
+
+Install the Go version required by [gui/go.mod](gui/go.mod), Node.js, and pnpm, then run from the repository root:
+
+```powershell
+.\build.ps1
+```
+
+Start Clash Verge Rev and select a subscription, then open `dist\FDU-Connect-GUI.exe` and enable campus access on Home. After first-use confirmation, the GUI saves the default configuration, backs up and integrates Clash, and opens UIS login in a browser. Selected resources use FDU; other traffic follows Clash. Manage individual resources or paste a URL to add one. Advanced VPN settings and diagnostics remain available.
+
+The build script produces both the GUI and its `fdu-connect.exe` core. Keep them in the same directory; the core does not need a separate build or launch. Configuration, rules, and login state stay in this directory and survive rebuilds. Exit programs running from that directory before building. Use `./build.ps1 -Test` to also run the existing tests.
+
+Use `./build.ps1 -Package` to create a portable Windows x64 ZIP containing only the GUI, core, example configuration, and license. Personal configurations and login caches are excluded. The first Clash import carries over the example routing rules; existing rule files are preserved.
+
+### macOS / Linux GUI
+
+The same Go, Node.js, and pnpm are required. macOS also needs the Xcode command line tools (`xcode-select --install`); Debian/Ubuntu also need:
+
+```bash
+sudo apt install build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev
+```
+
+Run `bash build.sh` from the repository root; `--test` and `--package` work as on Windows.
+
+- macOS produces `dist/FDU Connect.app` for both Apple silicon and Intel. The app is not notarized, so open it the first time by right-clicking it in Finder and choosing Open.
+- Linux produces `dist/fdu-connect-gui` and the core `dist/fdu-connect`; keep them in the same directory.
+
+Configuration, rules, and login state live in `~/Library/Application Support/FDU Connect` (macOS) or `~/.config/fdu-connect` (Linux). Enable campus access as on Windows; the GUI leaves system proxies, bypass lists and Clash TUN unchanged. Without TUN, only application traffic entering Clash is covered. Some Linux desktops hide tray icons, so closing the window quits by default on Linux; enable "minimize to tray" in Settings to change it.
+
+### Command-line core (optional)
 
 Use the Go version required by [go.mod](go.mod). For the first run, save [config.toml.example](config.toml.example) as `config.toml`. Existing configurations can be reused.
 
@@ -52,7 +82,7 @@ Refer to the upstream [Docker instructions](docs/docker_en.md). The images docum
 ## ⚠️ Warning
 
 1. When using Clash TUN, configure routing correctly and bind VPN underlay connections to a physical interface to avoid proxy loops. See the upstream [discussion](https://github.com/Mythologyli/zju-connect/issues/57).
-2. In selective routing mode, selected destinations use FDU; other TCP/UDP traffic entering the proxy is forwarded to `routing.upstream_proxy`. This upstream must be a dedicated Clash listener pinned to `INTERNET`, and must not route back to `GLOBAL` or FDU.
+2. The GUI integrates the current global or rule mode automatically. In global mode, select the outside node in the GUI; in rule mode, existing Clash rules and selections continue to apply. Disabling campus access restores the outside exit before stopping the VPN. Without Clash TUN, bypassed internal addresses do not enter the proxy; adjust those bypass rules yourself if needed.
 3. Rules determine traffic routes and do not extend campus resource permissions. Domain routing requires the application or Clash to provide the domain name. Add IP rules for connections that provide only IP addresses.
 
 ## ⚠️ TUN mode precautions
@@ -198,7 +228,7 @@ The old `disable_zju_dns` and `zju_dns_server` names, including their command-li
 
 The following settings belong to the `[routing]` section of the TOML configuration file. See [config.toml.example](config.toml.example) for a complete example.
 
-To use Clash TUN, configure a dedicated SOCKS5 listener, the underlay interface, and the campus resources to access before enabling selective routing. Interface names, listener ports, and resource permissions vary between users, so the example leaves these values empty. For management-window rules, save the file first and point `rules_file` to it; an absolute path is recommended.
+The GUI generates the dedicated listener and rules file and automatically detects the underlay interface. Manage destinations in Campus resources. The settings below are for using the command-line core manually.
 
 + `enabled`: Enable selective routing, disabled by default. Requires aTrust and either `bind_interface` or `auto_detect_interface`. Keep `tun_mode`, `add_route`, `dns_hijack`, and `fake_ip` disabled
 
@@ -210,7 +240,7 @@ To use Clash TUN, configure a dedicated SOCKS5 listener, the underlay interface,
 
 + `upstream_proxy`: Required when selective routing is enabled. Use your own dedicated Clash SOCKS5 listener with a literal loopback IP and its actual port, pinned to an Internet group. Empty by default
 
-+ `rules_file`: Optional path to a JSON rules file. When set, it replaces the three inline rule lists above and reloads automatically after saving. Use the Windows management window to enable or disable individual rules. Updated rules apply to new connections
++ `rules_file`: Optional path to a JSON rules file. When set, it replaces the three inline rule lists above and reloads automatically after saving. Use the desktop GUI to enable or disable individual rules. Updated rules apply to new connections
 
 
 ### Upstream contributors
