@@ -3,12 +3,20 @@ package resolve
 import (
 	"context"
 	"errors"
+	"github.com/mythologyli/zju-connect/client"
 	"net"
 	"sync/atomic"
 	"testing"
-
-	"github.com/mythologyli/zju-connect/client"
 )
+
+func failingNetResolver() *net.Resolver {
+	return &net.Resolver{
+		PreferGo: true,
+		Dial: func(context.Context, string, string) (net.Conn, error) {
+			return nil, errors.New("DNS unavailable")
+		},
+	}
+}
 
 func TestVPNResolverNeverUsesSecondaryOrSystemDNS(t *testing.T) {
 	for _, remote := range []bool{true, false} {
