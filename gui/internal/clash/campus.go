@@ -32,6 +32,8 @@ type CampusAttachment struct {
 	MixedPort    int      `json:"mixed_port"`
 	UnsafeNodes  []string `json:"unsafe_nodes"`
 	Active       bool     `json:"active"`
+	RuntimeFile  string   `json:"runtime_file,omitempty"`
+	RuntimeHash  string   `json:"runtime_hash,omitempty"`
 }
 
 // SafeCampusTarget additionally permits DIRECT for the preserved outside exit.
@@ -110,7 +112,10 @@ func (c *Connection) PrepareCampus(root, config string, values map[string]any) (
 	if err != nil {
 		return Plan{}, err
 	}
-	r := clashsetup.Request{Campus: true, CampusURL: feed.base(), Root: root, Config: config, Directory: c.Dir, Values: values, ClashMode: mode, OccupiedPorts: sysproc.UsedPorts(17902, 18000)}
+	r := clashsetup.Request{Campus: true, CampusURL: feed.base(), Root: root, RuntimeFile: c.RuntimePath(), Config: config, Directory: c.Dir, Values: values, ClashMode: mode, OccupiedPorts: sysproc.UsedPorts(17902, 18000)}
+	if r.RuntimeFile != "" {
+		r.RuntimeOverrides = runtimeOverrides(live, api)
+	}
 	plan, err := clashsetup.PrepareCampus(r, false)
 	if err != nil {
 		return plan, err
@@ -190,6 +195,10 @@ func (c *Connection) ImportCampus(plan Plan) (string, CampusAttachment, error) {
 		return "", a, err
 	}
 	a = CampusAttachment{Root: root, ProfileUID: plan.ProfileUID, Config: plan.Config, Rules: plan.Rules, ProviderPath: plan.ProviderPath, ProviderHash: fsx.HashFile(plan.ProviderPath), ClashMode: plan.ClashMode, Global: global, Outside: outside, MixedPort: plan.MixedPort, UnsafeNodes: append([]string(nil), plan.UnsafeNodes...)}
+	a.RuntimeFile, a.RuntimeHash = plan.RuntimeFile, plan.RuntimeHash
+	c.targetMu.Lock()
+	c.previousRuntime = ""
+	c.targetMu.Unlock()
 	return backup, a, nil
 }
 
@@ -264,6 +273,10 @@ func restoreCampusSelections(api API, before Proxies, mode string, unsafe map[st
 }
 
 func campusProfile(a CampusAttachment) (bool, error) {
+	if a.RuntimeFile != "" {
+		raw, err := fsx.ReadBounded(a.RuntimeFile, 8*1024*1024)
+		return err == nil && fsx.Hash(raw) == a.RuntimeHash, err
+	}
 	b, err := fsx.ReadBounded(filepath.Join(a.Root, "profiles.yaml"), 8*1024*1024)
 	if err != nil {
 		return false, err
@@ -347,13 +360,13 @@ func replaceCampusProvider(api API, a CampusAttachment, data []byte, forceReload
 		return next, nil
 	}
 	if fsx.HashFile(a.ProviderPath) != next.ProviderHash {
-		return a, fmt.Errorf("%v；规则文件已被其他操作修改，未恢复", err)
+		return a, fmt.Errorf("%w；规则文件已被其他操作修改，未恢复", err)
 	}
 	if rollback := fsx.AtomicWrite(a.ProviderPath, old); rollback != nil {
-		return next, fmt.Errorf("%v；规则文件恢复失败：%v", err, rollback)
+		return next, fmt.Errorf("%w；规则文件恢复失败：%v", err, rollback)
 	}
 	if rollback := api.Do("PUT", campusProviderAPI, nil, nil); rollback != nil {
-		return a, fmt.Errorf("%v；Clash 规则集恢复未确认：%v", err, rollback)
+		return a, fmt.Errorf("%w；Clash 规则集恢复未确认：%v", err, rollback)
 	}
 	return a, err
 }
@@ -449,6 +462,9 @@ func (c *Connection) activateCampus(api API, a CampusAttachment, data []byte, ru
 }
 
 func (c *Connection) DeactivateCampus(a CampusAttachment) (CampusAttachment, error) {
+	if a.RuntimeFile != "" {
+		return c.deactivateRuntime(a)
+	}
 	_, providerErr := campusProviderBytes(a)
 	match, err := campusProfile(a)
 	if err != nil {
@@ -465,22 +481,10 @@ func (c *Connection) DeactivateCampus(a CampusAttachment) (CampusAttachment, err
 			return a, err
 		}
 		proxies := response.Proxies
-		global, internet := proxies["GLOBAL"], proxies["INTERNET"]
-		unsafe := UnsafeSet(Plan{UnsafeNodes: a.UnsafeNodes})
-		if global != nil && global.Now == "FDU-ROUTER" {
-			target := a.Global
-			if !SafeCampusTarget(proxies, target, map[string]bool{}, unsafe) {
-				target = a.Outside
-			}
-			if internet != nil && SafeCampusTarget(proxies, internet.Now, map[string]bool{}, unsafe) {
-				target = internet.Now
-			}
-			if err = restoreCampusGlobal(api, target, unsafe); err != nil {
-				return a, err
-			}
-			a.Global, a.Outside = target, target
+		if err = restoreCampusExit(api, &a, proxies); err != nil {
+			return a, err
 		}
-		if internet == nil || proxies["FDU-ROUTER"] == nil {
+		if proxies["INTERNET"] == nil || proxies["FDU-ROUTER"] == nil {
 			api = nil
 		}
 	} else {
@@ -507,6 +511,26 @@ func (c *Connection) DeactivateCampus(a CampusAttachment) (CampusAttachment, err
 		a.RulesHash = ""
 	}
 	return a, err
+}
+
+func restoreCampusExit(api API, a *CampusAttachment, proxies Proxies) error {
+	global, internet := proxies["GLOBAL"], proxies["INTERNET"]
+	if global == nil || global.Now != "FDU-ROUTER" {
+		return nil
+	}
+	unsafe := UnsafeSet(Plan{UnsafeNodes: a.UnsafeNodes})
+	target := a.Global
+	if !SafeCampusTarget(proxies, target, map[string]bool{}, unsafe) {
+		target = a.Outside
+	}
+	if internet != nil && SafeCampusTarget(proxies, internet.Now, map[string]bool{}, unsafe) {
+		target = internet.Now
+	}
+	if err := restoreCampusGlobal(api, target, unsafe); err != nil {
+		return err
+	}
+	a.Global, a.Outside = target, target
+	return nil
 }
 
 func restoreCampusGlobal(api API, target string, unsafe map[string]bool) error {

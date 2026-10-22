@@ -9,7 +9,12 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"syscall"
 )
+
+func controllerMissing(err error) bool {
+	return errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ECONNREFUSED)
+}
 
 func dialPipe(context.Context, string) (net.Conn, error) {
 	return nil, errors.New("named pipes are Windows-only")

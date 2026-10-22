@@ -17,22 +17,36 @@ import (
 	"github.com/mythologyli/zju-connect/gui/internal/fsx"
 	"github.com/mythologyli/zju-connect/gui/internal/rules"
 	"github.com/mythologyli/zju-connect/gui/internal/sysproc"
+	"gopkg.in/yaml.v3"
 )
 
 type Plan = clashsetup.Plan
 
 // Connection imports FDU support into the active Clash Verge profile and applies modes.
 type Connection struct {
-	Dir    string // GUI-owned directory for generated configs and backups
-	API    API    // nil discovers the live controller
-	feedMu sync.Mutex
-	feed   *campusFeed
+	Dir             string // GUI-owned directory for generated configs and backups
+	API             API    // nil discovers the live controller
+	feedMu          sync.Mutex
+	feed            *campusFeed
+	targetMu        sync.RWMutex
+	runtimeFile     string
+	controller      *ControlAPI
+	previousRuntime string // original source while a verified automatic migration is settling
 }
 
 // api finds the controller of the Verge instance whose files live in clashDir.
 func (c *Connection) api(clashDir string) (API, error) {
 	if c.API != nil {
 		return c.API, nil
+	}
+	c.targetMu.RLock()
+	file, controller := c.runtimeFile, c.controller
+	c.targetMu.RUnlock()
+	if controller != nil {
+		return *controller, nil
+	}
+	if file != "" {
+		return DiscoverRuntime(file)
 	}
 	return Discover(clashDir)
 }
@@ -50,6 +64,9 @@ func (c *Connection) Prepare(root, config, mode string) (Plan, error) {
 }
 
 func profilesRoot(plan Plan) (string, error) {
+	if plan.RuntimeFile != "" {
+		return filepath.Dir(plan.RuntimeFile), nil
+	}
 	for path := range plan.Inputs {
 		if filepath.Base(path) == "profiles.yaml" {
 			return filepath.Dir(path), nil
@@ -128,9 +145,26 @@ func (c *Connection) Import(plan Plan) (string, error) {
 	if plan.Mode == "fdu-first" && (selections.Proxies["GLOBAL"] == nil || !SafeTarget(selections.Proxies, selections.Proxies["GLOBAL"].Now, map[string]bool{}, unsafe)) {
 		return "", errors.New("FDU 前置的 GLOBAL 必须选择安全外网节点，请先刷新并应用正确模式")
 	}
-	oldRuntime, err := os.ReadFile(filepath.Join(root, "clash-verge.yaml"))
+	runtimePath := filepath.Join(root, "clash-verge.yaml")
+	if plan.RuntimeFile != "" {
+		runtimePath = plan.RuntimeFile
+	}
+	oldRuntime, err := fsx.ReadBounded(runtimePath, 8*1024*1024)
 	if err != nil {
 		return "", err
+	}
+	if plan.RuntimeFile != "" {
+		var original map[string]any
+		if err = yaml.Unmarshal(oldRuntime, &original); err != nil || original == nil {
+			return "", errors.New("客户端运行配置无效")
+		}
+		for key, value := range runtimeOverrides(live, api) {
+			original[key] = value
+		}
+		oldRuntime, err = yaml.Marshal(original)
+		if err != nil {
+			return "", err
+		}
 	}
 	backup := filepath.Join(c.Dir, "connection-backups", backupName())
 	if err := os.MkdirAll(backup, 0o700); err != nil {

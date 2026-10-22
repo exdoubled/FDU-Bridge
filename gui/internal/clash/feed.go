@@ -106,6 +106,9 @@ func (c *Connection) campusFeed() (*campusFeed, error) {
 }
 
 func (c *Connection) campusAPI(a CampusAttachment) (API, error) {
+	if clientPathKey(c.RuntimePath()) != clientPathKey(a.RuntimeFile) {
+		return nil, errors.New("当前客户端与上次接入记录不同，请选择原客户端后恢复")
+	}
 	api, err := c.api(a.Root)
 	if err != nil {
 		return nil, err

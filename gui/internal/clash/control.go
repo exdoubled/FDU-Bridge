@@ -21,6 +21,15 @@ import (
 
 const responseLimit = 4 * 1024 * 1024
 
+var ErrControllerUnavailable = errors.New("Clash 控制接口不可用")
+
+func controllerFailure(err error) error {
+	if controllerMissing(err) {
+		return fmt.Errorf("%w：%w", ErrControllerUnavailable, err)
+	}
+	return fmt.Errorf("无法连接 Clash 控制接口：%w", err)
+}
+
 // API is the only path to the controller, so tests can substitute a fake.
 type API interface {
 	Do(method, path string, payload, out any) error
@@ -38,7 +47,7 @@ type ControlAPI struct {
 func allowed(method, path string) bool {
 	switch method {
 	case http.MethodGet:
-		return path == "/configs" || path == "/proxies"
+		return path == "/configs" || path == "/proxies" || path == "/version"
 	case http.MethodPut:
 		return path == "/proxies/INTERNET" || path == "/proxies/GLOBAL" || path == "/configs?force=true" || path == "/providers/rules/FDU-CAMPUS"
 	}
@@ -91,14 +100,14 @@ func (c ControlAPI) Do(method, path string, payload, out any) error {
 	if err != nil {
 		var timeout interface{ Timeout() bool }
 		if errors.As(err, &timeout) && timeout.Timeout() {
-			return errors.New("Clash 控制接口响应超时，请稍后刷新")
+			return fmt.Errorf("Clash 控制接口响应超时，请稍后刷新：%w", err)
 		}
-		return fmt.Errorf("无法连接 Clash 控制接口：%w", err)
+		return controllerFailure(err)
 	}
 	defer response.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(response.Body, responseLimit+1))
 	if err != nil {
-		return errors.New("Clash 控制接口返回了不完整的数据，请刷新")
+		return fmt.Errorf("Clash 控制接口返回了不完整的数据，请刷新：%w", err)
 	}
 	if len(data) > responseLimit {
 		return errors.New("Clash 返回的数据过大，已停止读取")
@@ -183,14 +192,14 @@ func loopbackTCP(address string) bool {
 	return host == "localhost" || (ip != nil && ip.IsLoopback())
 }
 
-func reachable(api ControlAPI) bool {
+func probeController(api ControlAPI) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	conn, err := api.dial(ctx)
 	if err == nil {
 		conn.Close()
 	}
-	return err == nil
+	return err
 }
 
 // Discover prefers the address the running Verge gave mihomo, then the defaults
@@ -209,14 +218,22 @@ func Discover(clashDir string) (API, error) {
 	if loopbackTCP(rc.TCP) {
 		candidates = append(candidates, ControlAPI{Network: "tcp", Address: rc.TCP, Secret: rc.Secret})
 	}
+	var uncertain error
 	for _, c := range candidates {
-		if reachable(c) {
+		probeErr := probeController(c)
+		if probeErr == nil {
 			c.Timeout = 5 * time.Second
 			return c, nil
+		}
+		if !controllerMissing(probeErr) {
+			uncertain = probeErr
 		}
 	}
 	if err != nil {
 		return nil, err
 	}
-	return nil, errors.New("未找到正在运行的 Clash Verge 控制接口，请确认 Clash 已打开后刷新")
+	if uncertain != nil {
+		return nil, controllerFailure(uncertain)
+	}
+	return nil, fmt.Errorf("%w：未找到正在运行的 Clash Verge 控制接口", ErrControllerUnavailable)
 }
