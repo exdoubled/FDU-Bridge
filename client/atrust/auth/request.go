@@ -46,7 +46,7 @@ func (s *Session) ServerVersionInfo() ([]byte, error) {
 }
 
 func (s *Session) authConfig(mod, needTicket bool) (int, []AuthInfo, error) {
-	return s.authConfigContext(context.Background(), mod, needTicket, false)
+	return s.authConfigContext(s.ctx, mod, needTicket, false)
 }
 
 func (s *Session) authConfigContext(ctx context.Context, mod, needTicket, refresh bool) (int, []AuthInfo, error) {
@@ -72,7 +72,7 @@ func (s *Session) authConfigContext(ctx context.Context, mod, needTicket, refres
 	req.Header.Set("x-sdp-rid", s.rid)
 	req.Header.Set("x-sdp-traceid", s.randSdpId())
 
-	resp, err := s.request(req)
+	resp, err := s.client.Do(req)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -173,7 +173,7 @@ func (s *Session) checkAntiMITMAuthConfig(ctx context.Context, resp *http.Respon
 }
 
 func (s *Session) performAntiMITMRequest(data antiMITMAttackData, csrfToken string) error {
-	return s.performAntiMITMRequestContext(context.Background(), data, csrfToken)
+	return s.performAntiMITMRequestContext(s.ctx, data, csrfToken)
 }
 
 func (s *Session) performAntiMITMRequestContext(ctx context.Context, data antiMITMAttackData, csrfToken string) error {
@@ -198,7 +198,7 @@ func (s *Session) performAntiMITMRequestContext(ctx context.Context, data antiMI
 	req.Header.Set("x-sdp-rid", s.rid)
 	req.Header.Set("x-sdp-traceid", s.randSdpId())
 
-	resp, err := s.request(req)
+	resp, err := s.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("aTrust anti-MITM request failed: %w", err)
 	}
