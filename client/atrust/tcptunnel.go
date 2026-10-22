@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/mythologyli/zju-connect/client"
+	"github.com/mythologyli/zju-connect/client/authchallenge"
 	"github.com/mythologyli/zju-connect/internal/ipresource"
 	"github.com/mythologyli/zju-connect/log"
 	"github.com/mythologyli/zju-connect/resolve"
@@ -169,6 +170,7 @@ func parseTCPTunnelAuthResponse(data string, managed ...bool) error {
 	if response.Code != 0 {
 		if response.Code == 10000004 || response.Code == 75500002 {
 			if len(managed) == 0 || !managed[0] {
+				authchallenge.GUIState("auth-required")
 				log.Fatalf("tcp tunnel: aTrust session is invalid (code %d): %s", response.Code, response.Message)
 			}
 			return invalidSessionError(response.Code, response.Message)

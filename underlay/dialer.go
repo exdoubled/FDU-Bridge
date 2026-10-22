@@ -114,7 +114,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 	if autoDetect && requireBound && interfaceName == "" {
 		interfaceName = d.refreshInterface()
 		if interfaceName == "" {
-			return nil, fmt.Errorf("no usable underlay interface")
+			return nil, &net.OpError{Op: "dial", Net: network, Err: fmt.Errorf("no usable underlay interface")}
 		}
 	}
 

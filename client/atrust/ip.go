@@ -5,13 +5,17 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"time"
 
+	"github.com/mythologyli/zju-connect/client/authchallenge"
 	"github.com/mythologyli/zju-connect/log"
 )
+
+var ErrNoReachableNodes = errors.New("no reachable aTrust node")
 
 func parseIPAuthResponse(data []byte, managed ...bool) error {
 	var response authResponseSID
@@ -21,6 +25,7 @@ func parseIPAuthResponse(data []byte, managed ...bool) error {
 	if response.Code != 0 {
 		if response.Code == 10000004 || response.Code == 75500002 {
 			if len(managed) == 0 || !managed[0] {
+				authchallenge.GUIState("auth-required")
 				log.Fatalf("IP tunnel: aTrust session is invalid (code %d): %s", response.Code, response.Message)
 			}
 			return invalidSessionError(response.Code, response.Message)
@@ -95,7 +100,7 @@ func (c *Client) getIP(parent context.Context) error {
 		}
 	}
 	if addr == "" {
-		return fmt.Errorf("no reachable node for ip request")
+		return ErrNoReachableNodes
 	}
 
 	if parent == nil {

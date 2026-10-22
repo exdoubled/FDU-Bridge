@@ -3,12 +3,14 @@ package atrust
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/mythologyli/zju-connect/client"
+	"github.com/mythologyli/zju-connect/client/atrust/auth"
 	"github.com/mythologyli/zju-connect/internal/ipresource"
 	"github.com/mythologyli/zju-connect/log"
 )
@@ -62,9 +64,7 @@ func NewL3Tunnel(aTrustClient *Client) (*L3Tunnel, error) {
 			connectionID: aTrustClient.ConnectionID,
 			username:     aTrustClient.Username,
 		}
-		if aTrustClient.onSessionInvalid != nil {
-			info.onSessionInvalid = aTrustClient.reportInvalidSession
-		}
+		info.onSessionInvalid = aTrustClient.reportInvalidSession
 		dialTLS := func(ctx context.Context, network, address string, config *tls.Config) (*tls.Conn, error) {
 			return dialTLSContext(ctx, aTrustClient.underlayDialer, network, address, tlsConfig(config, aTrustClient.tlsKeyLogWriter))
 		}
@@ -287,6 +287,7 @@ func (t *L3Tunnel) startReconnect(nodeGroupID string) {
 	call := &l3TunnelConnectCall{done: make(chan struct{})}
 	t.connecting[nodeGroupID] = call
 	t.connsMu.Unlock()
+	t.client.setTransportReconnecting(nodeGroupID, true)
 	go t.connectWithRetry(nodeGroupID, call, false)
 }
 
@@ -316,6 +317,11 @@ func (t *L3Tunnel) connectWithRetry(nodeGroupID string, call *l3TunnelConnectCal
 			t.finishConnect(nodeGroupID, call, conn, nil)
 			return
 		}
+		if errors.Is(err, auth.ErrSessionInvalid) {
+			t.finishConnect(nodeGroupID, call, nil, err)
+			return
+		}
+		t.client.setTransportReconnecting(nodeGroupID, true)
 		log.DebugPrintf("l3-tunnel connect attempt %d failed for group %s: %v", attempt+1, nodeGroupID, err)
 	}
 }
@@ -335,6 +341,9 @@ func (t *L3Tunnel) finishConnect(nodeGroupID string, call *l3TunnelConnectCall, 
 		case <-t.closeCh:
 			err = net.ErrClosed
 		default:
+			// Publish restoration before waking writers, which may immediately
+			// discover another loss and begin a newer reconnect for this group.
+			t.client.setTransportReconnecting(nodeGroupID, false)
 			t.conns[nodeGroupID] = conn
 		}
 	}

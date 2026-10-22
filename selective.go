@@ -11,7 +11,9 @@ import (
 	"os/signal"
 	"runtime"
 	"strconv"
+	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/containers/winquit/pkg/winquit"
 	"github.com/mythologyli/zju-connect/client"
@@ -70,29 +72,47 @@ func runSelective(c configs.Config) error {
 		}
 		defer watcher.Close()
 	}
-	return serveSelective(ctx, c, router.Dial, func(ctx context.Context) error { return runSelectiveVPN(ctx, c, u, router) })
+	var sessionData selectiveSessionData
+	return serveSelectiveRecovery(ctx, c, router.Dial, func(ctx context.Context, mode selectiveSessionMode, ready func()) error {
+		return runSelectiveVPNWithMode(ctx, c, u, router, mode, ready, &sessionData)
+	})
 }
 
 func serveSelective(ctx context.Context, c configs.Config, dial client.DialContextFunc, connect func(context.Context) error) error {
+	return serveSelectiveRecovery(ctx, c, dial, func(ctx context.Context, _ selectiveSessionMode, _ func()) error { return connect(ctx) })
+}
+
+func serveSelectiveRecovery(ctx context.Context, c configs.Config, dial client.DialContextFunc, connect selectiveConnectFunc) error {
 	proxies, err := service.StartRoutingProxies(ctx, c, dial)
 	if err != nil {
 		return err
 	}
 	defer proxies.Close()
 	log.Printf("Selective router ready: SOCKS=%s HTTP=%s; ordinary traffic uses the configured Clash upstream", proxies.SocksAddr(), proxies.HTTPAddr())
-	if err = connect(ctx); err != nil && ctx.Err() == nil {
-		authchallenge.GUIState("campus-unavailable")
-		log.Printf("Campus VPN unavailable: %v; ordinary Internet forwarding remains available", err)
-	}
-	<-ctx.Done()
+	runSelectiveSessions(ctx, connect, authchallenge.GUIRelogin(), authchallenge.GUIState, time.Second)
 	return nil
 }
 
 // This opt-in path is managed independently of the legacy fatal-on-disconnect
 // startup. All resources stay local to this lifecycle, not global shutdown hooks.
 func runSelectiveVPN(ctx context.Context, c configs.Config, u *underlay.Dialer, router *routing.Router) error {
+	return runSelectiveVPNWithMode(ctx, c, u, router, selectiveInitial, func() {}, &selectiveSessionData{})
+}
+
+type selectiveSessionData struct {
+	clientData   []byte
+	username     string
+	freshPending bool
+}
+
+func runSelectiveVPNWithMode(ctx context.Context, c configs.Config, u *underlay.Dialer, router *routing.Router, mode selectiveSessionMode, onReady func(), sessionData *selectiveSessionData) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	if mode == selectiveFresh {
+		sessionData.freshPending = true
+	} else if mode == selectiveResume && sessionData.freshPending {
+		return auth.ErrSessionInvalid
+	}
 	tlsWriter, err := keylog.Open(c.DebugTLSLogFile)
 	if err != nil {
 		return err
@@ -107,17 +127,33 @@ func runSelectiveVPN(ctx context.Context, c configs.Config, u *underlay.Dialer, 
 			return fmt.Errorf("read resource file: %w", err)
 		}
 	}
-	if c.ClientDataFile != "" {
+	if sessionData.clientData != nil {
+		clientData = append([]byte(nil), sessionData.clientData...)
+		c.SID, c.SignKey = "", ""
+		c.Username = sessionData.username
+	} else if c.ClientDataFile != "" {
 		clientData, err = os.ReadFile(c.ClientDataFile)
 		if err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("read client data: %w", err)
 		}
 	}
-	setupOptions, err := aTrustSetupOptions(c, resourceData, clientData)
+	setupOptions, err := aTrustSetupOptionsForSession(c, resourceData, clientData, mode == selectiveFresh, mode == selectiveResume)
 	if err != nil {
 		return err
 	}
+	saveClientData := setupOptions.SaveClientData
+	setupOptions.SaveClientData = func(data []byte) error {
+		if saveClientData != nil {
+			if err := saveClientData(data); err != nil {
+				return err
+			}
+		}
+		sessionData.clientData = append([]byte(nil), data...)
+		sessionData.freshPending = false
+		return nil
+	}
 	invalid := make(chan error, 1)
+	var ready atomic.Bool
 	vpn := atrustclient.NewClient(atrustclient.ClientOptions{
 		Session: atrustclient.SessionOptions{Username: c.Username, SID: c.SID, DeviceID: c.DeviceID, SignKey: c.SignKey}, UnderlayDialer: u, TLSKeyLogWriter: tlsWriter,
 		OnSessionInvalid: func(err error) {
@@ -126,16 +162,36 @@ func runSelectiveVPN(ctx context.Context, c configs.Config, u *underlay.Dialer, 
 			default:
 			}
 		},
+		OnConnectionState: func(connected bool) {
+			if !ready.Load() || ctx.Err() != nil {
+				return
+			}
+			if connected {
+				authchallenge.GUIState("connected")
+			} else {
+				authchallenge.GUIState("reconnecting")
+			}
+		},
 	})
-	defer vpn.Close()
+	defer func() { cancel(); vpn.Close() }()
+	setupOptions.OnAuthenticated = func(data []byte) {
+		sessionData.clientData = append([]byte(nil), data...)
+		sessionData.username = vpn.Username
+		sessionData.freshPending = false
+	}
 	_, err = vpn.SetupContext(ctx, setupOptions)
 	if err != nil {
 		return err
 	}
+	sessionData.username = vpn.Username
 	ips, _ := vpn.IPResources()
 	domains, _ := vpn.DomainResources()
 	dnsResources, _ := vpn.DNSResource()
 	s, err := gvisor.NewStack(vpn)
+	if err != nil {
+		return err
+	}
+	failed, err := s.Start(ctx)
 	if err != nil {
 		return err
 	}
@@ -157,15 +213,12 @@ func runSelectiveVPN(ctx context.Context, c configs.Config, u *underlay.Dialer, 
 		}
 		resolver.SetPermanentDNS(entry.HostName, ip)
 	}
-	failed, err := s.Start(ctx)
-	if err != nil {
-		return err
-	}
 	vpnDialer := dial.NewDialer(s, resolver, ips, false, "")
 	router.SetVPN(func(ctx context.Context, network, addr string) (net.Conn, error) {
 		conn, err := vpnDialer.DialVPN(ctx, network, addr)
 		if errors.Is(err, auth.ErrSessionInvalid) {
-			router.SetVPN(nil)
+			// Only the session owner clears the route; an older dial may
+			// finish after a replacement session has already been installed.
 			select {
 			case invalid <- err:
 			default:
@@ -175,6 +228,8 @@ func runSelectiveVPN(ctx context.Context, c configs.Config, u *underlay.Dialer, 
 	})
 	defer router.SetVPN(nil)
 	log.Println("Campus VPN ready; only configured destinations use FDU")
+	ready.Store(true)
+	onReady()
 	authchallenge.GUIState("connected")
 	select {
 	case <-ctx.Done():
