@@ -26,3 +26,11 @@ config.toml
 
 # Saved aTrust login state
 client_data.json
+
+# Desktop GUI build outputs
+/dist/
+/gui/bin/
+/gui/*.syso
+/gui/frontend/node_modules/
+/gui/frontend/dist/
+/gui/frontend/bindings/

@@ -79,11 +79,27 @@ resource_file = ""
 # Before enabling: configure a dedicated local Clash SOCKS5 listener for Internet traffic,
 # fill upstream_proxy below, and set auto_detect_interface = true or bind_interface above.
 # Keep tun_mode, add_route, dns_hijack, fake_ip and dns_server_bind disabled/empty.
-# Add only your own permitted campus resources; no destinations are selected by default.
+# Example destinations for selective routing; keep only the resources you need.
 [routing]
 enabled = false
-domains = [] # Exact ASCII hostnames, without scheme, path or port.
-domain_suffixes = [] # Includes the suffix itself and its subdomains.
-ip_cidrs = [] # IPv4 CIDRs; use /32 for a single host, e.g. "192.0.2.10/32" (replace before use).
+# Exact ASCII hostnames, without scheme, path or port.
+domains = [
+    "ehall.fudan.edu.cn",
+    "gsportal.fudan.edu.cn",
+    "icourse.fudan.edu.cn",
+    "libdbnav.fudan.edu.cn",
+    "library.fudan.edu.cn",
+    "visa.fudan.edu.cn",
+    "pilot.studyblockchain.space"
+]
+domain_suffixes = ["fdu.edu.cn"] # Includes the suffix itself and its subdomains.
+# IPv4 CIDRs; use /32 for a single host.
+ip_cidrs = [
+    "10.0.0.0/8",
+    "175.186.248.18/32",
+    "175.186.248.2/32",
+    "175.186.248.53/32",
+    "202.120.224.6/32"
+]
 upstream_proxy = "" # Required when enabled: socks5://loopback-IP:port of your dedicated Clash listener, never GLOBAL/FDU.
 rules_file = "" # Optional existing JSON rules file; use the manager's actual path. Replaces the three inline lists.

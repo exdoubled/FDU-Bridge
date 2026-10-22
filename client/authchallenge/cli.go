@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -114,7 +113,7 @@ func (h *CLIHandler) HandleClickCaptcha(challenge ClickCaptchaChallenge) (ClickC
 func (h *CLIHandler) HandleExternalLogin(challenge ExternalLoginChallenge) (ExternalLoginResponse, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if runtime.GOOS == "windows" && challenge.Kind == ExternalLoginOAuth2 && challenge.CallbackURL != "" {
+	if challenge.Kind == ExternalLoginOAuth2 && challenge.CallbackURL != "" {
 		interruptCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
 		ctx, cancel := context.WithTimeout(interruptCtx, 5*time.Minute)

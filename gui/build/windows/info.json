@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.1.0"
+	},
+	"info": {
+		"0409": {
+			"ProductVersion": "0.1.0-beta.1",
+			"CompanyName": "FDU Connect",
+			"FileDescription": "FDU Connect",
+			"LegalCopyright": "AGPL-3.0",
+			"ProductName": "FDU Connect",
+			"Comments": "复旦大学 VPN 与分流管理"
+		}
+	}
+}

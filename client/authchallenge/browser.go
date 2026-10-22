@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -41,23 +42,51 @@ func matchesOAuthCallback(raw, expected string) bool {
 		u.User == nil && u.Path == want.Path && u.Query().Get("code") != ""
 }
 
+// loginBrowsers lists Chromium-based browsers in preference order; all of them speak the
+// DevTools protocol the capture relies on.
+func loginBrowsers() []string {
+	switch runtime.GOOS {
+	case "windows":
+		return []string{
+			filepath.Join(os.Getenv("ProgramFiles(x86)"), "Microsoft", "Edge", "Application", "msedge.exe"),
+			filepath.Join(os.Getenv("ProgramFiles"), "Microsoft", "Edge", "Application", "msedge.exe"),
+			filepath.Join(os.Getenv("ProgramFiles"), "Google", "Chrome", "Application", "chrome.exe"),
+			filepath.Join(os.Getenv("LOCALAPPDATA"), "Google", "Chrome", "Application", "chrome.exe"),
+		}
+	case "darwin":
+		home, _ := os.UserHomeDir()
+		var paths []string
+		for _, app := range []string{
+			"Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+			"Google Chrome.app/Contents/MacOS/Google Chrome",
+			"Chromium.app/Contents/MacOS/Chromium",
+			"Brave Browser.app/Contents/MacOS/Brave Browser",
+		} {
+			paths = append(paths, filepath.Join("/Applications", app), filepath.Join(home, "Applications", app))
+		}
+		return paths
+	}
+	var paths []string
+	for _, name := range []string{"microsoft-edge", "microsoft-edge-stable", "google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "brave-browser"} {
+		if path, err := exec.LookPath(name); err == nil {
+			paths = append(paths, path)
+		}
+	}
+	return paths
+}
+
 // captureBrowserLogin owns a separate browser profile. It never attaches to the
 // user's regular browser or sends the intercepted OAuth request to the network.
 func captureBrowserLogin(ctx context.Context, loginURL, callbackURL string, output io.Writer) (string, error) {
 	var browser string
-	for _, path := range []string{
-		filepath.Join(os.Getenv("ProgramFiles(x86)"), "Microsoft", "Edge", "Application", "msedge.exe"),
-		filepath.Join(os.Getenv("ProgramFiles"), "Microsoft", "Edge", "Application", "msedge.exe"),
-		filepath.Join(os.Getenv("ProgramFiles"), "Google", "Chrome", "Application", "chrome.exe"),
-		filepath.Join(os.Getenv("LOCALAPPDATA"), "Google", "Chrome", "Application", "chrome.exe"),
-	} {
+	for _, path := range loginBrowsers() {
 		if info, err := os.Stat(path); err == nil && !info.IsDir() {
 			browser = path
 			break
 		}
 	}
 	if browser == "" {
-		return "", fmt.Errorf("Microsoft Edge or Google Chrome was not found")
+		return "", fmt.Errorf("no Chromium-based browser (Edge, Chrome or Chromium) was found")
 	}
 	profile, err := os.MkdirTemp("", "fdu-connect-login-")
 	if err != nil {

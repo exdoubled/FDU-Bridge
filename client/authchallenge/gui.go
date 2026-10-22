@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"runtime"
 	"sync"
 	"time"
 )
@@ -142,7 +141,7 @@ func (h *guiHandler) HandleClickCaptcha(c ClickCaptchaChallenge) (ClickCaptchaRe
 	return response, err
 }
 func (h *guiHandler) HandleExternalLogin(c ExternalLoginChallenge) (ExternalLoginResponse, error) {
-	if runtime.GOOS == "windows" && c.Kind == ExternalLoginOAuth2 && c.CallbackURL != "" {
+	if c.Kind == ExternalLoginOAuth2 && c.CallbackURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		go func() {
 			select {

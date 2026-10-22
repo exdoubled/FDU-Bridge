@@ -1,200 +1,181 @@
-name: Build
+name: Build FDU Connect
 
 on:
-  release:
-    types: [published]
   push:
-    paths:
-      - "**/*.go"
-      - "go.mod"
-      - "go.sum"
-      - ".github/workflows/*.yml"
+    branches: [main, "build/campus-client-*"]
+    tags: ["v*"]
   pull_request:
-    types:
-      - opened
-    paths:
-      - "**/*.go"
-      - "go.mod"
-      - "go.sum"
   workflow_dispatch:
 
-permissions: write-all
+permissions:
+  contents: read
+
+concurrency:
+  group: fdu-connect-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
-  build:
+  windows:
+    name: Windows x64 GUI
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: gui/go.mod
+          cache-dependency-path: |
+            go.sum
+            gui/go.sum
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Install pnpm
+        run: npm install --global pnpm@11.21.0
+
+      - name: Test core
+        run: go test ./...
+
+      - name: Build and test GUI package
+        shell: pwsh
+        env:
+          BUILD_REF: ${{ github.ref }}
+          BUILD_TAG: ${{ github.ref_name }}
+        run: |
+          $version = if ($env:BUILD_REF.StartsWith('refs/tags/')) { $env:BUILD_TAG } else { 'dev' }
+          .\build.ps1 -Test -Package -Version $version -OutputDirectory release
+          Get-ChildItem -LiteralPath release -Filter '*.zip' -File | ForEach-Object {
+            $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($_.Name)"
+          } | Set-Content -LiteralPath release/SHA256SUMS.txt -Encoding utf8NoBOM
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fdu-connect-windows-x64
+          path: |
+            release/*.zip
+            release/SHA256SUMS.txt
+          if-no-files-found: error
+
+  unix:
+    name: ${{ matrix.name }} GUI
     strategy:
-      matrix:
-        # Include amd64 on all platforms.
-        goos: [windows, linux, darwin]
-        goarch: [amd64, 386]
-        exclude:
-          # Exclude i386 on darwin.
-          - goarch: 386
-            goos: darwin
-        include:
-          # BEGIN Linux ARM 5 6 7
-          - { goos: linux, goarch: arm, goarm: 7 }
-          - { goos: linux, goarch: arm, goarm: 6 }
-          - { goos: linux, goarch: arm, goarm: 5 }
-          # END Linux ARM 5 6 7
-          # BEGIN Other architectures
-          - { goos: darwin, goarch: arm64 }
-          - { goos: linux, goarch: arm64 }
-          - { goos: linux, goarch: riscv64 }
-          - { goos: windows, goarch: arm64 }
-          # BEGIN MIPS
-          - { goos: linux, goarch: mips64 }
-          - { goos: linux, goarch: mips64le }
-          - { goos: linux, goarch: mipsle }
-          - { goos: linux, goarch: mips }
-          # END MIPS
-          # END Other architectures
       fail-fast: false
-
-    runs-on: ubuntu-latest
-    env:
-      GOOS: ${{ matrix.goos }}
-      GOARCH: ${{ matrix.goarch }}
-      GOARM: ${{ matrix.goarm }}
-      CGO_ENABLED: 0
-
+      matrix:
+        include:
+          - { name: Linux x64, os: ubuntu-24.04, artifact: fdu-connect-linux-x64 }
+          - { name: macOS universal, os: macos-latest, artifact: fdu-connect-macos-universal }
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout codebase
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v7
 
-      - name: Show workflow information
-        id: get_filename
-        run: |
-          export _NAME=$GOOS-$GOARCH$GOARM
-          echo "GOOS: $GOOS, GOARCH: $GOARCH, GOARM: $GOARM, RELEASE_NAME: $_NAME"
-          echo "ASSET_NAME=$_NAME" >> $GITHUB_OUTPUT
-          echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
-
-      - name: Set up Go
-        uses: actions/setup-go@v3
+      - uses: actions/setup-go@v7
         with:
-          go-version: ^1.25
+          go-version-file: gui/go.mod
+          cache-dependency-path: |
+            go.sum
+            gui/go.sum
 
-      - name: Get project dependencies
-        run: go mod download
-
-      - name: Build
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          mkdir -p build_assets
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          VERSION=dev
-          VERSION_FLAGS="-X main.zjuConnectVersion=${VERSION}"
-          if [ "${{ github.event_name }}" = "release" ]; then
-            VERSION_FLAGS="-X main.zjuConnectVersion=${RELEASE_TAG}"
-          else
-            VERSION_FLAGS="${VERSION_FLAGS} -X main.CommitID=${SHORT_SHA}"
-          fi
-          go build -v -o build_assets/zju-connect -trimpath \
-            -ldflags "-s -w -buildid= ${VERSION_FLAGS}" .
-
-      - name: Rename Windows zju-connect
-        if: matrix.goos == 'windows'
-        run: |
-          cd ./build_assets || exit 1
-          mv zju-connect zju-connect.exe
-
-      - name: Upload artifact
-        if: github.event_name != 'release'
-        uses: actions/upload-artifact@v4
+      - uses: actions/setup-node@v7
         with:
-          name: zju-connect-${{ steps.get_filename.outputs.ASSET_NAME }}
-          path: build_assets/*
+          node-version: "24"
+          package-manager-cache: false
 
-      - name: Create ZIP archive
-        if: github.event_name == 'release' || (github.event_name == 'push' && contains(vars.NIGHTLY_RELEASE_ENABLED_BRANCHES, github.ref_name))
-        run: |
-          pushd build_assets || exit 1
-          zip -9vr ../zju-connect-$ASSET_NAME.zip .
-          popd || exit 1
+      - name: Install pnpm
+        run: npm install --global pnpm@11.21.0
 
-      - name: Upload release binary
-        if: github.event_name == 'release' || (github.event_name == 'push' && contains(vars.NIGHTLY_RELEASE_ENABLED_BRANCHES, github.ref_name))
+      - name: Install Linux GUI libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - name: Test core
+        run: go test ./...
+
+      - name: Build and test GUI package
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          BUILD_REF: ${{ github.ref }}
+          BUILD_TAG: ${{ github.ref_name }}
         run: |
-          gh release upload --clobber ${{ github.event_name == 'release' && github.event.release.tag_name || 'nightly' }} zju-connect-${{ steps.get_filename.outputs.ASSET_NAME }}.zip
+          version=dev
+          if [[ "$BUILD_REF" == refs/tags/* ]]; then version="$BUILD_TAG"; fi
+          bash build.sh --test --package --version "$version" --output release
+          cd release
+          for file in FDU-Connect-*; do
+            case "$file" in *.zip|*.tar.gz) shasum -a 256 "$file" ;; esac
+          done > "SHA256SUMS-${{ matrix.artifact }}.txt"
 
-  update-aur:
-    if: github.event_name == 'release'
-    needs: build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            release/FDU-Connect-*.zip
+            release/FDU-Connect-*.tar.gz
+            release/SHA256SUMS-*.txt
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.repository == 'exdoubled/FDU-Bridge'
+    needs: [windows, unix]
     runs-on: ubuntu-latest
-    permissions: {}
+    permissions:
+      contents: write
     steps:
-      - name: Update AUR package
-        env:
-          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: fdu-connect-*
+          merge-multiple: true
+          path: release
+
+      - name: Verify package checksums
+        working-directory: release
         run: |
-          set -euo pipefail
+          cat SHA256SUMS-*.txt >> SHA256SUMS.txt
+          rm SHA256SUMS-*.txt
+          sha256sum --check SHA256SUMS.txt
 
-          if [ -z "${AUR_SSH_PRIVATE_KEY}" ]; then
-            echo "::error::AUR_SSH_PRIVATE_KEY is not set"
-            exit 1
-          fi
+      - name: Publish this repository's release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          cat > release-notes.md <<'EOF'
+          ## FDU Connect
 
-          TAG="${{ github.event.release.tag_name }}"
-          PKGVER="${TAG#v}"
-          PKGVER="${PKGVER//-/_}"
+          桌面 GUI（Windows x64、macOS 通用版、Linux x64）：为现有 Clash 一键添加复旦内网，支持 UIS 登录、托盘、诊断、外网节点和逐条校内资源开关。
 
-          eval "$(ssh-agent -s)"
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          printf '%s\n' "${AUR_SSH_PRIVATE_KEY}" | tr -d '\r' | ssh-add -
-          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
+          - Windows：解压 ZIP，运行 FDU-Connect-GUI.exe；核心须与 GUI 保持在同一目录。需要 Microsoft Edge WebView2 Runtime。
+          - macOS：解压后将 FDU Connect.app 拖入“应用程序”，首次在 Finder 中右键选择“打开”（应用未经公证）。支持 Apple 芯片和 Intel。
+          - Linux：解压 tar.gz，运行 fdu-connect-gui；需要 GTK 4 与 WebKitGTK 6.0（Ubuntu 24.04 起自带）。
 
-          git clone ssh://aur@aur.archlinux.org/zju-connect-bin.git aur-package
-          cd aur-package
+          使用自己的复旦 UIS 账号登录。
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          在首页启用校内访问，首次确认后自动备份并接入。保留 Clash 当前全局或规则模式，指定资源走 FDU，其他流量沿用外网设置。停用时先恢复出口再关闭 VPN。不开 TUN 时，仅覆盖进入 Clash 的应用流量，保留系统代理绕过列表。
 
-          OLD_PKGVER="$(grep -E '^pkgver=' PKGBUILD | cut -d= -f2-)"
-          OLD_PKGREL="$(grep -E '^pkgrel=' PKGBUILD | cut -d= -f2-)"
-          if [ "${OLD_PKGVER}" = "${PKGVER}" ]; then
-            PKGREL="$((OLD_PKGREL + 1))"
-          else
-            PKGREL=1
-          fi
+          包内仅含 GUI、核心、公共示例配置和许可证，不含个人配置或登录缓存。SHA256SUMS.txt 可用于校验下载文件。
 
-          sed -i "s/^pkgver=.*/pkgver=${PKGVER}/" PKGBUILD
-          sed -i "s/^pkgrel=.*/pkgrel=${PKGREL}/" PKGBUILD
-
-          docker run --rm -i -v "$PWD:/pkg" -w /pkg archlinux:base-devel bash <<'EOF'
-          set -euo pipefail
-          pkg_owner="$(stat -c '%u:%g' /pkg)"
-          trap 'chown -R "$pkg_owner" /pkg' EXIT
-          pacman -Sy --noconfirm pacman-contrib
-          useradd -m builder
-          chown -R builder:builder /pkg
-          su builder -c 'cd /pkg && updpkgsums && makepkg --printsrcinfo > .SRCINFO'
+          感谢 [AkiraSalvare/fdu-connect](https://github.com/AkiraSalvare/fdu-connect)、[Mythologyli/zju-connect](https://github.com/Mythologyli/zju-connect)、[lyc8503/EasierConnect](https://github.com/lyc8503/EasierConnect) 及所有贡献者。
           EOF
 
-          git diff --check
-          if git diff --quiet; then
-            echo "AUR package is already up to date."
-            exit 0
+          is_draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft 2>/dev/null || true)"
+          if [[ "$is_draft" == "false" ]]; then
+            echo "::error::This release is already published; refusing to replace its assets."
+            exit 1
           fi
-
-          git add PKGBUILD .SRCINFO
-          git commit -m "Update to ${TAG}"
-          git push
-
-  nightly:
-    if: github.event_name != 'release' && github.event_name == 'push' && contains(vars.NIGHTLY_RELEASE_ENABLED_BRANCHES, github.ref_name)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout codebase
-        uses: actions/checkout@v3
-
-      - name: Move nightly tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -f nightly
-          git push origin nightly --force
+          if [[ "$is_draft" != "true" ]]; then
+            gh release create "$RELEASE_TAG" --verify-tag --draft \
+              --title "FDU Connect $RELEASE_TAG" --notes-file release-notes.md
+          fi
+          gh release upload "$RELEASE_TAG" release/*.zip release/*.tar.gz release/SHA256SUMS.txt --clobber
+          prerelease=false
+          latest=true
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            prerelease=true
+            latest=false
+          fi
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease="$prerelease" --latest="$latest"
