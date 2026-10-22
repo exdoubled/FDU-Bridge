@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 func cmdline(pid string) []string {
@@ -61,16 +63,16 @@ func StartTime(pid uint32) (time.Time, error) {
 	if err != nil {
 		return time.Time{}, err
 	}
-	uptime, err := os.ReadFile("/proc/uptime")
-	if err != nil {
-		return time.Time{}, err
-	}
-	seconds, err := strconv.ParseFloat(strings.Fields(string(uptime))[0], 64)
-	if err != nil {
+	// /proc/uptime rounds to centiseconds, which can move a newly started
+	// process after its own first acknowledgement. Sample wall time first
+	// so syscall latency cannot move the estimated boot time forward.
+	now := time.Now()
+	var uptime unix.Timespec
+	if err := unix.ClockGettime(unix.CLOCK_BOOTTIME, &uptime); err != nil {
 		return time.Time{}, err
 	}
 	// USER_HZ is 100 on every Linux ABI Go supports.
-	boot := time.Now().Add(-time.Duration(seconds * float64(time.Second)))
+	boot := now.Add(-time.Duration(uptime.Nano()))
 	return boot.Add(time.Duration(ticks) * 10 * time.Millisecond), nil
 }
 
