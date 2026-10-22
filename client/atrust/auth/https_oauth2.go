@@ -63,6 +63,7 @@ func (s *Session) interactiveHttpsOauth2(loginURL string) (string, error) {
 		LoginURL:    loginURL,
 		CallbackURL: s.baseURL + "/passport/v1/auth/httpsOauth2",
 		Message:     "Please enter the callback URL:",
+		DialContext: s.dialContext,
 	})
 	if err != nil {
 		return "", err

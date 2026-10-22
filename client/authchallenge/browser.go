@@ -6,15 +6,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/mythologyli/zju-connect/client"
+	"github.com/things-go/go-socks5"
 	"golang.org/x/net/websocket"
 )
 
@@ -41,34 +45,71 @@ func matchesOAuthCallback(raw, expected string) bool {
 		u.User == nil && u.Path == want.Path && u.Query().Get("code") != ""
 }
 
+// loginBrowsers lists Chromium-based browsers in preference order; all of them speak the
+// DevTools protocol the capture relies on.
+func standardLoginBrowsers() []string {
+	switch runtime.GOOS {
+	case "windows":
+		return []string{
+			filepath.Join(os.Getenv("ProgramFiles(x86)"), "Microsoft", "Edge", "Application", "msedge.exe"),
+			filepath.Join(os.Getenv("ProgramFiles"), "Microsoft", "Edge", "Application", "msedge.exe"),
+			filepath.Join(os.Getenv("ProgramFiles"), "Google", "Chrome", "Application", "chrome.exe"),
+			filepath.Join(os.Getenv("LOCALAPPDATA"), "Google", "Chrome", "Application", "chrome.exe"),
+		}
+	case "darwin":
+		home, _ := os.UserHomeDir()
+		var paths []string
+		for _, app := range []string{
+			"Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+			"Google Chrome.app/Contents/MacOS/Google Chrome",
+			"Chromium.app/Contents/MacOS/Chromium",
+			"Brave Browser.app/Contents/MacOS/Brave Browser",
+		} {
+			paths = append(paths, filepath.Join("/Applications", app), filepath.Join(home, "Applications", app))
+		}
+		return paths
+	}
+	var paths []string
+	for _, name := range []string{"microsoft-edge", "microsoft-edge-stable", "google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "brave-browser"} {
+		if path, err := exec.LookPath(name); err == nil {
+			paths = append(paths, path)
+		}
+	}
+	return paths
+}
+
 // captureBrowserLogin owns a separate browser profile. It never attaches to the
 // user's regular browser or sends the intercepted OAuth request to the network.
-func captureBrowserLogin(ctx context.Context, loginURL, callbackURL string, output io.Writer) (string, error) {
+func captureBrowserLogin(ctx context.Context, loginURL, callbackURL string, dial client.DialContextFunc, output io.Writer) (string, error) {
 	var browser string
-	for _, path := range []string{
-		filepath.Join(os.Getenv("ProgramFiles(x86)"), "Microsoft", "Edge", "Application", "msedge.exe"),
-		filepath.Join(os.Getenv("ProgramFiles"), "Microsoft", "Edge", "Application", "msedge.exe"),
-		filepath.Join(os.Getenv("ProgramFiles"), "Google", "Chrome", "Application", "chrome.exe"),
-		filepath.Join(os.Getenv("LOCALAPPDATA"), "Google", "Chrome", "Application", "chrome.exe"),
-	} {
+	for _, path := range loginBrowsers() {
 		if info, err := os.Stat(path); err == nil && !info.IsDir() {
 			browser = path
 			break
 		}
 	}
 	if browser == "" {
-		return "", fmt.Errorf("Microsoft Edge or Google Chrome was not found")
+		return "", fmt.Errorf("no Chromium-based browser (Edge, Chrome or Chromium) was found")
 	}
 	profile, err := os.MkdirTemp("", "fdu-connect-login-")
 	if err != nil {
 		return "", err
 	}
 	defer os.RemoveAll(profile)
+	proxyArg := "--no-proxy-server"
+	if dial != nil {
+		addr, closeProxy, err := startLoginProxy(ctx, dial)
+		if err != nil {
+			return "", fmt.Errorf("start direct login channel: %w", err)
+		}
+		defer closeProxy()
+		proxyArg = "--proxy-server=socks5://" + addr
+	}
 	cmd := exec.CommandContext(ctx, browser,
 		"--user-data-dir="+profile, "--remote-debugging-port=0",
 		"--remote-debugging-address=127.0.0.1", "--remote-allow-origins=http://127.0.0.1",
 		"--no-first-run", "--no-default-browser-check", "--disable-extensions",
-		"--disable-background-networking", "--no-proxy-server", "about:blank")
+		"--disable-background-networking", "--disable-quic", proxyArg, "about:blank")
 	if err := cmd.Start(); err != nil {
 		return "", fmt.Errorf("start login browser: %w", err)
 	}
@@ -82,17 +123,18 @@ func captureBrowserLogin(ctx context.Context, loginURL, callbackURL string, outp
 			<-done
 		}
 	}()
-	_, _ = fmt.Fprintln(output, "Opening an isolated login browser. Complete UIS login there; the callback will be captured automatically.")
+	_, _ = fmt.Fprintf(output, "登录浏览器：%s（独立窗口，自动接收回调）。默认浏览器不兼容时使用此浏览器。\n", filepath.Base(browser))
 	startupCtx, startupCancel := context.WithTimeout(ctx, 15*time.Second)
 	defer startupCancel()
-	endpoint, err := waitForLoginBrowser(startupCtx, profile, done)
+	// Edge may hand off to another process and exit before DevTools is ready.
+	endpoint, err := waitForLoginBrowser(startupCtx, profile)
 	if err != nil {
 		return "", err
 	}
 	return interceptOAuthCallback(ctx, endpoint, loginURL, callbackURL)
 }
 
-func waitForLoginBrowser(ctx context.Context, profile string, done <-chan struct{}) (string, error) {
+func waitForLoginBrowser(ctx context.Context, profile string) (string, error) {
 	transport := &http.Transport{Proxy: nil}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, Timeout: time.Second}
@@ -101,7 +143,7 @@ func waitForLoginBrowser(ctx context.Context, profile string, done <-chan struct
 	for {
 		data, err := os.ReadFile(filepath.Join(profile, "DevToolsActivePort"))
 		if err == nil {
-			port, err := strconv.Atoi(strings.SplitN(string(data), "\n", 2)[0])
+			port, err := strconv.Atoi(strings.TrimSpace(strings.SplitN(string(data), "\n", 2)[0]))
 			if err == nil && port > 0 && port <= 65535 {
 				addr := "127.0.0.1:" + strconv.Itoa(port)
 				req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+"/json/list", nil)
@@ -127,11 +169,48 @@ func waitForLoginBrowser(ctx context.Context, profile string, done <-chan struct
 		select {
 		case <-ctx.Done():
 			return "", fmt.Errorf("waiting for login browser: %w", ctx.Err())
-		case <-done:
-			return "", fmt.Errorf("login browser was closed")
 		case <-ticker.C:
 		}
 	}
+}
+
+// Leave hostnames intact so the physical underlay resolves them, outside TUN DNS.
+type loginResolver struct{}
+
+func (loginResolver) Resolve(ctx context.Context, _ string) (context.Context, net.IP, error) {
+	return ctx, nil, nil
+}
+
+// This short-lived loopback proxy serves only the isolated login browser.
+func startLoginProxy(ctx context.Context, dial client.DialContextFunc) (string, context.CancelFunc, error) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", nil, err
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	context.AfterFunc(ctx, func() { _ = listener.Close() })
+	server := socks5.NewServer(socks5.WithResolver(loginResolver{}),
+		socks5.WithRule(&socks5.PermitCommand{EnableConnect: true}),
+		socks5.WithDial(func(_ context.Context, network, addr string) (net.Conn, error) {
+			dialCtx, cancelDial := context.WithTimeout(ctx, 20*time.Second)
+			defer cancelDial()
+			return dial(dialCtx, network, addr)
+		}))
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+				defer stop()
+				defer conn.Close()
+				_ = server.ServeConn(conn)
+			}()
+		}
+	}()
+	return listener.Addr().String(), cancel, nil
 }
 
 func interceptOAuthCallback(ctx context.Context, endpoint, loginURL, callbackURL string) (string, error) {

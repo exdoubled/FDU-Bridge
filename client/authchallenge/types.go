@@ -3,6 +3,8 @@ package authchallenge
 import (
 	"fmt"
 	"strings"
+
+	"github.com/mythologyli/zju-connect/client"
 )
 
 type CodeKind string
@@ -70,6 +72,7 @@ type ExternalLoginChallenge struct {
 	LoginURL    string
 	CallbackURL string // Expected callback endpoint, without authorization parameters.
 	Message     string
+	DialContext client.DialContextFunc `json:"-"` // The same physical underlay used by VPN authentication.
 }
 
 type ExternalLoginResponse struct {

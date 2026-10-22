@@ -5,9 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
-	"runtime"
 	"sync"
 	"time"
 )
@@ -142,7 +142,10 @@ func (h *guiHandler) HandleClickCaptcha(c ClickCaptchaChallenge) (ClickCaptchaRe
 	return response, err
 }
 func (h *guiHandler) HandleExternalLogin(c ExternalLoginChallenge) (ExternalLoginResponse, error) {
-	if runtime.GOOS == "windows" && c.Kind == ExternalLoginOAuth2 && c.CallbackURL != "" {
+	if c.Kind == ExternalLoginOAuth2 {
+		if c.CallbackURL == "" {
+			return ExternalLoginResponse{}, errors.New("自动登录缺少回调地址，请重新连接")
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		go func() {
 			select {
@@ -151,7 +154,7 @@ func (h *guiHandler) HandleExternalLogin(c ExternalLoginChallenge) (ExternalLogi
 			case <-ctx.Done():
 			}
 		}()
-		callback, err := captureBrowserLogin(ctx, c.LoginURL, c.CallbackURL, os.Stderr)
+		callback, err := captureBrowserLogin(ctx, c.LoginURL, c.CallbackURL, c.DialContext, os.Stderr)
 		cancel()
 		if err == nil {
 			return ExternalLoginResponse{CallbackURL: callback}, nil
@@ -161,6 +164,7 @@ func (h *guiHandler) HandleExternalLogin(c ExternalLoginChallenge) (ExternalLogi
 			return ExternalLoginResponse{}, errors.New("GUI authentication cancelled")
 		default:
 		}
+		return ExternalLoginResponse{}, fmt.Errorf("自动登录失败，请重新连接：%w", err)
 	}
 	r, err := h.ask("external-login", map[string]any{"login_url": c.LoginURL, "message": "在浏览器登录后，粘贴回调地址。"})
 	if err == nil && r.Callback == "" {

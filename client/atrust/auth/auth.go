@@ -112,6 +112,7 @@ type Session struct {
 
 	response         map[string]json.RawMessage
 	challengeHandler authchallenge.Handler
+	dialContext      client.DialContextFunc
 }
 
 func NewSession(server string, tlsKeyLogWriter io.Writer, dialContext ...client.DialContextFunc) *Session {
@@ -132,12 +133,13 @@ func NewSessionContext(ctx context.Context, server string, tlsKeyLogWriter io.Wr
 	httpClient := &http.Client{Transport: tr, Jar: jar, Timeout: 20 * time.Second}
 
 	return &Session{
-		ctx:      ctx,
-		client:   httpClient,
-		baseHost: server,
-		baseURL:  "https://" + server,
-		rid:      base64.StdEncoding.EncodeToString([]byte(server)),
-		response: make(map[string]json.RawMessage),
+		ctx:         ctx,
+		client:      httpClient,
+		baseHost:    server,
+		baseURL:     "https://" + server,
+		rid:         base64.StdEncoding.EncodeToString([]byte(server)),
+		response:    make(map[string]json.RawMessage),
+		dialContext: tr.DialContext,
 	}
 }
 
