@@ -3,6 +3,7 @@ import { Events } from "@wailsio/runtime";
 import { AppService, CoreService } from "./lib/api";
 import { StoreProvider, useStore } from "./store";
 import { Sidebar } from "./components/Sidebar";
+import { UpdateProvider } from "./components/UpdateControl";
 import { ConfirmDialog, Toasts } from "./components/Overlays";
 import { ChallengeDialog, type Challenge } from "./components/ChallengeDialog";
 import { Home } from "./pages/Home";
@@ -72,7 +73,7 @@ function Shell() {
 export function App() {
   return (
     <StoreProvider>
-      <Shell />
+      <UpdateProvider><Shell /></UpdateProvider>
     </StoreProvider>
   );
 }

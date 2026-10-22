@@ -6,6 +6,7 @@ import { useStore } from "../store";
 import { Banner, Empty, Segmented, Spinner, Switch } from "../components/ui";
 import { SettingRow } from "../components/SettingField";
 import { IntegrationSettings } from "../components/IntegrationSettings";
+import { UpdateSettings } from "../components/UpdateControl";
 
 function PathSetting({ label, path, onBrowse, disabled }: { label: string; path?: string; onBrowse: () => void; disabled: boolean }) {
   return (
@@ -149,6 +150,8 @@ export function Settings() {
       <div className="page-body">
         <div className="stack">
           <IntegrationSettings onDirtyChange={setIntegrationDirty} />
+
+          <UpdateSettings />
 
           <section className="card section" style={{ padding: 0 }}>
             <div className="section-head"><Palette size={16} />外观与启动</div>
