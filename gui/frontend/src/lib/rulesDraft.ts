@@ -32,6 +32,22 @@ export function cloneDraft(d: Draft): Draft {
   };
 }
 
+/** Both drafts contain canonical values validated by the rules service. */
+export function mergeDraft(current: Draft, imported: Draft): Draft {
+  const next = cloneDraft(current);
+  for (const key of Object.values(lists)) {
+    const seen = new Set(next[key]);
+    const off = new Set(imported.disabled[key]);
+    for (const value of imported[key]) {
+      if (seen.has(value)) continue;
+      seen.add(value);
+      next[key].push(value);
+      if (off.has(value)) next.disabled[key].push(value);
+    }
+  }
+  return next;
+}
+
 export function rows(d: Draft): RuleRow[] {
   const result: RuleRow[] = [];
   for (const type of ["domain", "suffix", "cidr"] as RuleType[]) {
