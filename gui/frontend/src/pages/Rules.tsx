@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, Plus, RefreshCw, Route, Search, Trash2, Upload } from "lucide-react";
 import { RuleKind, RulesService, errorText, type ApplyState, type RulesImport } from "../lib/api";
 import { addRule, cloneDraft, counts, emptyDraft, filterRows, mergeDraft, removeRules, rows, sameDraft, setEnabled, typeLabels, type Draft, type RuleType } from "../lib/rulesDraft";
@@ -24,15 +24,19 @@ export function Rules() {
   const [query, setQuery] = useState("");
   const [saving, setSaving] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [transferring, setTransferring] = useState(false);
   const [preview, setPreview] = useState<RulesImport | null>(null);
-  const busy = saving || adding || transferring || preview !== null;
+  const busy = saving || adding || loading || transferring || preview !== null;
+  const stale = useRef(true);
 
   const dirty = saved !== null && !sameDraft(draft, saved);
   useEffect(() => setDirty("rules", dirty), [dirty, setDirty]);
   useEffect(() => () => setDirty("rules", false), [setDirty]);
 
   const load = useCallback(async () => {
+    stale.current = false;
+    setLoading(true);
     try {
       const view = await RulesService.Load();
       const doc = view.snapshot.document as Draft;
@@ -45,13 +49,19 @@ export function Rules() {
     } catch (e) {
       setSaved(null);
       setLoadError(errorText(e));
+    } finally {
+      setLoading(false);
     }
   }, []);
 
-  // Reload when another page changes the rules file, but never over an unsaved draft.
+  // Keep skipped notifications pending until dialogs close and the draft is clean.
   useEffect(() => {
-    if (!dirty && !preview && !transferring) load();
-  }, [load, versions.settings, versions.clash]);
+    stale.current = true;
+  }, [versions.settings, versions.clash]);
+
+  useEffect(() => {
+    if (stale.current && !dirty && !busy) load();
+  }, [load, versions.settings, versions.clash, dirty, busy]);
 
   useEffect(() => {
     if (dirty || !hash) return;
