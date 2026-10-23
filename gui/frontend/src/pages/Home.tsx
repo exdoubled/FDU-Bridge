@@ -5,7 +5,7 @@ import { counts, type Draft } from "../lib/rulesDraft";
 import { formatUptime, stateLabel, stateTone } from "../lib/status";
 import { useStore } from "../store";
 import { Banner, CardTitle, Spinner, Switch } from "../components/ui";
-import { CampusChecks } from "../components/NetworkTools";
+import { CampusChecks, TrafficCards } from "../components/NetworkTools";
 
 function useNow(active: boolean) {
   const [now, setNow] = useState(Date.now());
@@ -127,6 +127,7 @@ export function Home() {
             </section>
           </div>
 
+          <TrafficCards />
           <CampusChecks />
 
           <section className="card row" style={{ alignItems: "center" }}>

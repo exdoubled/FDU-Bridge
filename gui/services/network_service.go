@@ -13,15 +13,24 @@ import (
 
 	"github.com/mythologyli/zju-connect/gui/internal/clash"
 	"github.com/mythologyli/zju-connect/gui/internal/netcheck"
+	"github.com/mythologyli/zju-connect/routing"
 )
 
 type NetworkService struct {
-	b         *Backend
-	probeBusy sync.Mutex
+	b             *Backend
+	mu            sync.Mutex
+	probeBusy     sync.Mutex
+	started       int64
+	coreEpoch     int64
+	corePrevious  [2]routing.TrafficTotals
+	totals        [2]TrafficBucket
+	previousRates [2][2]uint64
+	clashPrevious map[string][2]uint64
+	lastSample    time.Time
 }
 
 func NewNetworkService(b *Backend) *NetworkService {
-	return &NetworkService{b: b}
+	return &NetworkService{b: b, started: time.Now().UnixMilli(), clashPrevious: map[string][2]uint64{}}
 }
 
 type ProbeReport struct {
@@ -53,6 +62,29 @@ func (s *NetworkService) controller() (clash.API, error) {
 		api = local
 	}
 	return api, nil
+}
+
+func (s *NetworkService) Observe() (NetworkView, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	core, received := s.b.runtime.Traffic()
+	now := time.Now()
+	fresh := s.b.runtime.Running() && received > 0 && now.UnixMilli()-received < 5000
+	var observed clash.ConnectionSnapshot
+	api, err := s.controller()
+	if err == nil {
+		err = api.Do("GET", "/connections", nil, &observed)
+	}
+	s.b.mu.Lock()
+	values := s.b.saved
+	s.b.mu.Unlock()
+	fallback := ""
+	if route, ok := values["routing"].(map[string]any); ok {
+		if upstream, e := url.Parse(text(route, "upstream_proxy")); e == nil {
+			fallback = upstream.Port()
+		}
+	}
+	return s.sample(core, fresh, observed, err == nil, fallback, now), nil
 }
 
 func lookupClash(api clash.API) func(context.Context, string) ([]string, error) {
