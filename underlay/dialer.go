@@ -165,6 +165,40 @@ func (d *Dialer) wrapCapture(conn net.Conn) net.Conn {
 
 func dialContextOnInterface(ctx context.Context, network, address, interfaceName, localDNSServer string) (net.Conn, error) {
 	dialer := &platformdialer.Dialer{InterfaceName: interfaceName}
+	if runtime.GOOS == "windows" && interfaceName != "" && localDNSServer == "" && network != "tcp6" && network != "udp6" {
+		// A TUN may block application DNS sockets while Windows DNS still works.
+		// Try real IPv4 answers with bound sockets, preserving the total deadline
+		// and a share of its budget for the physical DNS fallback below.
+		host, port, err := net.SplitHostPort(address)
+		if err == nil && net.ParseIP(host) == nil {
+			lookupCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			addresses, _ := net.DefaultResolver.LookupIP(lookupCtx, "ip4", host)
+			cancel()
+			var candidates []net.IP
+			for _, ip := range addresses {
+				ipv4 := ip.To4()
+				if ipv4 == nil || ipv4[0] == 198 && (ipv4[1] == 18 || ipv4[1] == 19) {
+					continue
+				}
+				candidates = append(candidates, ipv4)
+			}
+			for i, ip := range candidates {
+				timeout := 3 * time.Second
+				if deadline, ok := ctx.Deadline(); ok {
+					timeout = time.Until(deadline) / time.Duration(len(candidates)-i+1)
+				}
+				attemptCtx, cancel := context.WithTimeout(ctx, timeout)
+				conn, err := dialer.DialContext(attemptCtx, network, net.JoinHostPort(ip.String(), port))
+				cancel()
+				if err == nil {
+					return conn, nil
+				}
+				if ctx.Err() != nil {
+					return nil, ctx.Err()
+				}
+			}
+		}
+	}
 	if interfaceName != "" || localDNSServer != "" {
 		dialer.Resolver = newUnderlayResolver(interfaceName, localDNSServer)
 	}
