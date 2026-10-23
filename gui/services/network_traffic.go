@@ -44,6 +44,7 @@ type NetworkView struct {
 	Truncated      bool                `json:"truncated"`
 	Scope          string              `json:"scope"`
 	SampledAt      int64               `json:"sampledAt"`
+	PollIntervalMS int                 `json:"pollIntervalMs"`
 }
 
 func counterDelta(value, previous uint64) uint64 {
@@ -62,7 +63,8 @@ func (r *trafficRate) sample(upload, download uint64, now time.Time) (uint64, ui
 	var rates [2]uint64
 	current := [2]uint64{upload, download}
 	seconds := now.Sub(r.at).Seconds()
-	if !r.at.IsZero() && seconds > 0 && seconds <= 5 {
+	// Allow the slower five-second cadence plus request and timer delays.
+	if !r.at.IsZero() && seconds > 0 && seconds <= 10 {
 		for i := range rates {
 			rates[i] = uint64(float64(counterDelta(current[i], r.totals[i])) / seconds)
 		}
@@ -111,6 +113,10 @@ func diagnosticIP(raw, mode string) (string, string) {
 // and its internal return listener are excluded, because the core already counts them.
 func (s *NetworkService) sample(core routing.TrafficSnapshot, coreFresh bool, observed clash.ConnectionSnapshot, clashOK bool, fallback string, now time.Time) NetworkView {
 	view := NetworkView{CoreAvailable: coreFresh, ClashAvailable: clashOK, Connections: []NetworkConnection{}, SampledAt: now.UnixMilli(), Truncated: core.Truncated}
+	view.PollIntervalMS = 1000
+	if len(observed.Connections) > 1000 {
+		view.PollIntervalMS = 5000
+	}
 	coreKeys := map[string]bool{}
 	if core.Started > 0 {
 		if core.Started != s.coreEpoch {

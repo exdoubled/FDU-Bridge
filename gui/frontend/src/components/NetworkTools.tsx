@@ -57,11 +57,14 @@ export function NetworkToolsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!active) return;
     let live = true;
+    let nextSampleAt = 0;
     const observe = async () => {
-      if (document.hidden || observing.current) return;
+      const now = Date.now();
+      if (document.hidden || observing.current || now < nextSampleAt) return;
       observing.current = true;
       try {
         const next = await NetworkService.Observe();
+        nextSampleAt = next.pollIntervalMs > 1000 ? now + next.pollIntervalMs : 0;
         if (live) { setView(next); setObserveError(""); }
       } catch (e) {
         if (live) setObserveError(errorText(e));
