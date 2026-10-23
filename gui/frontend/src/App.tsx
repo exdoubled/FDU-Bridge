@@ -11,9 +11,10 @@ import { Nodes } from "./pages/Nodes";
 import { Rules } from "./pages/Rules";
 import { Logs } from "./pages/Logs";
 import { Settings } from "./pages/Settings";
+import { Network } from "./pages/Network";
 import { NetworkToolsProvider } from "./components/NetworkTools";
 
-const pages = { home: Home, nodes: Nodes, rules: Rules, logs: Logs, settings: Settings };
+const pages = { home: Home, nodes: Nodes, rules: Rules, network: Network, logs: Logs, settings: Settings };
 
 function useTheme(theme: string | undefined) {
   useEffect(() => {

@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Events } from "@wailsio/runtime";
 import { AppService, ClashService, CoreService, errorText, type AppConfig, type ClashOverview, type CoreStatus } from "./lib/api";
 
-export type Page = "home" | "nodes" | "rules" | "logs" | "settings";
+export type Page = "home" | "nodes" | "rules" | "network" | "logs" | "settings";
 export type ToastKind = "success" | "error" | "info";
 
 export interface Toast {

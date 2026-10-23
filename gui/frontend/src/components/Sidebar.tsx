@@ -1,4 +1,4 @@
-import { Globe, House, Route, ScrollText, Settings } from "lucide-react";
+import { Activity, Globe, House, Route, ScrollText, Settings } from "lucide-react";
 import { useStore, type Page } from "../store";
 import { stateLabel, stateTone } from "../lib/status";
 import { UpdateControl } from "./UpdateControl";
@@ -7,6 +7,7 @@ const items: { page: Page; label: string; icon: typeof House }[] = [
   { page: "home", label: "首页", icon: House },
   { page: "nodes", label: "外网节点", icon: Globe },
   { page: "rules", label: "校内资源", icon: Route },
+  { page: "network", label: "网络检测", icon: Activity },
   { page: "logs", label: "诊断", icon: ScrollText },
   { page: "settings", label: "设置", icon: Settings },
 ];
