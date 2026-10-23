@@ -149,8 +149,8 @@ export function TrafficCards() {
 }
 
 const checkNames: Record<string, string> = { dns: "DNS", tcp: "TCP", tls: "TLS", http: "HTTP", websocket: "WS" };
-const checkLabels: Record<string, string> = { ok: "通过", error: "失败", auth: "需认证", unsupported: "不支持" };
-const checkTones: Record<string, string> = { ok: "success", error: "danger", auth: "warning", unsupported: "" };
+const checkLabels: Record<string, string> = { ok: "通过", error: "失败", auth: "需认证", unsupported: "不支持", skipped: "未尝试" };
+const checkTones: Record<string, string> = { ok: "success", error: "danger", auth: "warning", unsupported: "", skipped: "" };
 
 function ProbeStatus({ report, error, loading }: { report?: ProbeReport; error?: string; loading: boolean }) {
   if (loading) return <span className="probe-status muted"><Spinner />检测中</span>;

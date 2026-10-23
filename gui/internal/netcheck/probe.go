@@ -164,13 +164,21 @@ func probeTarget(ctx context.Context, target Target, opts Options, transport *ht
 	if response != nil {
 		result.HTTPStatus = response.StatusCode
 		check.Status, check.Detail = responseDetail(response)
+		if target.Provider != "campus" && check.Status == "error" {
+			check.Status = "ok"
+			check.Detail += "；仅证明 HTTP 可达，不代表模型可用"
+		}
 		response.Body.Close()
 	}
 	result.Checks = append(result.Checks, check)
 	if target.Provider != "campus" {
 		ws := Check{Kind: "websocket", Status: "unsupported", Detail: "未配置可免认证的 WebSocket 测试入口"}
 		if target.wsURL != "" {
-			ws = checkWebSocket(ctx, client, target.wsURL)
+			if result.HTTPStatus == 0 {
+				ws.Status, ws.Detail = "skipped", "HTTP 未收到响应，未尝试 WebSocket 握手"
+			} else {
+				ws = checkWebSocket(ctx, client, target.wsURL)
+			}
 		}
 		result.Checks = append(result.Checks, ws)
 	}

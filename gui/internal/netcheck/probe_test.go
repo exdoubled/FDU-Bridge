@@ -78,6 +78,46 @@ func TestProbeClassifiesAuthenticationAndRecordsTLS(t *testing.T) {
 	}
 }
 
+func TestAIHTTPResponsesReportTransportReachability(t *testing.T) {
+	for _, status := range []int{400, 404, 405, 429, 500} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) }))
+			defer server.Close()
+			transport := server.Client().Transport.(*http.Transport)
+			for _, provider := range []string{"anthropic", "campus"} {
+				result := probeTarget(context.Background(), Target{ID: "fixture", Host: "127.0.0.1", Provider: provider, URL: server.URL}, Options{Lookup: localLookup}, transport)
+				want := "ok"
+				if provider == "campus" {
+					want = "error"
+				}
+				if result.HTTPStatus != status || findCheck(t, result, "http").Status != want {
+					t.Fatalf("%s HTTP %d lost transport reachability: %+v", provider, status, result)
+				}
+			}
+		})
+	}
+}
+
+func TestWebSocketIsNotAttemptedAfterHTTPTransportFailure(t *testing.T) {
+	failed := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	failed.Close()
+	var attempted atomic.Bool
+	websocket := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempted.Store(true)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer websocket.Close()
+	transport, err := newTransport("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer transport.CloseIdleConnections()
+	result := probeTarget(context.Background(), Target{ID: "fixture", Host: "127.0.0.1", Provider: "openai", URL: failed.URL, wsURL: websocket.URL}, Options{Lookup: localLookup}, transport)
+	if result.HTTPStatus != 0 || attempted.Load() || findCheck(t, result, "websocket").Status != "skipped" {
+		t.Fatalf("a failed HTTP transport triggered a redundant WebSocket attempt: %+v", result)
+	}
+}
+
 func TestDNSFailureDoesNotSuppressHTTPAndAnswersAreCandidates(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) }))
 	defer server.Close()
