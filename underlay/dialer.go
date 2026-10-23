@@ -171,7 +171,11 @@ func dialContextOnInterface(ctx context.Context, network, address, interfaceName
 		// and a share of its budget for the physical DNS fallback below.
 		host, port, err := net.SplitHostPort(address)
 		if err == nil && net.ParseIP(host) == nil {
-			lookupCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			lookupTimeout := 3 * time.Second
+			if deadline, ok := ctx.Deadline(); ok {
+				lookupTimeout = min(lookupTimeout, time.Until(deadline)/2)
+			}
+			lookupCtx, cancel := context.WithTimeout(ctx, lookupTimeout)
 			addresses, _ := net.DefaultResolver.LookupIP(lookupCtx, "ip4", host)
 			cancel()
 			var candidates []net.IP

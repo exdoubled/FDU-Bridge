@@ -20,6 +20,9 @@ func TestBoundDialUsesSystemDNSWhenAdapterDNSIsBlocked(t *testing.T) {
 			t.Fatal(err)
 		}
 		server := &dns.Server{PacketConn: packet, Handler: dns.HandlerFunc(func(w dns.ResponseWriter, query *dns.Msg) {
+			if len(ips) == 0 {
+				return
+			}
 			answer := new(dns.Msg)
 			answer.SetReply(query)
 			for _, ip := range ips {
@@ -62,6 +65,7 @@ func TestBoundDialUsesSystemDNSWhenAdapterDNSIsBlocked(t *testing.T) {
 		{"blocked adapter DNS", []string{"127.0.0.1"}, "127.0.0.1:1"},
 		{"synthetic system answer", []string{"198.18.0.8"}, physical},
 		{"later system address succeeds", []string{"127.0.0.2", "127.0.0.1"}, "127.0.0.1:1"},
+		{"slow system DNS preserves physical fallback", nil, physical},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			system := serve(tc.systemIPs...)
