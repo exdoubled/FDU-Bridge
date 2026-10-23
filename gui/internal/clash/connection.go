@@ -150,7 +150,7 @@ func (c *Connection) Import(plan Plan) (string, error) {
 	}
 	oldRuntime, err := fsx.ReadBounded(runtimePath, 8*1024*1024)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("读取 %s：%w", runtimePath, err)
 	}
 	if plan.RuntimeFile != "" {
 		var original map[string]any

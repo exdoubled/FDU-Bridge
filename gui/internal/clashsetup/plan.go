@@ -83,7 +83,7 @@ func read(path string, plan *Plan) ([]byte, error) {
 	defer f.Close()
 	b, err := io.ReadAll(io.LimitReader(f, 8*1024*1024+1))
 	if len(b) > 8*1024*1024 {
-		return nil, errors.New("配置文件超过 8 MiB")
+		return nil, fmt.Errorf("配置文件 %s 超过 8 MiB", path)
 	}
 	if err == nil {
 		plan.Inputs[path] = digest(b)
