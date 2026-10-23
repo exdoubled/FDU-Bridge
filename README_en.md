@@ -72,6 +72,8 @@ In global mode, the return listener is pinned to `INTERNET` to avoid looping bac
 - **Port in use**: automatic/manual integration switches to free ports before enabling; in local proxy mode, adjust the listening ports yourself. See **Diagnostics (诊断)** for other errors.
 - **Data directories**: Windows normally uses the program directory, falling back to `%APPDATA%\FDU Connect` when it is not writable (an existing per-user directory keeps being used). macOS uses `~/Library/Application Support/FDU Connect`. Linux uses `$XDG_CONFIG_HOME/fdu-connect`, or `~/.config/fdu-connect` when unset.
 - **Upgrades**: keep those directories to keep your configuration and login state. Closing the window may leave the program in the tray; quit it before replacing the files.
+- **Remove integration**: after disconnecting, use **Settings → Maintenance (维护)** to remove verifiable FDU entries for the client/subscription in the current integration record, preserving subscriptions and personal settings. Uncertain ownership leaves files and recovery records intact.
+- **Directory migration**: in the GUI using the new directory, choose **Settings → Maintenance → Select Old Directory (选择旧目录)**, preview, then copy managed settings, rules, and login state. The source must contain `gui-settings.json`; original files remain, and differing destination data is never overwritten.
 - **Tray**: some Linux desktops hide tray icons, so closing the window quits by default on Linux; enable minimize to tray in Settings to change this.
 
 </details>

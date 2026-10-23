@@ -69,7 +69,7 @@ func TestCleanupKeepsSubscriptionAdditionsAndRuntimePreferences(t *testing.T) {
 				}
 				installCleanupScript(t, root, p, false)
 			}
-			backup, err := c.RemoveCampus(a, nil)
+			backup, err := c.RemoveCampus(a, nil, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -114,7 +114,7 @@ func TestCleanupRefusesChangedOwnershipBeforeWriting(t *testing.T) {
 	c, f, a := campusFixture(t, "rule")
 	before := fsx.HashFile(a.ProviderPath)
 	_ = os.WriteFile(a.ProviderPath, []byte("payload: ['DOMAIN,user.invalid']\n"), 0600)
-	if _, err := c.RemoveCampus(a, nil); err == nil {
+	if _, err := c.RemoveCampus(a, nil, nil); err == nil {
 		t.Fatal("accepted ownership mismatch")
 	}
 	if fsx.HashFile(a.ProviderPath) == before {
@@ -124,6 +124,17 @@ func TestCleanupRefusesChangedOwnershipBeforeWriting(t *testing.T) {
 		if strings.HasPrefix(request, "PUT ") {
 			t.Fatal("mutated controller before validation")
 		}
+	}
+}
+
+func TestCleanupAcceptsInternetChoiceChangedAfterImport(t *testing.T) {
+	c, f, a, _ := importedCleanupFixture(t, false)
+	f.outside = "Other"
+	if _, err := c.RemoveCampus(a, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !f.cleaned || f.selected != "node-a" {
+		t.Fatal("cleanup lost the user's outside selector")
 	}
 }
 
@@ -189,11 +200,31 @@ func installCleanupScript(t *testing.T, root string, p Plan, edited bool) {
 }
 
 func TestCleanupKeepsRecoveryOnEditedScriptOrControllerFailure(t *testing.T) {
-	for _, scenario := range []string{"edited script", "unavailable", "rollback"} {
+	for _, scenario := range []string{"edited script", "shared groups", "shared script", "unavailable", "rollback", "metadata"} {
 		t.Run(scenario, func(t *testing.T) {
-			c, f, a, p := importedCleanupFixture(t, scenario != "edited script")
+			shared := strings.HasPrefix(scenario, "shared ")
+			c, f, a, p := importedCleanupFixture(t, scenario != "edited script" && !shared)
 			if scenario == "edited script" {
 				installCleanupScript(t, a.Root, p, true)
+			}
+			if shared {
+				if scenario == "shared script" {
+					installCleanupScript(t, a.Root, p, false)
+				}
+				path := filepath.Join(a.Root, "profiles.yaml")
+				var meta map[string]any
+				_ = yaml.Unmarshal(mustRead(t, path), &meta)
+				items := meta["items"].([]any)
+				for _, item := range items {
+					entry := item.(map[string]any)
+					if entry["uid"] == a.ProfileUID {
+						kind := strings.TrimPrefix(scenario, "shared ")
+						meta["items"] = append(items, map[string]any{"uid": "other", "type": "remote", "file": "other.yaml", "option": map[string]any{kind: entry["option"].(map[string]any)[kind]}})
+					}
+				}
+				raw, _ := yaml.Marshal(meta)
+				_ = os.WriteFile(path, raw, 0600)
+				f.requests = nil
 			}
 			runtimePath := filepath.Join(a.Root, "clash-verge.yaml")
 			before, feed := fsx.HashFile(runtimePath), fsx.HashFile(a.ProviderPath)
@@ -201,13 +232,24 @@ func TestCleanupKeepsRecoveryOnEditedScriptOrControllerFailure(t *testing.T) {
 			f.failAfterReload = scenario == "rollback"
 			f.mode = "global"
 			f.global = "FDU-ROUTER"
-			if _, err := c.RemoveCampus(a, nil); err == nil {
+			finalize := func() error { return nil }
+			if scenario == "metadata" {
+				finalize = func() error { return errors.New("journal finalization failed") }
+			}
+			if _, err := c.RemoveCampus(a, nil, finalize); err == nil {
 				t.Fatal("accepted uncertain cleanup")
 			}
 			if fsx.HashFile(runtimePath) != before || fsx.HashFile(a.ProviderPath) != feed {
 				t.Fatal("did not retain source and owned feed")
 			}
-			if scenario == "rollback" && (f.cleaned || f.global != "FDU-ROUTER" || f.outside != "node-a" || f.selected != "node-a") {
+			if shared {
+				for _, request := range f.requests {
+					if strings.HasPrefix(request, "PUT ") {
+						t.Fatal("shared extension caused runtime mutation")
+					}
+				}
+			}
+			if (scenario == "rollback" || scenario == "metadata") && (f.cleaned || f.global != "FDU-ROUTER" || f.outside != "node-a" || f.selected != "node-a") {
 				t.Fatal("did not restore prior runtime and selections")
 			}
 		})
