@@ -25,9 +25,9 @@ type NetworkService struct {
 	coreEpoch     int64
 	corePrevious  [2]routing.TrafficTotals
 	totals        [2]TrafficBucket
-	previousRates [2][2]uint64
+	rates         [3]trafficRate
+	clashTotals   [2]uint64
 	clashPrevious map[string][2]uint64
-	lastSample    time.Time
 	controllerMu  sync.Mutex
 	controllerKey networkControllerKey
 	controllerAPI clash.API
@@ -98,14 +98,17 @@ func (s *NetworkService) controller() (clash.API, error) {
 func (s *NetworkService) Observe() (NetworkView, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	core, received := s.b.runtime.Traffic()
-	now := time.Now()
-	fresh := s.b.runtime.Running() && received > 0 && now.UnixMilli()-received < 5000
 	var observed clash.ConnectionSnapshot
 	api, err := s.controller()
 	if err == nil {
 		err = api.Do("GET", "/connections", nil, &observed)
+		if err != nil {
+			s.forgetController()
+		}
 	}
+	core, received := s.b.runtime.Traffic()
+	now := time.Now()
+	fresh := s.b.runtime.Running() && received > 0 && now.UnixMilli()-received < 5000
 	s.b.mu.Lock()
 	values := s.b.saved
 	s.b.mu.Unlock()

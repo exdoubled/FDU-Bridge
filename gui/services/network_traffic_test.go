@@ -6,8 +6,27 @@ import (
 	"time"
 
 	"github.com/mythologyli/zju-connect/gui/internal/clash"
+	"github.com/mythologyli/zju-connect/gui/internal/core"
 	"github.com/mythologyli/zju-connect/routing"
 )
+
+func TestObserveIsReadOnlyDuringIntegration(t *testing.T) {
+	requests := 0
+	b := &Backend{runtime: &core.Runtime{}}
+	b.conn = &clash.Connection{API: networkTestAPI(func(method, path string, _, _ any) error {
+		if method != "GET" || path != "/connections" {
+			t.Fatalf("observation made an unexpected request: %s %s", method, path)
+		}
+		requests++
+		return nil
+	})}
+	b.clashBusy.Lock()
+	defer b.clashBusy.Unlock()
+	view, err := NewNetworkService(b).Observe()
+	if err != nil || !view.ClashAvailable || requests != 1 {
+		t.Fatalf("a write transaction interrupted read-only observation: %+v / %v / %d", view, err, requests)
+	}
+}
 
 func TestNetworkAccountingExcludesRouterAndFallbackDuplicates(t *testing.T) {
 	s := NewNetworkService(nil)
@@ -66,5 +85,28 @@ func TestNetworkRowsAreAllowlistedAndFakeIPsAreLabelled(t *testing.T) {
 	view := s.sample(routing.TrafficSnapshot{}, false, observed, true, "", time.Now())
 	if len(view.Connections) != 1 || view.Connections[0].IPKind != "fake" || view.Connections[0].Route != "non-fdu" {
 		t.Fatalf("incorrect allowlist/IP classification: %+v", view.Connections)
+	}
+}
+
+func TestTrafficRatesUseEachSourcesLastSuccessfulSample(t *testing.T) {
+	now := time.Unix(1000, 0)
+	s := NewNetworkService(nil)
+	s.started = now.UnixMilli()
+	core := routing.TrafficSnapshot{Started: 10}
+	clashView := clash.ConnectionSnapshot{Connections: []clash.ObservedConnection{{ID: "external", Start: now, Chains: []string{"DIRECT"}}}}
+	s.sample(core, true, clashView, true, "", now)
+	for second := 1; second <= 5; second++ {
+		coreFresh, clashOK := second != 4, second != 2
+		if coreFresh {
+			core.FDU.Upload, core.NonFDU.Upload = uint64(second*50), uint64(second*10)
+		}
+		clashView.Connections[0].Upload = uint64(second * 100)
+		clashView.Connections[0].Download = uint64(second * 200)
+		view := s.sample(core, coreFresh, clashView, clashOK, "", now.Add(time.Duration(second)*time.Second))
+		if second == 3 || second == 5 {
+			if view.FDU.UploadRate != 50 || view.NonFDU.UploadRate != 110 || view.NonFDU.DownloadRate != 200 {
+				t.Fatalf("sample %d counted a multi-second delta over one second: FDU=%+v / non-FDU=%+v", second, view.FDU, view.NonFDU)
+			}
+		}
 	}
 }

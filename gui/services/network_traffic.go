@@ -53,6 +53,24 @@ func counterDelta(value, previous uint64) uint64 {
 	return value - previous
 }
 
+type trafficRate struct {
+	at     time.Time
+	totals [2]uint64
+}
+
+func (r *trafficRate) sample(upload, download uint64, now time.Time) (uint64, uint64) {
+	var rates [2]uint64
+	current := [2]uint64{upload, download}
+	seconds := now.Sub(r.at).Seconds()
+	if !r.at.IsZero() && seconds > 0 && seconds <= 5 {
+		for i := range rates {
+			rates[i] = uint64(float64(counterDelta(current[i], r.totals[i])) / seconds)
+		}
+	}
+	r.at, r.totals = now, current
+	return rates[0], rates[1]
+}
+
 func routerHop(c clash.ObservedConnection) bool {
 	for _, name := range c.Chains {
 		if name == "FDU-ROUTER" {
@@ -122,7 +140,7 @@ func (s *NetworkService) sample(core routing.TrafficSnapshot, coreFresh bool, ob
 	plainActive := 0
 	if clashOK {
 		next := map[string][2]uint64{}
-		// The controller response already has a 4 MiB bound. Preserve every
+		// The controller response has its own bounded connection-list limit. Preserve every
 		// active baseline instead of recounting connections when a subset changes.
 		for _, c := range observed.Connections {
 			if fallbackHop(c, fallback) {
@@ -137,8 +155,11 @@ func (s *NetworkService) sample(core routing.TrafficSnapshot, coreFresh bool, ob
 				if !seen && (c.Start.IsZero() || c.Start.UnixMilli() < s.started) {
 					previous = current
 				}
-				s.totals[1].Upload += counterDelta(current[0], previous[0])
-				s.totals[1].Download += counterDelta(current[1], previous[1])
+				upload, download := counterDelta(current[0], previous[0]), counterDelta(current[1], previous[1])
+				s.totals[1].Upload += upload
+				s.totals[1].Download += download
+				s.clashTotals[0] += upload
+				s.clashTotals[1] += download
 				next[c.ID] = current
 			}
 			host, port := connectionHost(c), c.Metadata.DestinationPort.String()
@@ -164,23 +185,21 @@ func (s *NetworkService) sample(core routing.TrafficSnapshot, coreFresh bool, ob
 		view.FDU.Connections, view.NonFDU.Connections = core.FDU.Connections, core.NonFDU.Connections
 	}
 	view.NonFDU.Connections += plainActive
-	seconds := now.Sub(s.lastSample).Seconds()
-	if seconds > 0 && seconds < 5 {
-		for i, bucket := range []*TrafficBucket{&view.FDU, &view.NonFDU} {
-			if (i == 0 && coreFresh) || (i == 1 && (coreFresh || clashOK)) {
-				bucket.UploadRate = uint64(float64(counterDelta(bucket.Upload, s.previousRates[i][0])) / seconds)
-				bucket.DownloadRate = uint64(float64(counterDelta(bucket.Download, s.previousRates[i][1])) / seconds)
-			}
-		}
+	if coreFresh {
+		view.FDU.UploadRate, view.FDU.DownloadRate = s.rates[0].sample(core.FDU.Upload, core.FDU.Download, now)
+		view.NonFDU.UploadRate, view.NonFDU.DownloadRate = s.rates[1].sample(core.NonFDU.Upload, core.NonFDU.Download, now)
 	}
-	s.previousRates = [2][2]uint64{{view.FDU.Upload, view.FDU.Download}, {view.NonFDU.Upload, view.NonFDU.Download}}
-	s.lastSample = now
+	if clashOK {
+		upload, download := s.rates[2].sample(s.clashTotals[0], s.clashTotals[1], now)
+		view.NonFDU.UploadRate += upload
+		view.NonFDU.DownloadRate += download
+	}
 	view.Scope = "统计当前 FDU 与 Clash；Clash 非 FDU 流量为采样估算，短连接可能漏采。"
 	if !coreFresh {
 		view.Scope += " FDU 核心统计暂不可用。"
 	}
 	if !clashOK {
-		view.Scope += " Clash 未连接，覆盖不完整。"
+		view.Scope += " Clash 流量统计暂不可用，覆盖不完整。"
 	}
 	sort.Slice(view.Connections, func(i, j int) bool { return view.Connections[i].Started > view.Connections[j].Started })
 	if len(view.Connections) > 128 {
