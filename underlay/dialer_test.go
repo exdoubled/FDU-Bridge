@@ -362,3 +362,40 @@ func TestWindowsSystemDNSDoesNotBindToUnderlay(t *testing.T) {
 		t.Fatal("explicit non-loopback DNS override lost its interface binding")
 	}
 }
+
+func TestWindowsUsesAdapterDNSInsteadOfClashFakeIP(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows adapter DNS selection")
+	}
+	serve := func(ip string) string {
+		packet, err := net.ListenPacket("udp4", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		server := &dns.Server{PacketConn: packet, Handler: dns.HandlerFunc(func(w dns.ResponseWriter, query *dns.Msg) {
+			answer := new(dns.Msg)
+			answer.SetReply(query)
+			answer.Answer = []dns.RR{&dns.A{Hdr: dns.RR_Header{Name: query.Question[0].Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60}, A: net.ParseIP(ip)}}
+			_ = w.WriteMsg(answer)
+		})}
+		go func() { _ = server.ActivateAndServe() }()
+		t.Cleanup(func() { _ = server.Shutdown() })
+		return packet.LocalAddr().String()
+	}
+	physical, clash := serve("203.0.113.8"), serve("198.18.0.8")
+	original := interfaceDNSServer
+	interfaceDNSServer = func(string) string { return physical }
+	t.Cleanup(func() { interfaceDNSServer = original })
+	resolver := newUnderlayResolver("physical-test-interface", "")
+	conn, err := resolver.Dial(t.Context(), "udp4", clash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	query := new(dns.Msg)
+	query.SetQuestion("vpn.fudan.edu.cn.", dns.TypeA)
+	answer, _, err := (&dns.Client{}).ExchangeWithConn(query, &dns.Conn{Conn: conn})
+	if err != nil || len(answer.Answer) != 1 || !answer.Answer[0].(*dns.A).A.Equal(net.ParseIP("203.0.113.8")) {
+		t.Fatalf("VPN DNS used the synthetic system answer: %v %v", answer, err)
+	}
+}
