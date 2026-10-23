@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"strconv"
 	"testing"
 	"time"
@@ -25,6 +26,21 @@ func TestObserveIsReadOnlyDuringIntegration(t *testing.T) {
 	view, err := NewNetworkService(b).Observe()
 	if err != nil || !view.ClashAvailable || requests != 1 {
 		t.Fatalf("a write transaction interrupted read-only observation: %+v / %v / %d", view, err, requests)
+	}
+}
+
+func TestFailedSnapshotReadsKeepSlowSampling(t *testing.T) {
+	b := &Backend{runtime: &core.Runtime{}}
+	b.conn = &clash.Connection{API: networkTestAPI(func(string, string, any, any) error {
+		return errors.New("Clash 返回的数据过大，已停止读取")
+	})}
+	view, err := NewNetworkService(b).Observe()
+	if err != nil || view.ClashAvailable || view.PollIntervalMS != 5000 {
+		t.Fatalf("a failed snapshot read returned to one-second sampling: %+v / %v", view, err)
+	}
+	b.config.Integration.Mode = "proxy" // No controller request is made, so core sampling stays fast.
+	if view, err = NewNetworkService(b).Observe(); err != nil || view.PollIntervalMS != 1000 {
+		t.Fatalf("an unavailable controller slowed sampling: %+v / %v", view, err)
 	}
 }
 

@@ -99,10 +99,12 @@ func (s *NetworkService) Observe() (NetworkView, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var observed clash.ConnectionSnapshot
+	readFailed := false
 	api, err := s.controller()
 	if err == nil {
 		err = api.Do("GET", "/connections", nil, &observed)
 		if err != nil {
+			readFailed = true
 			s.forgetController()
 		}
 	}
@@ -118,7 +120,13 @@ func (s *NetworkService) Observe() (NetworkView, error) {
 			fallback = upstream.Port()
 		}
 	}
-	return s.sample(core, fresh, observed, err == nil, fallback, now), nil
+	view := s.sample(core, fresh, observed, err == nil, fallback, now)
+	if readFailed {
+		// The failed read may be the oversized or slow snapshot itself. Retry at
+		// the slower cadence instead of repeating the heaviest request every second.
+		view.PollIntervalMS = 5000
+	}
+	return view, nil
 }
 
 func (s *NetworkService) forgetController() {
