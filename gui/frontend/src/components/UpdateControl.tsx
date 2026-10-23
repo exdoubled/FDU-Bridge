@@ -76,14 +76,27 @@ function updateMessage(update: UpdateStatus | null): string {
   }
 }
 
+/** Short enough for the sidebar; the full message stays in the tooltip and dialog. */
+function entryLabel(update: UpdateStatus | null): string {
+  switch (update?.phase) {
+    case "checking": return "正在检查更新…";
+    case "downloading": return `正在下载 ${Math.round(update.progress)}%`;
+    case "ready": return "更新已就绪";
+    case "installing": return "正在安装…";
+    case "error": return "更新失败";
+    default: return "有新版本";
+  }
+}
+
 export function UpdateSettings() {
   const { update, error, busy, check, setAutoCheck } = useUpdates();
   const message = error || updateMessage(update);
+  const failed = !!error || update?.phase === "error";
   return (
     <section className="card section" style={{ padding: 0 }}>
       <div className="section-head"><Download size={16} />应用更新</div>
       <div className="setting">
-        <div className="setting-label">当前版本</div>
+        <div className="setting-label">当前版本{message && !failed && <span className="setting-hint">{message}</span>}</div>
         <div className="setting-control">
           <span className="mono selectable">{update?.current || "—"}</span>
           <button className="btn" onClick={check} disabled={busy}>
@@ -97,8 +110,7 @@ export function UpdateSettings() {
           <Switch checked={!!update?.autoCheck} onChange={setAutoCheck} disabled={!update || busy} label="自动检查更新" />
         </div>
       </div>
-      {message && <div className={error || update?.phase === "error" ? "field-error selectable" : "muted"}
-        style={{ padding: "0 20px 14px", marginTop: 0 }}>{message}</div>}
+      {message && failed && <div className="field-error selectable" style={{ padding: "0 20px 14px", marginTop: 0 }}>{message}</div>}
     </section>
   );
 }
@@ -125,8 +137,9 @@ export function UpdateControl() {
 
   if (!visible && !open) return null;
   return <>
-    {visible && <button ref={trigger} className="btn ghost icon-btn" aria-label="下载更新" title={updateMessage(update)}
-      style={{ color: "var(--accent-text)", flex: "none" }} onClick={() => setOpen(true)}><Download size={18} /></button>}
+    {visible && <button ref={trigger} className="update-entry" title={updateMessage(update)} onClick={() => setOpen(true)}>
+      {busy ? <Spinner size={16} /> : <Download size={16} />}<span className="ellipsis">{entryLabel(update)}</span>
+    </button>}
     {open && update && <div className="overlay" onMouseDown={(event) => event.target === event.currentTarget && close()}>
       <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="update-title">
         <h2 className="dialog-title" id="update-title">应用更新</h2>

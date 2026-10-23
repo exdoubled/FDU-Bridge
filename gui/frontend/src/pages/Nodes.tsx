@@ -64,7 +64,7 @@ export function Nodes() {
       </header>
       <div className="page-body">
         {error ? (
-          <Empty icon={Globe} title="无法读取 Clash 节点" action={<button className="btn" onClick={load}>重试</button>}>{error}</Empty>
+          <Empty icon={Globe} tone="danger" title="无法读取 Clash 节点" action={<button className="btn" onClick={load}>重试</button>}>{error}</Empty>
         ) : !state ? (
           <Empty icon={Globe} title="正在读取节点…" />
         ) : (
