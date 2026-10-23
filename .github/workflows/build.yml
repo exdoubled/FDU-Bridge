@@ -144,8 +144,12 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          cat > release-notes.md <<'EOF'
-          ## FDU Connect
+          gh api --method POST "repos/$GH_REPO/releases/generate-notes" \
+            -f tag_name="$RELEASE_TAG" --jq .body > release-notes.md
+
+          cat >> release-notes.md <<'EOF'
+
+          ## 使用说明
 
           桌面 GUI（Windows x64、macOS 通用版、Linux x64）：为现有 Clash 一键添加复旦内网，支持 UIS 登录、托盘、诊断、外网节点和逐条校内资源开关。
 
