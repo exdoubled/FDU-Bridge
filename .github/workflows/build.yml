@@ -149,20 +149,6 @@ jobs:
 
           cat >> release-notes.md <<'EOF'
 
-          ## 使用说明
-
-          桌面 GUI（Windows x64、macOS 通用版、Linux x64）：为现有 Clash 一键添加复旦内网，支持 UIS 登录、托盘、诊断、外网节点和逐条校内资源开关。
-
-          - Windows：解压 ZIP，运行 FDU-Connect-GUI.exe；核心须与 GUI 保持在同一目录。需要 Microsoft Edge WebView2 Runtime。
-          - macOS：解压后将 FDU Connect.app 拖入“应用程序”，首次在 Finder 中右键选择“打开”（应用未经公证）。支持 Apple 芯片和 Intel。
-          - Linux：解压 tar.gz，运行 fdu-connect-gui；需要 GTK 4 与 WebKitGTK 6.0（Ubuntu 24.04 起自带）。
-
-          使用自己的复旦 UIS 账号登录。
-
-          在首页启用校内访问，首次确认后自动备份并接入。保留 Clash 当前全局或规则模式，指定资源走 FDU，其他流量沿用外网设置。停用时先恢复出口再关闭 VPN。不开 TUN 时，仅覆盖进入 Clash 的应用流量，保留系统代理绕过列表。
-
-          包内仅含 GUI、核心、公共示例配置和许可证，不含个人配置或登录缓存。SHA256SUMS.txt 可用于校验下载文件。
-
           感谢 [AkiraSalvare/fdu-connect](https://github.com/AkiraSalvare/fdu-connect)、[Mythologyli/zju-connect](https://github.com/Mythologyli/zju-connect)、[lyc8503/EasierConnect](https://github.com/lyc8503/EasierConnect) 及所有贡献者。
           EOF
 
