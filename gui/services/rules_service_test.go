@@ -4,11 +4,13 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/mythologyli/zju-connect/gui/internal/appconf"
 	"github.com/mythologyli/zju-connect/gui/internal/clash"
 	"github.com/mythologyli/zju-connect/gui/internal/rules"
 	"github.com/mythologyli/zju-connect/gui/internal/settings"
+	"github.com/mythologyli/zju-connect/gui/internal/updates"
 )
 
 func TestRulesImportPreviewAndCancellationDoNotSave(t *testing.T) {
@@ -69,5 +71,60 @@ func TestRulesExportProtectsManagedAndActiveExternalFiles(t *testing.T) {
 	got, err := rules.ImportFile(output)
 	if err != nil || len(got.Disabled.Domains) != 1 || got.Domains[0] != "draft.cn" {
 		t.Fatalf("export lost unsaved rule or switch: %+v %v", got, err)
+	}
+}
+
+func TestRulesExportProtectsManagedTreesWithoutClashLock(t *testing.T) {
+	dir, clashDir := t.TempDir(), t.TempDir()
+	b := &Backend{Dir: dir, config: appconf.Config{ClashDir: clashDir}}
+	s := NewRulesService(b)
+	for _, path := range []string{filepath.Join(dir, "connection-backups", "saved", "previous.yaml"), filepath.Join(clashDir, "profiles", "other.yaml")} {
+		if _, err := s.exportFile(path, rules.Empty()); err == nil {
+			t.Errorf("accepted managed tree destination: %s", path)
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("created managed destination: %v", err)
+		}
+	}
+	b.clashBusy.Lock()
+	defer b.clashBusy.Unlock()
+	done := make(chan error, 1)
+	output := filepath.Join(t.TempDir(), "export.json")
+	go func() {
+		_, err := s.exportFile(output, rules.Empty())
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("export waited for a Clash transaction")
+	}
+}
+
+func TestLogsAndRulesShareExportProtection(t *testing.T) {
+	dir, stage := t.TempDir(), t.TempDir()
+	b := &Backend{Dir: dir, logs: []string{"redacted log"}}
+	b.updater = &UpdateService{pending: &updates.Pending{Root: stage}}
+	logs, resources := NewCoreService(b), NewRulesService(b)
+	for _, path := range []string{filepath.Join(dir, "client.toml"), filepath.Join(stage, "job.json"), filepath.Join(stage, "payload", "fdu-connect.exe")} {
+		if _, err := logs.exportLogs(path); err == nil {
+			t.Errorf("log export accepted managed destination: %s", path)
+		}
+		if _, err := resources.exportFile(path, rules.Empty()); err == nil {
+			t.Errorf("rule export accepted managed destination: %s", path)
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("export created managed destination: %v", err)
+		}
+	}
+	output := filepath.Join(t.TempDir(), "log.txt")
+	if _, err := logs.exportLogs(output); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(output); err != nil || string(data) != "redacted log\r\n" {
+		t.Fatalf("exported logs: %q %v", data, err)
 	}
 }

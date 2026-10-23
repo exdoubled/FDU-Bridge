@@ -3,10 +3,10 @@ package services
 import (
 	"context"
 	"errors"
-	"os"
 	"strings"
 
 	"github.com/mythologyli/zju-connect/gui/internal/core"
+	"github.com/mythologyli/zju-connect/gui/internal/fsx"
 	"github.com/mythologyli/zju-connect/gui/internal/updates"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -92,5 +92,14 @@ func (s *CoreService) ExportLogs() (string, error) {
 	if err != nil || path == "" {
 		return "", err
 	}
-	return path, os.WriteFile(path, []byte(strings.Join(s.Logs(), "\r\n")+"\r\n"), 0o600)
+	return s.exportLogs(path)
+}
+
+func (s *CoreService) exportLogs(path string) (string, error) {
+	files, directories := s.b.exportPaths()
+	target, err := fsx.ExportPath(path, files, directories)
+	if err != nil {
+		return "", err
+	}
+	return path, fsx.AtomicWrite(target, []byte(strings.Join(s.Logs(), "\r\n")+"\r\n"))
 }

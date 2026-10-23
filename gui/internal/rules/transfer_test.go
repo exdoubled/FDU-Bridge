@@ -3,8 +3,10 @@ package rules
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -58,7 +60,11 @@ func TestExportRefusesManagedPathsAndInvalidDrafts(t *testing.T) {
 	if err := os.WriteFile(managed, []byte("private-state"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{managed, strings.ToUpper(managed)} {
+	paths := []string{managed}
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		paths = append(paths, strings.ToUpper(managed))
+	}
+	for _, path := range paths {
 		if err := ExportFile(path, Empty(), []string{managed}); err == nil {
 			t.Fatal("export overwrote managed state")
 		}
@@ -84,5 +90,56 @@ func TestExportRefusesManagedPathsAndInvalidDrafts(t *testing.T) {
 	}
 	if after, _ := os.ReadFile(managed); string(after) != "private-state" {
 		t.Fatal("refused export changed managed state")
+	}
+}
+
+func TestExportProtectsMissingFilesThroughDirectoryLinks(t *testing.T) {
+	root := t.TempDir()
+	real, link := filepath.Join(root, "real"), filepath.Join(root, "link")
+	if err := os.Mkdir(real, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS == "windows" {
+		if output, err := exec.Command("cmd", "/c", "mklink", "/J", link, real).CombinedOutput(); err != nil {
+			t.Fatalf("create junction: %v: %s", err, output)
+		}
+	} else if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"campus-session.json", filepath.Join("new", "campus-session.json")} {
+		managed := filepath.Join(real, name)
+		if err := ExportFile(filepath.Join(link, name), Empty(), nil, real); err == nil {
+			t.Errorf("accepted a destination inside an aliased managed directory: %s", name)
+		}
+		if err := ExportFile(filepath.Join(link, name), Empty(), []string{managed}); err == nil {
+			t.Errorf("accepted missing managed file through a directory link: %s", name)
+		}
+		if _, err := os.Stat(managed); !os.IsNotExist(err) {
+			t.Fatalf("export created managed state: %v", err)
+		}
+	}
+}
+
+func TestExportIgnoresUnresolvableUnrelatedProtectedPaths(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "export.json")
+	if err := ExportFile(path, Empty(), []string{filepath.Join(t.TempDir(), "bad\x00name", "cert.pem")}); err != nil {
+		t.Fatalf("unrelated invalid configuration path blocked export: %v", err)
+	}
+}
+
+func TestExportAllowsDistinctCaseSensitiveNames(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("requires a case-sensitive filesystem")
+	}
+	root := t.TempDir()
+	managed := filepath.Join(root, "client.toml")
+	if err := os.WriteFile(managed, []byte("private"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := ExportFile(filepath.Join(root, "Client.toml"), Empty(), []string{managed}); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(managed); string(data) != "private" {
+		t.Fatal("changed distinct managed file")
 	}
 }

@@ -134,32 +134,41 @@ func (s *Store) Load() (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("无法读取规则：%w", err)
 	}
-	parsed, err := routing.ParseRules(b)
+	parsed, err := parse(b)
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("规则文件格式无效：%w", err)
 	}
-	return Snapshot{Document: fromRuleSet(parsed), Hash: fsx.Hash(b)}, nil
+	return Snapshot{Document: parsed, Hash: fsx.Hash(b)}, nil
 }
 
-func encode(d Document) ([]byte, error) {
-	return json.Marshal(struct {
+func parse(b []byte) (Document, error) {
+	parsed, err := routing.ParseRules(b)
+	if err != nil {
+		return Document{}, err
+	}
+	return fromRuleSet(parsed), nil
+}
+
+func marshal(d Document) ([]byte, Document, error) {
+	normalized, err := Normalize(d)
+	if err != nil {
+		return nil, Document{}, err
+	}
+	b, err := json.Marshal(struct {
 		Version int `json:"version"`
 		Document
-	}{2, d})
+	}{2, normalized})
+	if err == nil && len(b) > limit {
+		err = errors.New("规则文件不能超过 256 KiB")
+	}
+	return b, normalized, err
 }
 
 // Save replaces the file only if it still has expectedHash ("" means it must not exist).
 func (s *Store) Save(d Document, expectedHash string) (Snapshot, error) {
-	normalized, err := Normalize(d)
+	b, normalized, err := marshal(d)
 	if err != nil {
 		return Snapshot{}, err
-	}
-	b, err := encode(normalized)
-	if err != nil {
-		return Snapshot{}, err
-	}
-	if len(b) > limit {
-		return Snapshot{}, errors.New("规则文件不能超过 256 KiB")
 	}
 	if err := os.MkdirAll(filepath.Dir(s.Path), 0o700); err != nil {
 		return Snapshot{}, err

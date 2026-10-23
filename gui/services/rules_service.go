@@ -110,29 +110,23 @@ func (s *RulesService) exportFile(path string, document rules.Document) (string,
 	if path == "" {
 		return "", nil
 	}
-	// Keep configuration changes from retargeting managed files during the write.
-	s.b.clashBusy.Lock()
-	defer s.b.clashBusy.Unlock()
-	if err := rules.ExportFile(path, document, s.protectedPaths()); err != nil {
+	files, directories := s.b.exportPaths()
+	if err := rules.ExportFile(path, document, files, directories...); err != nil {
 		return "", err
 	}
 	return path, nil
 }
 
-func (s *RulesService) protectedPaths() []string {
-	b := s.b
+func (b *Backend) exportPaths() ([]string, []string) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
 	paths := []string{b.config.ConfigPath, b.config.FduConfig, b.config.Integration.RuntimeFile}
+	directories := []string{b.Dir, b.exeDir, b.config.ClashDir}
 	addRules := func(path string) {
 		if path != "" {
 			paths = append(paths, path, path+".status.json")
 		}
 	}
 	addRules(b.rulesPath)
-	for _, name := range []string{"gui-settings.json", "client.toml", "fdu-routing.toml", "routing-rules.json", "routing-rules.json.status.json", "client_data.json", "campus-session.json", "campus-feed.json", "fdu-campus-runtime.yaml"} {
-		paths = append(paths, filepath.Join(b.Dir, name))
-	}
 	addValues := func(values map[string]any, config string) {
 		for _, key := range []string{"client_data_file", "cert_file", "resource_file", "graph_code_file", "debug_pcap_file", "debug_tls_log_file", "routing.rules_file"} {
 			if file := text(values, key); file != "" {
@@ -147,9 +141,8 @@ func (s *RulesService) protectedPaths() []string {
 		}
 	}
 	config := filepath.Join(b.Dir, "client.toml")
-	if b.workspace != nil {
-		config = b.workspace.Target
-		paths = append(paths, config)
+	if b.view != nil && b.view.Path != "" {
+		config = b.view.Path
 	}
 	addValues(b.saved, config)
 	if b.view != nil {
@@ -166,21 +159,24 @@ func (s *RulesService) protectedPaths() []string {
 			paths = append(paths, file.Path)
 		}
 	}
-	root := b.config.ClashDir
 	if b.campus != nil {
 		paths = append(paths, b.campus.Config, b.campus.ProviderPath, b.campus.RuntimeFile)
 		addRules(b.campus.Rules)
-		root = b.campus.Root
-	}
-	if root != "" {
-		for _, name := range []string{"profiles.yaml", "verge.yaml", "clash-verge.yaml"} {
-			paths = append(paths, filepath.Join(root, name))
-		}
+		directories = append(directories, b.campus.Root)
 	}
 	if b.conn != nil {
 		paths = append(paths, b.conn.RuntimePath())
 	}
-	return paths
+	updater := b.updater
+	b.mu.Unlock()
+	if updater != nil {
+		updater.mu.Lock()
+		if updater.pending != nil {
+			directories = append(directories, updater.pending.Root)
+		}
+		updater.mu.Unlock()
+	}
+	return paths, directories
 }
 
 // Validate returns the canonical spelling of one new entry.
