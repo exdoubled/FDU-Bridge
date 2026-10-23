@@ -79,7 +79,7 @@ func NewL3Tunnel(aTrustClient *Client) (*L3Tunnel, error) {
 
 	ip, err := aTrustClient.IP()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get client IP: %v", err)
+		return nil, fmt.Errorf("failed to get client IP: %w", err)
 	}
 	t.ip = ip
 
@@ -321,7 +321,6 @@ func (t *L3Tunnel) connectWithRetry(nodeGroupID string, call *l3TunnelConnectCal
 			t.finishConnect(nodeGroupID, call, nil, err)
 			return
 		}
-		t.client.setTransportReconnecting(nodeGroupID, true)
 		log.DebugPrintf("l3-tunnel connect attempt %d failed for group %s: %v", attempt+1, nodeGroupID, err)
 	}
 }
@@ -341,8 +340,8 @@ func (t *L3Tunnel) finishConnect(nodeGroupID string, call *l3TunnelConnectCall, 
 		case <-t.closeCh:
 			err = net.ErrClosed
 		default:
-			// Publish restoration before waking writers, which may immediately
-			// discover another loss and begin a newer reconnect for this group.
+			// Record restoration before waking writers. The client worker
+			// publishes the latest state without holding the tunnel lock.
 			t.client.setTransportReconnecting(nodeGroupID, false)
 			t.conns[nodeGroupID] = conn
 		}

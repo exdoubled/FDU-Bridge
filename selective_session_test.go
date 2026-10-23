@@ -125,28 +125,53 @@ func TestSelectiveExpiryWaitsForReloginAndReplacesLiveSession(t *testing.T) {
 	awaitSelective(t, done)
 }
 
-func TestSelectiveFreshAttemptIgnoresDuplicateRelogin(t *testing.T) {
+func TestSelectiveFreshAttemptCanRestartCancelledBrowser(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	t.Setenv("FDU_CONNECT_GUI", "1")
 	t.Setenv("FDU_CONNECT_GUI_RELOGIN", "1")
 	relogin := make(chan struct{}, 1)
-	attempts := make(chan struct{}, 2)
+	attempts := make(chan selectiveSessionMode, 2)
+	cleaned := make(chan struct{}, 2)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		runSelectiveSessions(ctx, func(ctx context.Context, _ selectiveSessionMode, _ func()) error {
-			attempts <- struct{}{}
+		runSelectiveSessions(ctx, func(ctx context.Context, mode selectiveSessionMode, _ func()) error {
+			attempts <- mode
 			<-ctx.Done()
+			cleaned <- struct{}{}
 			return ctx.Err()
 		}, relogin, func(string) {}, time.Millisecond)
 	}()
 	awaitSelective(t, attempts)
 	relogin <- struct{}{}
-	select {
-	case <-attempts:
-		t.Fatal("duplicate command started another fresh login")
-	case <-time.After(20 * time.Millisecond):
+	awaitSelective(t, cleaned)
+	if got := awaitSelective(t, attempts); got != selectiveFresh {
+		t.Fatalf("browser restart mode = %v", got)
+	}
+	cancel()
+	awaitSelective(t, done)
+}
+
+func TestSelectiveUnknownSetupFailureRetriesWithoutInteractiveLogin(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	attempts := make(chan selectiveSessionMode, 2)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		runSelectiveSessions(ctx, func(ctx context.Context, mode selectiveSessionMode, _ func()) error {
+			attempts <- mode
+			if mode == selectiveInitial {
+				return errors.New("temporary server response could not be decoded")
+			}
+			<-ctx.Done()
+			return ctx.Err()
+		}, nil, func(string) {}, time.Millisecond)
+	}()
+	awaitSelective(t, attempts)
+	if got := awaitSelective(t, attempts); got != selectiveResume {
+		t.Fatalf("unknown-error retry requested interactive login: %v", got)
 	}
 	cancel()
 	awaitSelective(t, done)

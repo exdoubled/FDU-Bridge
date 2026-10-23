@@ -230,7 +230,7 @@ func runSelectiveVPNWithMode(ctx context.Context, c configs.Config, u *underlay.
 	log.Println("Campus VPN ready; only configured destinations use FDU")
 	ready.Store(true)
 	onReady()
-	authchallenge.GUIState("connected")
+	vpn.PublishConnectionState()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

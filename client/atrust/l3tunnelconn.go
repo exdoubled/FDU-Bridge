@@ -528,13 +528,8 @@ func (c *l3TunnelConn) handleAuthResp(status byte, payload []byte) {
 		return
 	}
 	if resp.Code == 10000004 || resp.Code == 75500002 {
-		if c.info.onSessionInvalid == nil {
-			log.Fatalf("l3-tunnel resource auth: aTrust session is invalid (code %d): %s", resp.Code, resp.Message)
-		}
 		err := invalidSessionError(resp.Code, resp.Message)
-		if c.info.onSessionInvalid != nil {
-			c.info.onSessionInvalid(err)
-		}
+		c.info.onSessionInvalid(err)
 		c.markAuthErrorFromPayload(payload, err)
 		_ = c.Close()
 		return
@@ -946,13 +941,8 @@ func (c *l3TunnelConn) authTunnel() error {
 			return err
 		}
 		if resp.Code == 10000004 || resp.Code == 75500002 {
-			if c.info.onSessionInvalid == nil {
-				log.Fatalf("l3-tunnel: aTrust session is invalid (code %d): %s", resp.Code, resp.Message)
-			}
 			err := invalidSessionError(resp.Code, resp.Message)
-			if c.info.onSessionInvalid != nil {
-				c.info.onSessionInvalid(err)
-			}
+			c.info.onSessionInvalid(err)
 			return err
 		}
 		if resp.Code != 0 {

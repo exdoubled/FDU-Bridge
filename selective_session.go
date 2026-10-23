@@ -34,16 +34,14 @@ func runSelectiveSessions(ctx context.Context, connect selectiveConnectFunc, rel
 	}
 	delay := retryDelay
 	for ctx.Err() == nil {
-		var authenticating atomic.Bool
 		var connected atomic.Bool
-		authenticating.Store(mode == selectiveFresh)
 		if mode == selectiveFresh {
 			state("authentication")
 		}
 		attemptCtx, cancel := context.WithCancel(ctx)
 		result := make(chan error, 1)
 		go func() {
-			result <- connect(attemptCtx, mode, func() { authenticating.Store(false); connected.Store(true) })
+			result <- connect(attemptCtx, mode, func() { connected.Store(true) })
 		}()
 		var err error
 		restart := false
@@ -55,9 +53,6 @@ func runSelectiveSessions(ctx context.Context, connect selectiveConnectFunc, rel
 				<-result
 				return
 			case <-relogin:
-				if authenticating.Load() {
-					continue // One explicit browser attempt at a time.
-				}
 				cancel()
 				<-result // Fully release the old session before replacing it.
 				restart = true
@@ -92,6 +87,10 @@ func runSelectiveSessions(ctx context.Context, connect selectiveConnectFunc, rel
 			delay = min(delay*2, 30*time.Second)
 		default:
 			state("campus-unavailable")
+			// Unknown service/protocol failures may be temporary too. Resume
+			// slowly without opening a browser or discarding saved credentials.
+			timer = time.NewTimer(max(delay, 30*retryDelay))
+			retry = timer.C
 		}
 		select {
 		case <-ctx.Done():

@@ -1,6 +1,7 @@
 package atrust
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"crypto/rand"
@@ -76,6 +77,7 @@ type Client struct {
 	onConnectionState func(bool)
 	connectionMu      sync.Mutex
 	reconnecting      map[string]bool
+	connectionWake    chan struct{}
 
 	serverAddress   string
 	ipResources     []client.IPResource
@@ -110,7 +112,7 @@ type Client struct {
 
 func NewClient(options ClientOptions) *Client {
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
-	return &Client{
+	c := &Client{
 		onSessionInvalid:  options.OnSessionInvalid,
 		onConnectionState: options.OnConnectionState,
 		Username:          options.Session.Username,
@@ -122,6 +124,11 @@ func NewClient(options ClientOptions) *Client {
 		lifecycleCtx:      lifecycleCtx,
 		lifecycleCancel:   lifecycleCancel,
 	}
+	if c.onConnectionState != nil {
+		c.connectionWake = make(chan struct{}, 1)
+		go c.reportConnectionStates()
+	}
+	return c
 }
 
 func (c *Client) canResume(resourceData []byte) bool {
@@ -402,6 +409,7 @@ func (c *Client) SetupContext(ctx context.Context, options SetupOptions) ([]byte
 	}
 	c.tcpTunnelZeroRTT = parsedServerVersion.TCPTunnelZeroRTT()
 	log.Printf("aTrust TCP tunnel zero-RTT: %t", c.tcpTunnelZeroRTT)
+	var lastAuthData []byte
 	snapshotAuth := func() ([]byte, error) {
 		snapshot, err := sess.Snapshot()
 		if err != nil {
@@ -414,7 +422,8 @@ func (c *Client) SetupContext(ctx context.Context, options SetupOptions) ([]byte
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal client data: %w", err)
 		}
-		if options.OnAuthenticated != nil {
+		if options.OnAuthenticated != nil && !bytes.Equal(lastAuthData, data) {
+			lastAuthData = append(lastAuthData[:0], data...)
 			options.OnAuthenticated(data)
 		}
 		return data, nil
@@ -518,7 +527,7 @@ func (c *Client) SetupContext(ctx context.Context, options SetupOptions) ([]byte
 	}
 	l3Tunnel, err := NewL3Tunnel(c)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create L3 tunnel: %v", err)
+		return nil, fmt.Errorf("failed to create L3 tunnel: %w", err)
 	}
 	c.l3TunnelMu.Lock()
 	c.l3Tunnel = l3Tunnel
@@ -550,7 +559,6 @@ func (c *Client) setTransportReconnecting(group string, reconnecting bool) {
 		return
 	}
 	c.connectionMu.Lock()
-	defer c.connectionMu.Unlock()
 	wasReconnecting := len(c.reconnecting) != 0
 	if reconnecting {
 		if c.reconnecting == nil {
@@ -560,8 +568,36 @@ func (c *Client) setTransportReconnecting(group string, reconnecting bool) {
 	} else {
 		delete(c.reconnecting, group)
 	}
-	if nowReconnecting := len(c.reconnecting) != 0; nowReconnecting != wasReconnecting {
-		c.onConnectionState(!nowReconnecting)
+	changed := (len(c.reconnecting) != 0) != wasReconnecting
+	c.connectionMu.Unlock()
+	if changed {
+		c.PublishConnectionState()
+	}
+}
+
+// PublishConnectionState also replays losses observed before the owner's stack
+// was ready. The callback runs on one worker, never under tunnel/state locks.
+func (c *Client) PublishConnectionState() {
+	select {
+	case c.connectionWake <- struct{}{}:
+	default:
+	}
+}
+
+func (c *Client) reportConnectionStates() {
+	for {
+		select {
+		case <-c.lifecycleCtx.Done():
+			return
+		case <-c.connectionWake:
+		}
+		if c.lifecycleCtx.Err() != nil {
+			return
+		}
+		c.connectionMu.Lock()
+		connected := len(c.reconnecting) == 0
+		c.connectionMu.Unlock()
+		c.onConnectionState(connected)
 	}
 }
 

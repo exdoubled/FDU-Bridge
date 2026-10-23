@@ -208,6 +208,67 @@ func TestTunnelReconnectStopsWhenTunnelCloses(t *testing.T) {
 	}
 }
 
+func TestNewNodeGroupFailuresDoNotReportAnEstablishedConnectionLost(t *testing.T) {
+	states := make(chan bool, 8)
+	vpn := NewClient(ClientOptions{OnConnectionState: func(connected bool) { states <- connected }})
+	defer vpn.Close()
+	vpn.BestNodes = map[string]string{"secondary": "secondary:443"}
+	tunnel := &L3Tunnel{client: vpn, conns: make(map[string]*l3TunnelConn), connecting: make(map[string]*l3TunnelConnectCall),
+		dataChan: make(chan []byte, 1), closeCh: make(chan struct{}), reconnectInterval: time.Millisecond}
+	defer tunnel.Close()
+	want := &l3TunnelConn{tlsConn: tls.Client(&trackingNetConn{closed: make(chan struct{})}, &tls.Config{InsecureSkipVerify: true}), incoming: make(chan []byte), closeCh: make(chan struct{})}
+	attempts := 0
+	tunnel.connect = func(context.Context, string, *conntrackMgr) (*l3TunnelConn, error) {
+		attempts++
+		if attempts <= 2 {
+			return nil, net.ErrClosed
+		}
+		return want, nil
+	}
+	if conn, err := tunnel.getConn("secondary"); err != nil || conn != want {
+		t.Fatalf("new group did not recover: conn=%p err=%v", conn, err)
+	}
+	select {
+	case connected := <-states:
+		t.Fatalf("new group changed established connection state: %v", connected)
+	case <-time.After(20 * time.Millisecond):
+	}
+}
+
+func TestRestorationCallbackDoesNotBlockTunnelAccess(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	defer close(release)
+	lost := make(chan struct{}, 1)
+	vpn := NewClient(ClientOptions{OnConnectionState: func(connected bool) {
+		if connected {
+			close(entered)
+			<-release
+		} else {
+			lost <- struct{}{}
+		}
+	}})
+	defer vpn.Close()
+	vpn.setTransportReconnecting("main", true)
+	<-lost
+	call := &l3TunnelConnectCall{done: make(chan struct{})}
+	tunnel := &L3Tunnel{client: vpn, conns: make(map[string]*l3TunnelConn), connecting: map[string]*l3TunnelConnectCall{"main": call}, closeCh: make(chan struct{})}
+	conn := &l3TunnelConn{tlsConn: tls.Client(&trackingNetConn{closed: make(chan struct{})}, &tls.Config{InsecureSkipVerify: true}), incoming: make(chan []byte), closeCh: make(chan struct{})}
+	defer conn.Close()
+	go tunnel.finishConnect("main", call, conn, nil)
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("restoration was not reported")
+	}
+	available := make(chan struct{})
+	go func() { _, _ = tunnel.getConn("main"); close(available) }()
+	select {
+	case <-available:
+	case <-time.After(time.Second):
+		t.Fatal("slow GUI state callback blocked tunnel access")
+	}
+}
+
 func TestTunnelReconnectPreservesConntrackAndToken(t *testing.T) {
 	client := newSessionTestClient()
 	client.BestNodes = map[string]string{"group": "node:443"}

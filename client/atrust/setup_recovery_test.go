@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/mythologyli/zju-connect/client/atrust/auth"
 )
@@ -120,17 +121,73 @@ func TestAuthenticatedCookiesRemainAvailableWhenResourceFetchFails(t *testing.T)
 }
 
 func TestTransportStateReportsLossAndFullRestoration(t *testing.T) {
-	var states []bool
-	vpn := NewClient(ClientOptions{OnConnectionState: func(connected bool) { states = append(states, connected) }})
+	states := make(chan bool, 4)
+	vpn := NewClient(ClientOptions{OnConnectionState: func(connected bool) { states <- connected }})
 	defer vpn.Close()
 	vpn.setTransportReconnecting("a", false)
 	vpn.setTransportReconnecting("a", true)
+	if connected := <-states; connected {
+		t.Fatal("lost transport reported connected")
+	}
 	vpn.setTransportReconnecting("a", true)
 	vpn.setTransportReconnecting("b", true)
 	vpn.setTransportReconnecting("a", false)
 	vpn.setTransportReconnecting("b", false)
-	if len(states) != 2 || states[0] || !states[1] {
-		t.Fatalf("transport state transitions = %v", states)
+	if connected := <-states; !connected {
+		t.Fatal("full restoration reported disconnected")
+	}
+}
+
+func TestAuthenticationSnapshotNotifiesOnlyWhenCredentialsChange(t *testing.T) {
+	for _, changed := range []bool{false, true} {
+		t.Run(fmt.Sprint(changed), func(t *testing.T) {
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/public/manifest":
+					fmt.Fprint(w, `{"code":0,"data":{}}`)
+				case "/controller/v1/user/clientResource":
+					if changed {
+						http.SetCookie(w, &http.Cookie{Name: "sid", Value: "latest", Path: "/"})
+					}
+					fmt.Fprint(w, `{}`)
+				default:
+					http.SetCookie(w, &http.Cookie{Name: "sid", Value: "authenticated", Path: "/"})
+					fmt.Fprint(w, `{"code":0,"data":{"isLogin":1}}`)
+				}
+			}))
+			defer server.Close()
+			vpn := NewClient(ClientOptions{UnderlayDialer: setupTestDialer{server.Listener.Addr().String()}})
+			defer vpn.Close()
+			var snapshots [][]byte
+			_, _ = vpn.SetupContext(t.Context(), SetupOptions{
+				ServerAddress: strings.TrimPrefix(server.URL, "https://"), ServerPort: 443, ForceLogin: true,
+				OnAuthenticated: func(data []byte) { snapshots = append(snapshots, append([]byte(nil), data...)) },
+			})
+			want := 1
+			if changed {
+				want = 2
+			}
+			if len(snapshots) != want {
+				t.Fatalf("authentication snapshots=%d, want %d", len(snapshots), want)
+			}
+		})
+	}
+}
+
+func TestTransportReadinessReplaysAnEarlierLoss(t *testing.T) {
+	states := make(chan bool, 4)
+	vpn := NewClient(ClientOptions{OnConnectionState: func(connected bool) { states <- connected }})
+	defer vpn.Close()
+	vpn.setTransportReconnecting("main", true)
+	<-states // The owner was not yet ready and ignored this notification.
+	vpn.PublishConnectionState()
+	select {
+	case connected := <-states:
+		if connected {
+			t.Fatal("readiness hid an existing transport loss")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("readiness did not publish current transport state")
 	}
 }
 
