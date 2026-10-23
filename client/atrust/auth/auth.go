@@ -147,6 +147,11 @@ func (s *Session) request(req *http.Request) (*http.Response, error) {
 	return s.client.Do(req.WithContext(s.ctx))
 }
 
+// Close releases control-plane keep-alive connections owned by this session.
+func (s *Session) Close() {
+	s.client.CloseIdleConnections()
+}
+
 type AuthInfo struct {
 	LoginDomain string `json:"loginDomain"`
 	AuthType    string `json:"authType"`

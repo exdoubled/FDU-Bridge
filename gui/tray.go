@@ -11,8 +11,9 @@ import (
 var stateLabels = map[string]string{
 	"idle": "未启用校内访问", "preparing": "正在准备校内访问…", "connecting": "正在连接校园 VPN…",
 	"authentication": "等待登录验证", "enabling": "正在启用校内访问…", "connected": "校内访问已启用",
-	"adapting": "正在适配 Clash…",
-	"paused":   "校内访问已暂停", "error": "启用失败", "campus-unavailable": "校内连接不可用",
+	"adapting":     "正在适配 Clash…",
+	"reconnecting": "正在恢复校内连接…", "auth-required": "需要重新登录",
+	"paused": "校内访问已暂停", "error": "启用失败", "campus-unavailable": "校内连接不可用",
 	"stopped": "已关闭校内访问", "tool-running": "正在执行工具…", "tool-finished": "工具已结束",
 }
 

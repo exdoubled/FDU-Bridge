@@ -1,6 +1,7 @@
 package atrust
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"crypto/rand"
@@ -37,6 +38,9 @@ type ClientOptions struct {
 	TLSKeyLogWriter io.Writer
 	// OnSessionInvalid replaces process exit for an opt-in embedded router.
 	OnSessionInvalid func(error)
+	// OnConnectionState reports loss/restoration of established L3 transports.
+	// The owner decides when its stack is ready to publish a connected state.
+	OnConnectionState func(connected bool)
 }
 
 type SetupOptions struct {
@@ -50,6 +54,13 @@ type SetupOptions struct {
 	ChallengeHandler         authchallenge.Handler
 	SessionRefreshInterval   time.Duration
 	SaveClientData           func([]byte) error
+	// OnAuthenticated retains successful auth in memory even if tunnel setup
+	// subsequently fails. Persistent saves still follow successful setup.
+	OnAuthenticated func([]byte)
+	// ResumeOnly validates existing credentials without interactive login.
+	ResumeOnly bool
+	// ForceLogin discards session credentials in memory, preserving device data.
+	ForceLogin bool
 }
 
 type Client struct {
@@ -59,10 +70,14 @@ type Client struct {
 	ConnectionID string
 	SignKey      string
 
-	sessionMu        sync.RWMutex
-	sessionErr       error
-	refreshDone      chan struct{}
-	onSessionInvalid func(error)
+	sessionMu         sync.RWMutex
+	sessionErr        error
+	refreshDone       chan struct{}
+	onSessionInvalid  func(error)
+	onConnectionState func(bool)
+	connectionMu      sync.Mutex
+	reconnecting      map[string]bool
+	connectionWake    chan struct{}
 
 	serverAddress   string
 	ipResources     []client.IPResource
@@ -97,17 +112,23 @@ type Client struct {
 
 func NewClient(options ClientOptions) *Client {
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
-	return &Client{
-		onSessionInvalid: options.OnSessionInvalid,
-		Username:         options.Session.Username,
-		SID:              options.Session.SID,
-		DeviceID:         options.Session.DeviceID,
-		SignKey:          options.Session.SignKey,
-		underlayDialer:   options.UnderlayDialer,
-		tlsKeyLogWriter:  options.TLSKeyLogWriter,
-		lifecycleCtx:     lifecycleCtx,
-		lifecycleCancel:  lifecycleCancel,
+	c := &Client{
+		onSessionInvalid:  options.OnSessionInvalid,
+		onConnectionState: options.OnConnectionState,
+		Username:          options.Session.Username,
+		SID:               options.Session.SID,
+		DeviceID:          options.Session.DeviceID,
+		SignKey:           options.Session.SignKey,
+		underlayDialer:    options.UnderlayDialer,
+		tlsKeyLogWriter:   options.TLSKeyLogWriter,
+		lifecycleCtx:      lifecycleCtx,
+		lifecycleCancel:   lifecycleCancel,
 	}
+	if c.onConnectionState != nil {
+		c.connectionWake = make(chan struct{}, 1)
+		go c.reportConnectionStates()
+	}
+	return c
 }
 
 func (c *Client) canResume(resourceData []byte) bool {
@@ -324,7 +345,14 @@ func SetTrusted(serverAddress string, serverPort int, authData []byte, trusted b
 }
 
 func (c *Client) Setup(options SetupOptions) ([]byte, error) {
-	return c.SetupContext(context.Background(), options)
+	if options.ForceLogin {
+		authchallenge.GUIState("authentication")
+	}
+	data, err := c.SetupContext(context.Background(), options)
+	if errors.Is(err, auth.ErrSessionInvalid) {
+		authchallenge.GUIState("auth-required")
+	}
+	return data, err
 }
 
 func (c *Client) SetupContext(ctx context.Context, options SetupOptions) ([]byte, error) {
@@ -351,6 +379,12 @@ func (c *Client) SetupContext(ctx context.Context, options SetupOptions) ([]byte
 	if clientAuthData.DeviceID == "" && c.DeviceID != "" {
 		clientAuthData.DeviceID = c.DeviceID
 	}
+	if options.ForceLogin {
+		c.clearSessionCredentials(&clientAuthData)
+	}
+	if options.ChallengeHandler == nil {
+		options.ChallengeHandler = authchallenge.DefaultHandlerContext(setupCtx)
+	}
 
 	var authServerHost string
 	if options.ServerPort == 443 {
@@ -359,6 +393,7 @@ func (c *Client) SetupContext(ctx context.Context, options SetupOptions) ([]byte
 		authServerHost = fmt.Sprintf("%s:%d", options.ServerAddress, options.ServerPort)
 	}
 	sess := auth.NewSessionContext(setupCtx, authServerHost, c.tlsKeyLogWriter, c.underlayDialer.DialContext)
+	context.AfterFunc(c.lifecycleCtx, sess.Close)
 	serverVersionInfo, manifestErr := sess.ServerVersionInfo()
 	serverVersionInfo, err := resolveServerVersionInfo(clientAuthData.ServerVersionInfo, serverVersionInfo, manifestErr)
 	if err != nil {
@@ -374,16 +409,60 @@ func (c *Client) SetupContext(ctx context.Context, options SetupOptions) ([]byte
 	}
 	c.tcpTunnelZeroRTT = parsedServerVersion.TCPTunnelZeroRTT()
 	log.Printf("aTrust TCP tunnel zero-RTT: %t", c.tcpTunnelZeroRTT)
+	var lastAuthData []byte
+	snapshotAuth := func() ([]byte, error) {
+		snapshot, err := sess.Snapshot()
+		if err != nil {
+			return nil, err
+		}
+		c.setSessionSID(snapshot.SID, nil)
+		clientAuthData.DeviceID = c.DeviceID
+		clientAuthData.Cookies = snapshot.Cookies
+		data, err := json.Marshal(clientAuthData)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal client data: %w", err)
+		}
+		if options.OnAuthenticated != nil && !bytes.Equal(lastAuthData, data) {
+			lastAuthData = append(lastAuthData[:0], data...)
+			options.OnAuthenticated(data)
+		}
+		return data, nil
+	}
 
 	resourceData := options.ResourceData
-	if c.canResume(resourceData) {
+	if options.ForceLogin {
+		resourceData = nil
+	}
+	if options.ResumeOnly || c.canResume(resourceData) {
 		log.Println("Skipping login")
+		if c.DeviceID == "" {
+			c.DeviceID = clientAuthData.DeviceID
+		}
+		if c.DeviceID == "" || (c.SID == "" && len(clientAuthData.Cookies) == 0) {
+			return nil, auth.ErrSessionInvalid
+		}
 
 		c.ConnectionID = buildConnectionID(c.DeviceID)
 		if c.SignKey == "" {
 			c.SignKey = randHex(64)
 		}
 		sess.Restore(c.DeviceID, c.SID, clientAuthData.Cookies)
+		if options.ResumeOnly {
+			if _, err := sess.Refresh(setupCtx); err != nil {
+				return nil, err
+			}
+			if resourceData == nil {
+				if options.OnAuthenticated != nil {
+					if _, err := snapshotAuth(); err != nil {
+						return nil, err
+					}
+				}
+				resourceData, err = sess.ClientResource()
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
 	} else {
 		if clientAuthData.DeviceID == "" {
 			clientAuthData.DeviceID = strings.ToLower(randHex(32))
@@ -407,6 +486,11 @@ func (c *Client) SetupContext(ctx context.Context, options SetupOptions) ([]byte
 			return nil, err
 		}
 		c.Username = loginResult.Username
+		if options.OnAuthenticated != nil {
+			if _, err := snapshotAuth(); err != nil {
+				return nil, err
+			}
+		}
 
 		resourceData, err = sess.ClientResource()
 		if err != nil {
@@ -415,16 +499,9 @@ func (c *Client) SetupContext(ctx context.Context, options SetupOptions) ([]byte
 		}
 
 	}
-	snapshot, err := sess.Snapshot()
+	authData, err := snapshotAuth()
 	if err != nil {
 		return nil, err
-	}
-	c.setSessionSID(snapshot.SID, nil)
-	clientAuthData.DeviceID = c.DeviceID
-	clientAuthData.Cookies = snapshot.Cookies
-	authData, err := json.Marshal(clientAuthData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal client data: %w", err)
 	}
 
 	err = c.parseResource(resourceData)
@@ -450,7 +527,7 @@ func (c *Client) SetupContext(ctx context.Context, options SetupOptions) ([]byte
 	}
 	l3Tunnel, err := NewL3Tunnel(c)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create L3 tunnel: %v", err)
+		return nil, fmt.Errorf("failed to create L3 tunnel: %w", err)
 	}
 	c.l3TunnelMu.Lock()
 	c.l3Tunnel = l3Tunnel
@@ -469,6 +546,59 @@ func (c *Client) SetupContext(ctx context.Context, options SetupOptions) ([]byte
 	}
 
 	return authData, nil
+}
+
+func (c *Client) clearSessionCredentials(data *auth.ClientAuthData) {
+	c.setSessionSID("", nil)
+	c.SignKey = ""
+	data.Cookies = nil
+}
+
+func (c *Client) setTransportReconnecting(group string, reconnecting bool) {
+	if c.onConnectionState == nil || c.lifecycleCtx.Err() != nil {
+		return
+	}
+	c.connectionMu.Lock()
+	wasReconnecting := len(c.reconnecting) != 0
+	if reconnecting {
+		if c.reconnecting == nil {
+			c.reconnecting = make(map[string]bool)
+		}
+		c.reconnecting[group] = true
+	} else {
+		delete(c.reconnecting, group)
+	}
+	changed := (len(c.reconnecting) != 0) != wasReconnecting
+	c.connectionMu.Unlock()
+	if changed {
+		c.PublishConnectionState()
+	}
+}
+
+// PublishConnectionState also replays losses observed before the owner's stack
+// was ready. The callback runs on one worker, never under tunnel/state locks.
+func (c *Client) PublishConnectionState() {
+	select {
+	case c.connectionWake <- struct{}{}:
+	default:
+	}
+}
+
+func (c *Client) reportConnectionStates() {
+	for {
+		select {
+		case <-c.lifecycleCtx.Done():
+			return
+		case <-c.connectionWake:
+		}
+		if c.lifecycleCtx.Err() != nil {
+			return
+		}
+		c.connectionMu.Lock()
+		connected := len(c.reconnecting) == 0
+		c.connectionMu.Unlock()
+		c.onConnectionState(connected)
+	}
 }
 
 func newUnderlayDialer(bindInterface string, autoDetectInterface bool, localDNSServer string) (*underlay.Dialer, error) {

@@ -7,6 +7,8 @@ const labels: Record<string, string> = {
   enabling: "正在启用校内访问…",
   adapting: "正在适配 Clash…",
   authentication: "等待登录验证",
+  reconnecting: "正在恢复校内连接…",
+  "auth-required": "需要重新登录",
   connected: "校内访问已启用",
   paused: "校内访问已暂停",
   error: "启用失败",
@@ -33,6 +35,7 @@ export function stateLabel(s: StatusLike): string {
 }
 
 export function stateTone(s: StatusLike): Tone {
+  if (!s.stopping && s.state === "auth-required") return "bad";
   if (s.stopping || s.starting) return "busy";
   if (s.connected) return "on";
   if (s.state === "error" || s.state === "paused" || (s.state === "campus-unavailable" && s.running)) return "bad";

@@ -24,6 +24,7 @@ func TestMain(m *testing.M) {
 func fakeCore(marker string) {
 	emit := func(v any) { b, _ := json.Marshal(v); fmt.Println("@@FDU_GUI@@" + string(b)) }
 	fmt.Println("password=private-pass started " + strings.Join(os.Args[1:], " "))
+	fmt.Println("fresh-login=" + os.Getenv("FDU_CONNECT_GUI_RELOGIN"))
 	fmt.Fprintln(os.Stderr, "stderr line")
 	in := bufio.NewScanner(os.Stdin)
 	if os.Getenv("FDU_FAKE_CORE_CHALLENGE") == "1" {
@@ -115,6 +116,9 @@ func TestOwnedChildStopsGracefully(t *testing.T) {
 	if r.Running() {
 		t.Fatal("still running after stop")
 	}
+	if r.Tool() != "" {
+		t.Fatal("completed tool still blocks client actions")
+	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(config), "stopped.marker")); err != nil {
 		t.Fatal("stop request not received")
 	}
@@ -160,6 +164,36 @@ func TestChallengeRoundTrip(t *testing.T) {
 	}
 }
 
+func TestFreshLoginIsExplicitAndLeavesSavedConfigurationIntact(t *testing.T) {
+	t.Setenv("FDU_CONNECT_GUI_RELOGIN", "inherited")
+	for _, fresh := range []bool{false, true} {
+		r, rec, config := newRuntime(t, false)
+		before, _ := os.ReadFile(config)
+		// A fake tool avoids probing installed cores and listener ports.
+		if err := r.start(config, nil, "auth-info", fresh); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = r.Kill() })
+		waitFor(t, rec.connected, "fresh-login flag")
+		if stopped, err := r.Stop(10 * time.Second); err != nil || !stopped {
+			t.Fatalf("stop: %v", err)
+		}
+		rec.mu.Lock()
+		logs := "\n" + strings.Join(rec.logs, "\n") + "\n"
+		rec.mu.Unlock()
+		want := "fresh-login="
+		if fresh {
+			want += "1"
+		}
+		if !strings.Contains(logs, "\n"+want+"\n") {
+			t.Fatalf("fresh=%v: incorrect child environment: %s", fresh, logs)
+		}
+		if after, _ := os.ReadFile(config); string(after) != string(before) {
+			t.Fatal("fresh login changed the saved configuration")
+		}
+	}
+}
+
 func TestRejectsUnknownToolAndMissingFiles(t *testing.T) {
 	r, _, config := newRuntime(t, false)
 	if err := r.Start(config, nil, "delete-everything"); err == nil {
@@ -171,6 +205,16 @@ func TestRejectsUnknownToolAndMissingFiles(t *testing.T) {
 	r.Core += ".missing"
 	if err := r.Start(config, nil, "auth-info"); err == nil {
 		t.Fatal("accepted missing core")
+	}
+}
+
+func TestRespondReportsExitedCore(t *testing.T) {
+	r := New(t.TempDir())
+	if err := r.Respond(map[string]any{"operation": "relogin"}); err == nil {
+		t.Fatal("relogin silently succeeded without a running core")
+	}
+	if stopped, err := r.Stop(time.Second); err != nil || !stopped {
+		t.Fatalf("stopping an exited core: stopped=%v error=%v", stopped, err)
 	}
 }
 

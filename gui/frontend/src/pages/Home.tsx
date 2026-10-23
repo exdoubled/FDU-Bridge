@@ -66,6 +66,18 @@ export function Home() {
     }
   };
 
+  const relogin = async () => {
+    setBusy(true);
+    try {
+      if (!(await confirm({ title: "重新登录", message: status.state === "authentication" ? "结束当前登录并重新打开登录窗口，保留配置和校园规则。" : "重新认证，保留配置和校园规则。校内连接可能暂时中断。", confirm: "重新登录" }))) return;
+      await CoreService.Relogin();
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const metaPills = [
     status.server && status.server,
     status.protocol && (status.protocol === "atrust" ? "aTrust" : "EasyConnect"),
@@ -90,6 +102,12 @@ export function Home() {
                 {metaPills.map((p) => <span key={p} className="pill">{p}</span>)}
               </div>
               {status.problem && <div className="note">{status.problem}</div>}
+              {status.protocol === "atrust" && status.saved && !status.external && !status.tool && (
+                <button className={status.authRequired ? "btn primary" : "link"} style={{ marginTop: 10 }} onClick={relogin}
+                  disabled={busy || status.stopping || (status.starting && !status.authRequired && !["campus-unavailable", "authentication"].includes(status.state))}>
+                  重新登录
+                </button>
+              )}
             </div>
             {busy && <Spinner size={18} />}
             <Switch large checked={active} disabled={busy || status.stopping || (!active && status.external)} onChange={togglePower} label="启用校内访问" />

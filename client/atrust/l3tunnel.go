@@ -3,12 +3,14 @@ package atrust
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/mythologyli/zju-connect/client"
+	"github.com/mythologyli/zju-connect/client/atrust/auth"
 	"github.com/mythologyli/zju-connect/internal/ipresource"
 	"github.com/mythologyli/zju-connect/log"
 )
@@ -62,9 +64,7 @@ func NewL3Tunnel(aTrustClient *Client) (*L3Tunnel, error) {
 			connectionID: aTrustClient.ConnectionID,
 			username:     aTrustClient.Username,
 		}
-		if aTrustClient.onSessionInvalid != nil {
-			info.onSessionInvalid = aTrustClient.reportInvalidSession
-		}
+		info.onSessionInvalid = aTrustClient.reportInvalidSession
 		dialTLS := func(ctx context.Context, network, address string, config *tls.Config) (*tls.Conn, error) {
 			return dialTLSContext(ctx, aTrustClient.underlayDialer, network, address, tlsConfig(config, aTrustClient.tlsKeyLogWriter))
 		}
@@ -79,7 +79,7 @@ func NewL3Tunnel(aTrustClient *Client) (*L3Tunnel, error) {
 
 	ip, err := aTrustClient.IP()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get client IP: %v", err)
+		return nil, fmt.Errorf("failed to get client IP: %w", err)
 	}
 	t.ip = ip
 
@@ -287,6 +287,7 @@ func (t *L3Tunnel) startReconnect(nodeGroupID string) {
 	call := &l3TunnelConnectCall{done: make(chan struct{})}
 	t.connecting[nodeGroupID] = call
 	t.connsMu.Unlock()
+	t.client.setTransportReconnecting(nodeGroupID, true)
 	go t.connectWithRetry(nodeGroupID, call, false)
 }
 
@@ -316,6 +317,10 @@ func (t *L3Tunnel) connectWithRetry(nodeGroupID string, call *l3TunnelConnectCal
 			t.finishConnect(nodeGroupID, call, conn, nil)
 			return
 		}
+		if errors.Is(err, auth.ErrSessionInvalid) {
+			t.finishConnect(nodeGroupID, call, nil, err)
+			return
+		}
 		log.DebugPrintf("l3-tunnel connect attempt %d failed for group %s: %v", attempt+1, nodeGroupID, err)
 	}
 }
@@ -335,6 +340,9 @@ func (t *L3Tunnel) finishConnect(nodeGroupID string, call *l3TunnelConnectCall, 
 		case <-t.closeCh:
 			err = net.ErrClosed
 		default:
+			// Record restoration before waking writers. The client worker
+			// publishes the latest state without holding the tunnel lock.
+			t.client.setTransportReconnecting(nodeGroupID, false)
 			t.conns[nodeGroupID] = conn
 		}
 	}

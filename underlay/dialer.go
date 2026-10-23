@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
@@ -114,7 +115,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 	if autoDetect && requireBound && interfaceName == "" {
 		interfaceName = d.refreshInterface()
 		if interfaceName == "" {
-			return nil, fmt.Errorf("no usable underlay interface")
+			return nil, &net.OpError{Op: "dial", Net: network, Err: fmt.Errorf("no usable underlay interface")}
 		}
 	}
 
@@ -171,15 +172,22 @@ func dialContextOnInterface(ctx context.Context, network, address, interfaceName
 }
 
 func newUnderlayResolver(interfaceName, localDNSServer string) *net.Resolver {
+	dnsServer := localDNSServer
+	if runtime.GOOS == "windows" && dnsServer == "" {
+		// Query the physical adapter's resolver rather than a TUN fake-IP DNS.
+		dnsServer = interfaceDNSServer(interfaceName)
+	}
 	return &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, systemDNSServer string) (net.Conn, error) {
 			target := systemDNSServer
-			if localDNSServer != "" {
-				target = localDNSServer
+			if dnsServer != "" {
+				target = dnsServer
 			}
 			boundInterface := interfaceName
-			if isLoopbackAddress(target) {
+			// When adapter DNS cannot be identified, system DNS may point at
+			// the TUN adapter and must remain reachable through its own route.
+			if isLoopbackAddress(target) || runtime.GOOS == "windows" && dnsServer == "" {
 				boundInterface = ""
 			}
 			dialer := &platformdialer.Dialer{InterfaceName: boundInterface}
@@ -187,6 +195,8 @@ func newUnderlayResolver(interfaceName, localDNSServer string) *net.Resolver {
 		},
 	}
 }
+
+var interfaceDNSServer = systemInterfaceDNSServer
 
 func isLoopbackAddress(address string) bool {
 	host, _, err := net.SplitHostPort(address)

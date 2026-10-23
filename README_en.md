@@ -70,6 +70,7 @@ In global mode, the return listener is pinned to `INTERNET` to avoid looping bac
 
 - **Requirements**: Windows needs WebView2 Runtime. The macOS app is not notarized; open it the first time by right-clicking it in Finder and choosing Open. Linux needs GTK 4 and WebKitGTK 6.0.
 - **Login browser**: automatic UIS login needs Edge, Chrome, Chromium, or Brave. A compatible default browser is preferred, and no callback URL needs pasting.
+- **Recovery and expired login**: selective Clash connections retry transient failures automatically. An expired session pauses retries; click **Relogin (重新登录)** on Home to authenticate again. Disabling campus access stops retries and keeps rules and settings.
 - **Discovery fails**: use manual integration, or local proxy only if the client lacks the required capabilities.
 - **Port in use**: automatic/manual integration switches to free ports before enabling; in local proxy mode, adjust the listening ports yourself. See **Diagnostics (诊断)** for other errors.
 - **Data directories**: Windows normally uses the program directory, falling back to `%APPDATA%\FDU Connect` when it is not writable (an existing per-user directory keeps being used). macOS uses `~/Library/Application Support/FDU Connect`. Linux uses `$XDG_CONFIG_HOME/fdu-connect`, or `~/.config/fdu-connect` when unset.

@@ -32,9 +32,13 @@ export function ChallengeDialog({ challenge, onClose }: { challenge: Challenge; 
   // The core gave up (or exited); the prompt no longer has anyone to answer.
   const seenRunning = useRef(status.running);
   useEffect(() => {
+    if (status.stopping || status.authRequired || ["campus-unavailable", "reconnecting", "connected"].includes(status.state)) {
+      onClose();
+      return;
+    }
     if (status.running) seenRunning.current = true;
     else if (seenRunning.current) onClose();
-  }, [status.running, onClose]);
+  }, [status.running, status.stopping, status.authRequired, status.state, onClose]);
 
   const send = async (answer: Challenge) => {
     try {

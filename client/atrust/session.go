@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mythologyli/zju-connect/client/atrust/auth"
+	"github.com/mythologyli/zju-connect/client/authchallenge"
 	"github.com/mythologyli/zju-connect/log"
 )
 
@@ -17,6 +18,7 @@ func invalidSessionError(code int64, message string) error {
 
 func (c *Client) reportInvalidSession(err error) {
 	if c.onSessionInvalid == nil {
+		authchallenge.GUIState("auth-required")
 		log.Fatalf("aTrust session failed: %v", err)
 		return
 	}
@@ -53,9 +55,6 @@ func (c *Client) startSessionRefresh(refresh func(context.Context) (auth.LoginRe
 				return
 			}
 			if errors.Is(err, auth.ErrSessionInvalid) {
-				if c.onSessionInvalid == nil {
-					log.Fatalf("aTrust session maintenance failed: %v", err)
-				}
 				c.reportInvalidSession(err)
 				return
 			}
