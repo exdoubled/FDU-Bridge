@@ -134,3 +134,32 @@ func TestMigrationPreservesDifferentDestinationBackup(t *testing.T) {
 		t.Fatal("overwrote destination backup")
 	}
 }
+
+func TestMigrationPathChecksOnlyManagedRoot(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "gui")
+	if err := os.Mkdir(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(root, "client.toml")
+	if err := os.WriteFile(file, []byte("managed"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(t.TempDir(), "alias")
+	if err := os.Symlink(parent, alias); err != nil {
+		t.Skipf("directory symlink unavailable: %v", err)
+	}
+	if err := migrationPath(filepath.Join(alias, "gui"), filepath.Join(alias, "gui", "client.toml"), false); err != nil {
+		t.Fatalf("linked ancestor outside managed root: %v", err)
+	}
+	if err := migrationPath(alias, filepath.Join(alias, "gui", "client.toml"), false); err == nil {
+		t.Fatal("accepted a linked managed root")
+	}
+	inside := filepath.Join(root, "linked")
+	if err := os.Symlink(parent, inside); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrationPath(root, filepath.Join(inside, "gui", "client.toml"), false); err == nil {
+		t.Fatal("accepted a link inside managed root")
+	}
+}

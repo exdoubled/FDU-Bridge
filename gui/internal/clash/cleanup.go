@@ -230,7 +230,8 @@ func (c *Connection) RemoveCampus(a CampusAttachment, values map[string]any, fin
 		inputs[path] = hash
 	}
 	readFile := func(path string) ([]byte, error) {
-		// All writes are scoped to a selected client or the private GUI feed.
+		// Check through the managed root, without rejecting system aliases
+		// above it (for example, macOS /var -> /private/var).
 		for dir := path; ; dir = filepath.Dir(dir) {
 			info, e := os.Lstat(dir)
 			if e != nil {
@@ -239,7 +240,7 @@ func (c *Connection) RemoveCampus(a CampusAttachment, values map[string]any, fin
 			if info.Mode()&os.ModeSymlink != 0 {
 				return nil, errors.New("不支持链接形式的配置路径")
 			}
-			if filepath.Dir(dir) == dir {
+			if dir == a.Root || dir == c.Dir || filepath.Dir(dir) == dir {
 				break
 			}
 		}

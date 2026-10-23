@@ -43,7 +43,8 @@ func migrationPath(root, path string, missing bool) error {
 		if err == nil && (info.Mode()&os.ModeSymlink != 0 || current == path && !info.Mode().IsRegular()) {
 			return errors.New("迁移不支持链接或非常规文件")
 		}
-		if filepath.Dir(current) == current {
+		// Ancestors above the managed root may be OS aliases, such as macOS /var.
+		if current == w.Dir || filepath.Dir(current) == current {
 			break
 		}
 	}

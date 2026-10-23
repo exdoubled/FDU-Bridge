@@ -140,7 +140,11 @@ func TestCleanupAcceptsInternetChoiceChangedAfterImport(t *testing.T) {
 
 func importedCleanupFixture(t *testing.T, runtime bool) (*Connection, *cleanupAPI, CampusAttachment, Plan) {
 	t.Helper()
-	dir := t.TempDir()
+	return importedCleanupFixtureAt(t, runtime, t.TempDir())
+}
+
+func importedCleanupFixtureAt(t *testing.T, runtime bool, dir string) (*Connection, *cleanupAPI, CampusAttachment, Plan) {
+	t.Helper()
 	root := filepath.Join(dir, "client")
 	_ = os.MkdirAll(filepath.Join(root, "profiles"), 0700)
 	config := filepath.Join(dir, "client.toml")
@@ -166,6 +170,20 @@ func importedCleanupFixture(t *testing.T, runtime bool) (*Connection, *cleanupAP
 	}
 	f.selected = "node-a"
 	return c, f, a, p
+}
+
+func TestCleanupAllowsLinkedParent(t *testing.T) {
+	alias := filepath.Join(t.TempDir(), "alias")
+	if err := os.Symlink(t.TempDir(), alias); err != nil {
+		t.Skipf("directory symlink unavailable: %v", err)
+	}
+	c, f, a, _ := importedCleanupFixtureAt(t, false, filepath.Join(alias, "gui"))
+	if _, err := c.RemoveCampus(a, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !f.cleaned || fsx.HashFile(a.ProviderPath) != "" {
+		t.Fatal("integration was not removed")
+	}
 }
 
 func installCleanupScript(t *testing.T, root string, p Plan, edited bool) {
