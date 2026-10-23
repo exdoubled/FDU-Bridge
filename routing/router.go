@@ -148,6 +148,12 @@ type Router struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
 	conns          map[*routedConn]struct{}
+	trafficStarted int64
+	fduTraffic     trafficCounters
+	nonFDUTraffic  trafficCounters
+	aiConnections  map[*routedConn]TrafficConnection
+	aiActive       int
+	trafficID      uint64
 }
 
 func New(c configs.RoutingConfig) (*Router, error) {
@@ -161,6 +167,8 @@ func New(c configs.RoutingConfig) (*Router, error) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	router := &Router{upstreamDial: u.Dial, ctx: ctx, cancel: cancel, conns: make(map[*routedConn]struct{}), controlTargets: make(map[string]bool), blockedPorts: make(map[string]bool)}
+	router.trafficStarted = time.Now().UnixMilli()
+	router.aiConnections = make(map[*routedConn]TrafficConnection)
 	router.policy.Store(&p)
 	return router, nil
 }
@@ -226,8 +234,10 @@ func (r *Router) Dial(ctx context.Context, network, addr string) (net.Conn, erro
 	vpnCtx, generation := r.vpnCtx, r.vpnGeneration
 	r.mu.Unlock()
 	campus := false
+	control := false
 	if network == "tcp" && r.controlTargets[normalizeDomain(addr)] && r.control != nil {
 		dial = r.control
+		control = true
 	} else if r.policy.Load().match(host) {
 		campus = true
 		if dial == nil {
@@ -261,6 +271,9 @@ func (r *Router) Dial(ctx context.Context, network, addr string) (net.Conn, erro
 		return nil, ErrVPNUnavailable
 	}
 	r.conns[tracked] = struct{}{}
+	if !control {
+		r.trackTraffic(tracked, network, host, port)
+	}
 	return tracked, nil
 }
 
@@ -281,9 +294,13 @@ func (r *Router) Close() error {
 
 type routedConn struct {
 	net.Conn
-	router *Router
-	campus bool
-	once   sync.Once
+	router   *Router
+	campus   bool
+	once     sync.Once
+	traffic  *trafficCounters
+	ai       bool
+	upload   atomic.Uint64
+	download atomic.Uint64
 }
 
 func (c *routedConn) Close() error {
@@ -294,6 +311,13 @@ func (c *routedConn) Close() error {
 		err = c.Conn.Close()
 		c.router.mu.Lock()
 		delete(c.router.conns, c)
+		if c.traffic != nil {
+			c.traffic.connections--
+		}
+		if c.ai {
+			c.router.aiActive--
+			delete(c.router.aiConnections, c)
+		}
 		c.router.mu.Unlock()
 	})
 	return err

@@ -14,11 +14,20 @@ import (
 	"github.com/mythologyli/zju-connect/gui/internal/appconf"
 	"github.com/mythologyli/zju-connect/gui/internal/clash"
 	"github.com/mythologyli/zju-connect/gui/internal/netcheck"
+	"github.com/mythologyli/zju-connect/routing"
 )
 
 type NetworkService struct {
 	b             *Backend
+	mu            sync.Mutex
 	probeBusy     sync.Mutex
+	started       int64
+	coreEpoch     int64
+	corePrevious  [2]routing.TrafficTotals
+	totals        [2]TrafficBucket
+	rates         [3]trafficRate
+	clashTotals   [2]uint64
+	clashPrevious map[string][2]uint64
 	controllerMu  sync.Mutex
 	controllerKey networkControllerKey
 	controllerAPI clash.API
@@ -31,7 +40,7 @@ type networkControllerKey struct {
 }
 
 func NewNetworkService(b *Backend) *NetworkService {
-	return &NetworkService{b: b}
+	return &NetworkService{b: b, started: time.Now().UnixMilli(), clashPrevious: map[string][2]uint64{}}
 }
 
 type ProbeReport struct {
@@ -84,6 +93,40 @@ func (s *NetworkService) controller() (clash.API, error) {
 	}
 	s.controllerKey, s.controllerAPI = key, api
 	return api, nil
+}
+
+func (s *NetworkService) Observe() (NetworkView, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var observed clash.ConnectionSnapshot
+	readFailed := false
+	api, err := s.controller()
+	if err == nil {
+		err = api.Do("GET", "/connections", nil, &observed)
+		if err != nil {
+			readFailed = true
+			s.forgetController()
+		}
+	}
+	core, received := s.b.runtime.Traffic()
+	now := time.Now()
+	fresh := s.b.runtime.Running() && received > 0 && now.UnixMilli()-received < 5000
+	s.b.mu.Lock()
+	values := s.b.saved
+	s.b.mu.Unlock()
+	fallback := ""
+	if route, ok := values["routing"].(map[string]any); ok {
+		if upstream, e := url.Parse(text(route, "upstream_proxy")); e == nil {
+			fallback = upstream.Port()
+		}
+	}
+	view := s.sample(core, fresh, observed, err == nil, fallback, now)
+	if readFailed {
+		// The failed read may be the oversized or slow snapshot itself. Retry at
+		// the slower cadence instead of repeating the heaviest request every second.
+		view.PollIntervalMS = 5000
+	}
+	return view, nil
 }
 
 func (s *NetworkService) forgetController() {

@@ -105,11 +105,15 @@ func (c ControlAPI) Do(method, path string, payload, out any) error {
 		return controllerFailure(err)
 	}
 	defer response.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(response.Body, responseLimit+1))
+	limit := responseLimit
+	if method == http.MethodGet && path == "/connections" {
+		limit = 32 * 1024 * 1024 // Active connections include substantially more metadata than config queries.
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, int64(limit)+1))
 	if err != nil {
 		return fmt.Errorf("Clash 控制接口返回了不完整的数据，请刷新：%w", err)
 	}
-	if len(data) > responseLimit {
+	if len(data) > limit {
 		return errors.New("Clash 返回的数据过大，已停止读取")
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {

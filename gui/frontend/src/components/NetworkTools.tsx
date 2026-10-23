@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { Activity, ChevronRight, Info, RefreshCw } from "lucide-react";
-import { NetworkService, errorText, type NetworkTarget, type ProbeReport } from "../lib/api";
+import { Activity, ArrowDown, ArrowUp, ChevronRight, Info, RefreshCw } from "lucide-react";
+import { NetworkService, errorText, type NetworkTarget, type NetworkView, type ProbeReport, type TrafficBucket } from "../lib/api";
 import { useStore } from "../store";
 import { CardTitle, Spinner } from "./ui";
 
+export const aiProviders: Record<string, string> = { openai: "OpenAI", anthropic: "Anthropic", gemini: "Gemini", grok: "Grok" };
 const campusTargets = [
   { id: "library", name: "图书馆", host: "library.fudan.edu.cn" },
   { id: "icourse", name: "复旦课程", host: "icourse.fudan.edu.cn" },
@@ -11,6 +12,8 @@ const campusTargets = [
 const compatibilityNote = "icourse 在开启系统代理时可能无法访问。如遇此情况，请将 icourse.fudan.edu.cn 加入系统代理绕过列表；校外访问仍需校园网或有效的 TUN/FDU 路径。";
 
 interface NetworkToolsState {
+  view: NetworkView | null;
+  observeError: string;
   targets: NetworkTarget[];
   targetsError: string;
   reports: Record<string, ProbeReport>;
@@ -29,16 +32,20 @@ export function useNetworkTools() {
 }
 
 export function NetworkToolsProvider({ children }: { children: ReactNode }) {
-  const { status } = useStore();
+  const { page, status } = useStore();
+  const [view, setView] = useState<NetworkView | null>(null);
+  const [observeError, setObserveError] = useState("");
   const [targets, setTargets] = useState<NetworkTarget[]>([]);
   const [targetsError, setTargetsError] = useState("");
   const [reports, setReports] = useState<Record<string, ProbeReport>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [probing, setProbing] = useState("");
+  const observing = useRef(false);
   const queue = useRef(Promise.resolve());
   const pending = useRef(0);
   const wasConnected = useRef(false);
+  const active = page === "home" || page === "network";
 
   useEffect(() => {
     let live = true;
@@ -47,6 +54,35 @@ export function NetworkToolsProvider({ children }: { children: ReactNode }) {
     }).catch((e) => { if (live) setTargetsError(errorText(e)); });
     return () => { live = false; };
   }, []);
+
+  useEffect(() => {
+    if (!active) return;
+    let live = true;
+    let nextSampleAt = 0;
+    const observe = async () => {
+      const now = Date.now();
+      if (document.hidden || observing.current || now < nextSampleAt) return;
+      observing.current = true;
+      try {
+        const next = await NetworkService.Observe();
+        nextSampleAt = next.pollIntervalMs > 1000 ? now + next.pollIntervalMs : 0;
+        if (live) { setView(next); setObserveError(""); }
+      } catch (e) {
+        if (live) setObserveError(errorText(e));
+      } finally {
+        observing.current = false;
+      }
+    };
+    const visible = () => { if (!document.hidden) void observe(); };
+    void observe();
+    const timer = setInterval(observe, 1000);
+    document.addEventListener("visibilitychange", visible);
+    return () => {
+      live = false;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", visible);
+    };
+  }, [active]);
 
   const runProbes = useCallback((ids: string[]) => {
     if (!ids.length || pending.current > 0) return;
@@ -74,12 +110,50 @@ export function NetworkToolsProvider({ children }: { children: ReactNode }) {
     wasConnected.current = status.connected;
   }, [status.connected, runProbes]);
 
-  return <Context.Provider value={{ targets, targetsError, reports, errors, busy, probing, probe: runProbes }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ view, observeError, targets, targetsError, reports, errors, busy, probing, probe: runProbes }}>{children}</Context.Provider>;
+}
+
+export function formatBytes(value: number): string {
+  const bytes = Math.max(0, Number.isFinite(value) ? value : 0);
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  const power = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length);
+  return `${(bytes / 1024 ** power).toFixed(power === 1 ? 0 : 1)} ${units[power - 1]}`;
+}
+
+function TrafficCard({ label, bucket }: { label: string; bucket?: TrafficBucket }) {
+  return (
+    <section className="card traffic-card">
+      <CardTitle icon={Activity} extra={<span className="traffic-count">{bucket ? bucket.connections : "—"} 连接</span>}>{label}</CardTitle>
+      <div className="traffic-rates">
+        <div><ArrowUp size={15} /><strong>{bucket ? formatBytes(bucket.uploadRate) : "—"}</strong><span>/s</span></div>
+        <div><ArrowDown size={15} /><strong>{bucket ? formatBytes(bucket.downloadRate) : "—"}</strong><span>/s</span></div>
+      </div>
+      <div className="traffic-total">{label === "非 FDU" ? "累计估算" : "累计"} <span>↑ {bucket ? formatBytes(bucket.upload) : "—"}</span><span>↓ {bucket ? formatBytes(bucket.download) : "—"}</span></div>
+    </section>
+  );
+}
+
+export function TrafficCards() {
+  const { view, observeError } = useNetworkTools();
+  const sources = [view?.coreAvailable && "FDU", view?.clashAvailable && "Clash"].filter(Boolean).join(" / ");
+  return (
+    <div className="traffic-section">
+      <div className="grid-2">
+        <TrafficCard label="FDU" bucket={view?.fdu} />
+        <TrafficCard label="非 FDU" bucket={view?.nonFdu} />
+      </div>
+      <div className={`network-caption${observeError ? " warning-text" : ""}`} title={observeError || view?.scope}>
+        {observeError ? view ? "采样失败 · 显示上次数据" : "暂时无法读取流量" : !view ? "正在读取流量…" : sources ? `本次运行 · ${sources} 可观测流量` : "暂无可用流量来源"}
+        {view?.truncated && <span> · 连接列表已截断</span>}
+      </div>
+    </div>
+  );
 }
 
 const checkNames: Record<string, string> = { dns: "DNS", tcp: "TCP", tls: "TLS", http: "HTTP", websocket: "WS" };
-const checkLabels: Record<string, string> = { ok: "通过", error: "失败", auth: "需认证", unsupported: "不支持" };
-const checkTones: Record<string, string> = { ok: "success", error: "danger", auth: "warning", unsupported: "" };
+const checkLabels: Record<string, string> = { ok: "通过", error: "失败", auth: "需认证", unsupported: "不支持", skipped: "未尝试" };
+const checkTones: Record<string, string> = { ok: "success", error: "danger", auth: "warning", unsupported: "", skipped: "" };
 
 function ProbeStatus({ report, error, loading }: { report?: ProbeReport; error?: string; loading: boolean }) {
   if (loading) return <span className="probe-status muted"><Spinner />检测中</span>;
