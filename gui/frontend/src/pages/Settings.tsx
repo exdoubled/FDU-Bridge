@@ -156,7 +156,7 @@ export function Settings() {
           <UpdateSettings />
 
           <MaintenanceSettings disabled={dirty || integrationDirty || saving}
-            migrationDisabled={edited || integrationDirty || saving || (dirty && !(!view?.saved && view?.source.endsWith("config.toml.example")))} onMigrated={async () => {
+            migrationDisabled={edited || integrationDirty || saving || (dirty && !(!view?.saved && view?.example))} onMigrated={async () => {
             show(await SettingsService.Current());
             setMaintenanceVersion((version) => version + 1);
           }} />

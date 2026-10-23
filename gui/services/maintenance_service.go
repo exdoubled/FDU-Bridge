@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/mythologyli/zju-connect/gui/internal/appconf"
 	"github.com/mythologyli/zju-connect/gui/internal/settings"
@@ -38,12 +37,7 @@ func (s *MaintenanceService) editable(migration bool) error {
 		}
 	}
 	if view := s.b.currentView(); view != nil && view.Dirty {
-		initialExample := false
-		if migration && !view.Saved {
-			for _, path := range []string{filepath.Join(s.b.Dir, "config.toml.example"), filepath.Join(s.b.exeDir, "config.toml.example"), filepath.Join(s.b.exeDir, "..", "Resources", "config.toml.example")} {
-				initialExample = initialExample || strings.EqualFold(filepath.Clean(path), filepath.Clean(view.Source))
-			}
-		}
+		initialExample := migration && view.Example && !view.Saved
 		if !initialExample {
 			return errors.New("请先保存或放弃配置草稿")
 		}

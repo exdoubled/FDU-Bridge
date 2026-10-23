@@ -44,6 +44,10 @@ func TestMaintenanceRefusesLifecycleAndDraftChanges(t *testing.T) {
 	b.starting, b.stopping, b.updating, b.external = false, false, false, false
 	b.updater = nil
 	b.view = &settings.View{Dirty: true, Source: filepath.Join(b.exeDir, "config.toml.example")}
+	if s.editable(true) == nil {
+		t.Fatal("an imported lookalike filename is not a packaged example")
+	}
+	b.view.Example = true
 	if s.editable(true) != nil || s.editable(false) == nil {
 		t.Fatal("fresh example exception must apply to migration only")
 	}
