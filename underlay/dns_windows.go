@@ -29,25 +29,34 @@ func systemInterfaceDNSServer(name string) string {
 			if adapter.IfIndex != uint32(iface.Index) && adapter.Ipv6IfIndex != uint32(iface.Index) {
 				continue
 			}
-			ipv6 := ""
-			for server := adapter.FirstDnsServerAddress; server != nil; server = server.Next {
-				ip := server.Address.IP()
-				if ip == nil || ip.IsUnspecified() || ip.IsLoopback() {
-					continue
-				}
-				if ip.To4() != nil {
-					return net.JoinHostPort(ip.String(), "53")
-				}
-				host := ip.String()
-				if ip.IsLinkLocalUnicast() {
-					host += "%" + name
-				}
-				if ipv6 == "" {
-					ipv6 = net.JoinHostPort(host, "53")
-				}
-			}
-			return ipv6
+			return adapterDNSServer(name, adapter.FirstDnsServerAddress)
 		}
 		return ""
 	}
+}
+
+func adapterDNSServer(name string, first *windows.IpAdapterDnsServerAdapter) string {
+	ipv6 := ""
+	for server := first; server != nil; server = server.Next {
+		ip := server.Address.IP()
+		if ip == nil || ip.IsUnspecified() || ip.IsLoopback() {
+			continue
+		}
+		if ipv4 := ip.To4(); ipv4 != nil {
+			// Clash may put its TUN DNS on the physical adapter itself.
+			// That address is unreachable when bound to the physical NIC.
+			if ipv4[0] == 198 && (ipv4[1] == 18 || ipv4[1] == 19) {
+				continue
+			}
+			return net.JoinHostPort(ip.String(), "53")
+		}
+		host := ip.String()
+		if ip.IsLinkLocalUnicast() {
+			host += "%" + name
+		}
+		if ipv6 == "" {
+			ipv6 = net.JoinHostPort(host, "53")
+		}
+	}
+	return ipv6
 }
