@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/mythologyli/zju-connect/gui/internal/sysproc"
+	"github.com/mythologyli/zju-connect/routing"
 )
 
 const guiPrefix = "@@FDU_GUI@@"
@@ -37,14 +38,18 @@ type Runtime struct {
 	OnState     func(state string)
 	OnChallenge func(challenge map[string]any)
 
-	mu        sync.Mutex
-	writeMu   sync.Mutex
-	cmd       *exec.Cmd
-	stdin     io.WriteCloser
-	done      chan struct{}
-	secrets   []string
-	connected bool
-	tool      string
+	mu           sync.Mutex
+	writeMu      sync.Mutex
+	cmd          *exec.Cmd
+	stdin        io.WriteCloser
+	done         chan struct{}
+	secrets      []string
+	connected    bool
+	tool         string
+	traffic      routing.TrafficSnapshot
+	trafficAt    int64
+	trafficEpoch int64
+	trafficLast  [2]routing.TrafficTotals
 }
 
 // CoreName is the core executable expected beside the GUI.
@@ -273,6 +278,10 @@ func (r *Runtime) launch(config string, values map[string]any, action string, fr
 		return nil, nil, nil, fmt.Errorf("无法启动 FDU：%w", err)
 	}
 	r.secrets, r.connected, r.tool = secretsOf(values), false, action
+	// Keep lifetime byte totals even if no page sampled the previous session.
+	r.traffic.FDU.Connections, r.traffic.NonFDU.Connections = 0, 0
+	r.traffic.Connections, r.trafficAt = nil, 0
+	r.trafficEpoch, r.trafficLast = 0, [2]routing.TrafficTotals{}
 	r.cmd, r.stdin, r.done = cmd, stdin, make(chan struct{})
 	return stdout, stderr, r.done, nil
 }
@@ -298,6 +307,8 @@ func (r *Runtime) readStdout(reader io.Reader) {
 			return
 		}
 		switch message["kind"] {
+		case "traffic":
+			r.readTraffic(message["data"])
 		case "challenge":
 			r.emitState("authentication")
 			if r.OnChallenge != nil {

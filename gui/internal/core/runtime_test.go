@@ -97,6 +97,14 @@ func waitFor(t *testing.T, ch <-chan struct{}, what string) {
 
 func TestOwnedChildStopsGracefully(t *testing.T) {
 	r, rec, config := newRuntime(t, false)
+	exitLogged := make(chan struct{})
+	onLog := r.OnLog
+	r.OnLog = func(line string) {
+		onLog(line)
+		if strings.HasPrefix(line, "进程退出，代码 ") {
+			close(exitLogged)
+		}
+	}
 	if err := r.Start(config, map[string]any{"password": "private-pass"}, "auth-info"); err != nil {
 		t.Fatal(err)
 	}
@@ -113,6 +121,7 @@ func TestOwnedChildStopsGracefully(t *testing.T) {
 		t.Fatalf("child did not stop: %v", err)
 	}
 	r.Wait()
+	waitFor(t, exitLogged, "exit log")
 	if r.Running() {
 		t.Fatal("still running after stop")
 	}

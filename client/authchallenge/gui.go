@@ -115,6 +115,11 @@ func GUIState(state string) {
 		_ = h.emit(map[string]any{"kind": "state", "state": state})
 	}
 }
+func GUITraffic(data any) {
+	if h := guiSession(); h != nil {
+		_ = h.emit(map[string]any{"kind": "traffic", "data": data})
+	}
+}
 func (h *guiHandler) emit(event map[string]any) error {
 	h.writeMu.Lock()
 	defer h.writeMu.Unlock()

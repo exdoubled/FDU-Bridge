@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"runtime"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -56,6 +57,8 @@ func runSelective(c configs.Config) error {
 	defer signal.Stop(done)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	stopTraffic := startSelectiveTraffic(ctx, router)
+	defer stopTraffic()
 	go func() {
 		select {
 		case <-done:
@@ -76,6 +79,38 @@ func runSelective(c configs.Config) error {
 	return serveSelectiveRecovery(ctx, c, router.Dial, func(ctx context.Context, mode selectiveSessionMode, ready func()) error {
 		return runSelectiveVPNWithMode(ctx, c, u, router, mode, ready, &sessionData)
 	})
+}
+
+func startSelectiveTraffic(parent context.Context, router *routing.Router) func() {
+	if os.Getenv("FDU_CONNECT_GUI") != "1" {
+		return func() {}
+	}
+	ctx, cancel := context.WithCancel(parent)
+	done := make(chan struct{})
+	authchallenge.GUITraffic(router.Traffic())
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				authchallenge.GUITraffic(router.Traffic())
+			}
+		}
+	}()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			cancel()
+			<-done
+			// The proxy listeners finish before this deferred stop. Flush the
+			// last partial second before the owning GUI drains stdout.
+			authchallenge.GUITraffic(router.Traffic())
+		})
+	}
 }
 
 func serveSelective(ctx context.Context, c configs.Config, dial client.DialContextFunc, connect func(context.Context) error) error {
