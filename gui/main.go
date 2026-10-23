@@ -61,6 +61,7 @@ func main() {
 			application.NewService(clash),
 			application.NewService(services.NewRulesService(backend)),
 			application.NewService(services.NewSettingsService(backend)),
+			application.NewService(services.NewMaintenanceService(backend)),
 			application.NewService(services.NewAppService(backend)),
 			application.NewService(services.NewUpdateService(backend)),
 		},

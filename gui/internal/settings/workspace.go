@@ -16,12 +16,13 @@ import (
 type Field = clashsetup.SettingField
 
 type View struct {
-	Path   string         `json:"path"`
-	Source string         `json:"source"`
-	Fields []Field        `json:"fields"`
-	Values map[string]any `json:"values"`
-	Dirty  bool           `json:"dirty"`
-	Saved  bool           `json:"saved"`
+	Path    string         `json:"path"`
+	Source  string         `json:"source"`
+	Fields  []Field        `json:"fields"`
+	Values  map[string]any `json:"values"`
+	Dirty   bool           `json:"dirty"`
+	Saved   bool           `json:"saved"`
+	Example bool           `json:"example"`
 }
 
 type Workspace struct {

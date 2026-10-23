@@ -181,11 +181,12 @@ func (b *Backend) loadInitialSettings() {
 	candidates := []struct {
 		path    string
 		managed bool
-	}{{b.config.ConfigPath, true}, {b.workspace.Target, true},
-		{filepath.Join(b.exeDir, "client.toml"), false},
-		{filepath.Join(b.Dir, "config.toml.example"), false},
-		{filepath.Join(b.exeDir, "config.toml.example"), false},
-		{filepath.Join(b.exeDir, "..", "Resources", "config.toml.example"), false}} // macOS app bundle
+		example bool
+	}{{b.config.ConfigPath, true, false}, {b.workspace.Target, true, false},
+		{filepath.Join(b.exeDir, "client.toml"), false, false},
+		{filepath.Join(b.Dir, "config.toml.example"), false, true},
+		{filepath.Join(b.exeDir, "config.toml.example"), false, true},
+		{filepath.Join(b.exeDir, "..", "Resources", "config.toml.example"), false, true}} // macOS app bundle
 	for _, c := range candidates {
 		if c.path == "" {
 			continue
@@ -197,6 +198,7 @@ func (b *Backend) loadInitialSettings() {
 			continue
 		}
 		if view, err := b.workspace.Load(c.path, c.managed); err == nil {
+			view.Example = c.example
 			b.mu.Lock()
 			b.view = &view
 			b.mu.Unlock()

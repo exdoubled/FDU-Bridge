@@ -7,6 +7,7 @@ import { Banner, Empty, Segmented, Spinner, Switch } from "../components/ui";
 import { SettingRow } from "../components/SettingField";
 import { IntegrationSettings } from "../components/IntegrationSettings";
 import { UpdateSettings } from "../components/UpdateControl";
+import { MaintenanceSettings } from "../components/MaintenanceSettings";
 
 function PathSetting({ label, path, onBrowse, disabled }: { label: string; path?: string; onBrowse: () => void; disabled: boolean }) {
   return (
@@ -36,6 +37,7 @@ export function Settings() {
   const [baseline, setBaseline] = useState("");
   const [saving, setSaving] = useState(false);
   const [integrationDirty, setIntegrationDirty] = useState(false);
+  const [maintenanceVersion, setMaintenanceVersion] = useState(0);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const locked = status.running || status.starting || status.stopping;
   // Only real edits block navigation; an untouched draft stays in the backend until saved.
@@ -149,9 +151,15 @@ export function Settings() {
       </header>
       <div className="page-body">
         <div className="stack">
-          <IntegrationSettings onDirtyChange={setIntegrationDirty} />
+          <IntegrationSettings key={maintenanceVersion} onDirtyChange={setIntegrationDirty} />
 
           <UpdateSettings />
+
+          <MaintenanceSettings disabled={dirty || integrationDirty || saving}
+            migrationDisabled={edited || integrationDirty || saving || (dirty && !(!view?.saved && view?.example))} onMigrated={async () => {
+            show(await SettingsService.Current());
+            setMaintenanceVersion((version) => version + 1);
+          }} />
 
           <section className="card section" style={{ padding: 0 }}>
             <div className="section-head"><Palette size={16} />外观与启动</div>

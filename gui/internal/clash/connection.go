@@ -3,7 +3,6 @@ package clash
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -151,7 +150,7 @@ func (c *Connection) Import(plan Plan) (string, error) {
 	}
 	oldRuntime, err := fsx.ReadBounded(runtimePath, 8*1024*1024)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("读取 %s：%w", runtimePath, err)
 	}
 	if plan.RuntimeFile != "" {
 		var original map[string]any
@@ -166,31 +165,12 @@ func (c *Connection) Import(plan Plan) (string, error) {
 			return "", err
 		}
 	}
-	backup := filepath.Join(c.Dir, "connection-backups", backupName())
-	if err := os.MkdirAll(backup, 0o700); err != nil {
-		return "", err
+	changes := make([]cleanupChange, 0, len(plan.Files))
+	for _, change := range plan.Files {
+		changes = append(changes, cleanupChange{change.Path, change.Hash, []byte(change.Content)})
 	}
-	type entry struct {
-		Path    string `json:"path"`
-		Backup  string `json:"backup"`
-		Existed bool   `json:"existed"`
-	}
-	original := map[string][]byte{}
-	var manifest []entry
-	for i, change := range plan.Files {
-		name := fmt.Sprintf("%d.bak", i+1)
-		data, readErr := os.ReadFile(change.Path)
-		if readErr == nil {
-			original[change.Path] = data
-			if err := os.WriteFile(filepath.Join(backup, name), data, 0o600); err != nil {
-				return "", err
-			}
-		}
-		manifest = append(manifest, entry{change.Path, name, readErr == nil})
-	}
-	if b, err := json.Marshal(map[string]any{"files": manifest}); err != nil {
-		return "", err
-	} else if err := os.WriteFile(filepath.Join(backup, "manifest.json"), b, 0o600); err != nil {
+	backup, original, err := c.backupChanges(changes)
+	if err != nil {
 		return "", err
 	}
 	var written []clashsetup.Change

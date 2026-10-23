@@ -49,7 +49,7 @@ func allowed(method, path string) bool {
 	case http.MethodGet:
 		return path == "/configs" || path == "/proxies" || path == "/version"
 	case http.MethodPut:
-		return path == "/proxies/INTERNET" || path == "/proxies/GLOBAL" || path == "/configs?force=true" || path == "/providers/rules/FDU-CAMPUS"
+		return (strings.HasPrefix(path, "/proxies/") && !strings.ContainsAny(strings.TrimPrefix(path, "/proxies/"), "/?#") && len(path) > len("/proxies/")) || path == "/configs?force=true" || path == "/providers/rules/FDU-CAMPUS"
 	}
 	return false
 }

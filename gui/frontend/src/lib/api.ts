@@ -5,6 +5,7 @@ export {
   CoreService,
   RulesService,
   SettingsService,
+  MaintenanceService,
   UpdateService,
   ClashOverview,
   CoreStatus,

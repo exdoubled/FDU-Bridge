@@ -17,7 +17,7 @@ interface Updates {
 
 const Context = createContext<Updates | null>(null);
 
-function useUpdates() {
+export function useUpdates() {
   const updates = useContext(Context);
   if (!updates) throw new Error("updates missing");
   return updates;
