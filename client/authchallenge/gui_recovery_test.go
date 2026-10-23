@@ -64,6 +64,39 @@ func TestGUIChallengeCancellationKeepsInputAvailable(t *testing.T) {
 	}
 }
 
+func TestGUIStaleResponsesDoNotStopTheCoreOrBlockNewChallenges(t *testing.T) {
+	input, writer := io.Pipe()
+	defer input.Close()
+	defer writer.Close()
+	events := make(chan []byte, 2)
+	h := newGUIHandler(input, guiTestWriter{events})
+	if _, err := io.WriteString(writer, "{\"id\":1,\"code\":\"old\"}\n{\"id\":1,\"error\":\"cancelled\"}\n{\"operation\":\"relogin\"}\n"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-h.relogin:
+	case <-h.stop:
+		t.Fatal("stale answers stopped the core input reader")
+	case <-time.After(time.Second):
+		t.Fatal("stale answers blocked subsequent commands")
+	}
+	result := make(chan error, 1)
+	go func() {
+		response, err := h.askContext(t.Context(), "code", map[string]any{})
+		if err == nil && response.Code != "new" {
+			err = errors.New("delivered a stale answer to the new challenge")
+		}
+		result <- err
+	}()
+	awaitGUI(t, events)
+	if _, err := io.WriteString(writer, "{\"id\":1,\"code\":\"new\"}\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := awaitGUI(t, result); err != nil {
+		t.Fatal(err)
+	}
+}
+
 type guiTestWriter struct{ events chan []byte }
 
 func (w guiTestWriter) Write(data []byte) (int, error) {

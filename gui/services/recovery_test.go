@@ -28,6 +28,11 @@ func TestAuthenticationStateSurvivesCoreExitUntilExplicitAction(t *testing.T) {
 		t.Fatal("network watcher hid the explicit login action")
 	}
 	b.onCoreState("authentication")
+	b.challenge = map[string]any{"id": 2}
+	b.onCoreState("authentication")
+	if b.challenge != nil {
+		t.Fatal("restarting authentication kept the previous challenge")
+	}
 	if b.Status().AuthRequired {
 		t.Fatal("explicit authentication did not clear expired state")
 	}

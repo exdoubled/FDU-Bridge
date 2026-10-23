@@ -314,10 +314,15 @@ func (b *Backend) onCoreState(state string) {
 	if state != "connected" {
 		b.connectedAt = time.Time{}
 	}
-	if state == "stopped" || state == "tool-finished" || state == "auth-required" || state == "campus-unavailable" || state == "reconnecting" || state == "connected" {
+	clearChallenge := state == "authentication" || state == "stopped" || state == "tool-finished" || state == "auth-required" || state == "campus-unavailable" || state == "reconnecting" || state == "connected"
+	hadChallenge := b.challenge != nil
+	if clearChallenge {
 		b.challenge = nil
 	}
 	b.mu.Unlock()
+	if clearChallenge && hadChallenge {
+		b.emit(EventChallenge, map[string]any(nil))
+	}
 	b.publish()
 }
 

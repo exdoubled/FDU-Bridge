@@ -26,13 +26,15 @@ type guiResponse struct {
 	Height    int     `json:"height"`
 }
 type guiHandler struct {
-	output    io.Writer
-	responses chan guiResponse
-	relogin   chan struct{}
-	stop      chan struct{}
-	requestMu sync.Mutex
-	writeMu   sync.Mutex
-	sequence  int
+	output     io.Writer
+	responses  chan guiResponse
+	relogin    chan struct{}
+	stop       chan struct{}
+	requestMu  sync.Mutex
+	writeMu    sync.Mutex
+	sequence   int
+	responseMu sync.Mutex
+	pending    int
 }
 
 var guiOnce sync.Once
@@ -59,11 +61,15 @@ func newGUIHandler(input io.Reader, output io.Writer) *guiHandler {
 				}
 				continue
 			}
-			select {
-			case h.responses <- response:
-			default:
-				return
+			h.responseMu.Lock()
+			if response.ID > 0 && response.ID == h.pending {
+				select {
+				case h.responses <- response:
+				default:
+					// Duplicate answers must not close the core control channel.
+				}
 			}
+			h.responseMu.Unlock()
 		}
 	}()
 	return h
@@ -130,6 +136,8 @@ func (h *guiHandler) askContext(ctx context.Context, kind string, event map[stri
 		return guiResponse{}, err
 	}
 	h.sequence++
+	h.setPendingChallenge(h.sequence)
+	defer h.setPendingChallenge(0)
 	event["kind"], event["type"], event["id"] = "challenge", kind, h.sequence
 	if err := h.emit(event); err != nil {
 		return guiResponse{}, err
@@ -148,6 +156,21 @@ func (h *guiHandler) askContext(ctx context.Context, kind string, event map[stri
 				return guiResponse{}, errors.New("GUI authentication cancelled")
 			}
 			return response, nil
+		}
+	}
+}
+
+// Switching challenges and dropping queued answers are one operation, so a
+// cancelled reply cannot fill the next challenge's response slot.
+func (h *guiHandler) setPendingChallenge(id int) {
+	h.responseMu.Lock()
+	defer h.responseMu.Unlock()
+	h.pending = id
+	for {
+		select {
+		case <-h.responses:
+		default:
+			return
 		}
 	}
 }

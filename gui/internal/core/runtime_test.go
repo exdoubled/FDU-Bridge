@@ -208,6 +208,16 @@ func TestRejectsUnknownToolAndMissingFiles(t *testing.T) {
 	}
 }
 
+func TestRespondReportsExitedCore(t *testing.T) {
+	r := New(t.TempDir())
+	if err := r.Respond(map[string]any{"operation": "relogin"}); err == nil {
+		t.Fatal("relogin silently succeeded without a running core")
+	}
+	if stopped, err := r.Stop(time.Second); err != nil || !stopped {
+		t.Fatalf("stopping an exited core: stopped=%v error=%v", stopped, err)
+	}
+}
+
 func TestRedactsCredentialsAndCallbackParameters(t *testing.T) {
 	text := Redact("Authorization: Bearer bearer-private\npassword=private-pass https://vpn.invalid/callback?code=private-code", []string{"private-pass"})
 	text += Redact("Given auth data: {Cookies:[{Name:sid Value:private-cookie}]}", nil)

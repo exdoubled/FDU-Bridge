@@ -24,6 +24,8 @@ import (
 
 const guiPrefix = "@@FDU_GUI@@"
 
+var ErrNotRunning = errors.New("FDU 核心已退出，请重新登录或连接")
+
 // Tool actions run the core once with a flag instead of connecting.
 var Tools = map[string]bool{"auth-info": true, "trust-device": true, "untrust-device": true}
 
@@ -332,20 +334,20 @@ func (r *Runtime) Connected() bool {
 	return r.runningLocked() && r.connected
 }
 
-// Respond sends one JSON line to the child; it is a no-op once the child exited.
+// Respond sends one JSON line to the child, or reports that it has exited.
 func (r *Runtime) Respond(response map[string]any) error {
+	r.writeMu.Lock()
+	defer r.writeMu.Unlock()
 	r.mu.Lock()
 	stdin, running := r.stdin, r.runningLocked()
 	r.mu.Unlock()
 	if !running {
-		return nil
+		return ErrNotRunning
 	}
 	b, err := json.Marshal(response)
 	if err != nil {
 		return err
 	}
-	r.writeMu.Lock()
-	defer r.writeMu.Unlock()
 	_, err = stdin.Write(append(b, '\n'))
 	return err
 }
@@ -359,6 +361,9 @@ func (r *Runtime) Stop(timeout time.Duration) (bool, error) {
 		return true, nil
 	}
 	if err := r.Respond(map[string]any{"operation": "stop"}); err != nil {
+		if errors.Is(err, ErrNotRunning) || !r.Running() {
+			return true, nil
+		}
 		return false, err
 	}
 	select {
