@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/mythologyli/zju-connect/routing"
+	"github.com/mythologyli/zju-connect/gui/internal/netcheck"
 )
 
 // Diagnostics add only bounded, read-only controller requests.
@@ -22,8 +22,15 @@ func diagnosticRead(path string) bool {
 		return false
 	}
 	host := q.Get("name")
-	return (q.Get("type") == "A" || q.Get("type") == "AAAA") &&
-		(routing.AIProvider(host) != "" || host == "library.fudan.edu.cn" || host == "icourse.fudan.edu.cn")
+	if q.Get("type") != "A" && q.Get("type") != "AAAA" {
+		return false
+	}
+	for _, target := range netcheck.Targets() {
+		if host == target.Host {
+			return true
+		}
+	}
+	return false
 }
 
 // Only fields needed for local accounting and allowlisted AI diagnostics are read.
