@@ -2,15 +2,20 @@ package netcheck
 
 import (
 	"context"
+	"crypto/sha1"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestProbeRejectsUnknownTargetsAndNonLoopbackProxies(t *testing.T) {
@@ -70,6 +75,46 @@ func TestProbeClassifiesAuthenticationAndRecordsTLS(t *testing.T) {
 				t.Fatalf("connection stages = %+v", result.Checks)
 			}
 		})
+	}
+}
+
+func TestAIHTTPResponsesReportTransportReachability(t *testing.T) {
+	for _, status := range []int{400, 404, 405, 429, 500} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) }))
+			defer server.Close()
+			transport := server.Client().Transport.(*http.Transport)
+			for _, provider := range []string{"anthropic", "campus"} {
+				result := probeTarget(context.Background(), Target{ID: "fixture", Host: "127.0.0.1", Provider: provider, URL: server.URL}, Options{Lookup: localLookup}, transport)
+				want := "ok"
+				if provider == "campus" {
+					want = "error"
+				}
+				if result.HTTPStatus != status || findCheck(t, result, "http").Status != want {
+					t.Fatalf("%s HTTP %d lost transport reachability: %+v", provider, status, result)
+				}
+			}
+		})
+	}
+}
+
+func TestWebSocketIsNotAttemptedAfterHTTPTransportFailure(t *testing.T) {
+	failed := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	failed.Close()
+	var attempted atomic.Bool
+	websocket := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempted.Store(true)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer websocket.Close()
+	transport, err := newTransport("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer transport.CloseIdleConnections()
+	result := probeTarget(context.Background(), Target{ID: "fixture", Host: "127.0.0.1", Provider: "openai", URL: failed.URL, wsURL: websocket.URL}, Options{Lookup: localLookup}, transport)
+	if result.HTTPStatus != 0 || attempted.Load() || findCheck(t, result, "websocket").Status != "skipped" {
+		t.Fatalf("a failed HTTP transport triggered a redundant WebSocket attempt: %+v", result)
 	}
 }
 
@@ -137,6 +182,70 @@ func TestProxyEntryIsLabeledAndEnvironmentProxyIsIgnored(t *testing.T) {
 	check := findCheck(t, result, "tcp")
 	if check.Status != "ok" || !strings.Contains(check.Detail, "代理入口") || strings.Contains(check.Detail, "服务 IP") {
 		t.Fatalf("proxy TCP detail = %+v", check)
+	}
+}
+
+func TestWebSocketValidatesUpgradeAndNeverSendsApplicationData(t *testing.T) {
+	for _, valid := range []bool{true, false} {
+		t.Run(map[bool]string{true: "valid", false: "invalid_accept"}[valid], func(t *testing.T) {
+			closed := make(chan error, 1)
+			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.ProtoMajor != 1 || r.Header.Get("Upgrade") != "websocket" || r.Header.Get("Sec-WebSocket-Version") != "13" || r.Header.Get("Authorization") != "" {
+					t.Error("invalid or authenticated handshake request")
+				}
+				accept := "invalid"
+				if valid {
+					sum := sha1.Sum([]byte(r.Header.Get("Sec-WebSocket-Key") + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"))
+					accept = base64.StdEncoding.EncodeToString(sum[:])
+				}
+				connection, buffered, err := w.(http.Hijacker).Hijack()
+				if err != nil {
+					closed <- err
+					return
+				}
+				defer connection.Close()
+				fmt.Fprintf(buffered, "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: %s\r\n\r\n", accept)
+				buffered.Flush()
+				connection.SetReadDeadline(time.Now().Add(time.Second))
+				_, err = buffered.ReadByte()
+				closed <- err
+			}))
+			server.EnableHTTP2 = true
+			server.StartTLS()
+			defer server.Close()
+			transport, err := newTransport("")
+			if err != nil {
+				t.Fatal(err)
+			}
+			roots := x509.NewCertPool()
+			roots.AddCert(server.Certificate())
+			transport.TLSClientConfig.RootCAs = roots
+			defer transport.CloseIdleConnections()
+			check := checkWebSocket(context.Background(), probeClient(transport), server.URL)
+			want := "error"
+			if valid {
+				want = "ok"
+			}
+			if check.Status != want {
+				t.Fatalf("WebSocket check = %+v, want %s", check, want)
+			}
+			if err := <-closed; err != io.EOF {
+				t.Fatalf("expected connection close without application data, got %v", err)
+			}
+		})
+	}
+}
+
+func TestWebSocketAuthenticationIsReachable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusUnauthorized) }))
+	defer server.Close()
+	transport, err := newTransport("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer transport.CloseIdleConnections()
+	if got := checkWebSocket(context.Background(), probeClient(transport), server.URL); got.Status != "auth" || !strings.Contains(got.Detail, "已响应") {
+		t.Fatalf("WebSocket authentication = %+v", got)
 	}
 }
 
