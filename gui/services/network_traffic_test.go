@@ -110,3 +110,25 @@ func TestTrafficRatesUseEachSourcesLastSuccessfulSample(t *testing.T) {
 		}
 	}
 }
+
+func TestLargeSnapshotsSlowSamplingAndKeepRates(t *testing.T) {
+	now := time.Unix(1000, 0)
+	s := NewNetworkService(nil)
+	observed := clash.ConnectionSnapshot{Connections: make([]clash.ObservedConnection, 1000)}
+	observed.Connections[0] = clash.ObservedConnection{ID: "external", Start: now, Chains: []string{"DIRECT"}}
+	view := s.sample(routing.TrafficSnapshot{}, false, observed, true, "", now)
+	if view.PollIntervalMS != 1000 {
+		t.Fatalf("small snapshot interval: %d", view.PollIntervalMS)
+	}
+	observed.Connections = append(observed.Connections, clash.ObservedConnection{})
+	observed.Connections[0].Upload = 600
+	view = s.sample(routing.TrafficSnapshot{}, false, observed, true, "", now.Add(6*time.Second))
+	if view.PollIntervalMS != 5000 || view.NonFDU.UploadRate != 100 {
+		t.Fatalf("large snapshot lost throttling or rate accuracy: %+v", view)
+	}
+	observed.Connections = observed.Connections[:1000]
+	view = s.sample(routing.TrafficSnapshot{}, false, observed, true, "", now.Add(7*time.Second))
+	if view.PollIntervalMS != 1000 {
+		t.Fatalf("small snapshot did not restore sampling: %d", view.PollIntervalMS)
+	}
+}
