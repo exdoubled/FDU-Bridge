@@ -77,6 +77,17 @@ func (c *Connection) RuntimePath() string {
 	return c.runtimeFile
 }
 
+// ControllerBinding snapshots the selected target without discovery or mutation.
+func (c *Connection) ControllerBinding() (string, ControlAPI) {
+	c.targetMu.RLock()
+	defer c.targetMu.RUnlock()
+	var controller ControlAPI
+	if c.controller != nil {
+		controller = *c.controller
+	}
+	return c.runtimeFile, controller
+}
+
 // Controller returns the selected controller without making any mutation request.
 func (c *Connection) Controller(root string) API { api, _ := c.api(root); return api }
 

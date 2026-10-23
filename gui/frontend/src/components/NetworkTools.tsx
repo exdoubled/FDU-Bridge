@@ -80,8 +80,8 @@ export function NetworkToolsProvider({ children }: { children: ReactNode }) {
     };
   }, [active]);
 
-  const runProbes = useCallback((ids: string[], automatic = false) => {
-    if (!ids.length || (!automatic && pending.current > 0)) return;
+  const runProbes = useCallback((ids: string[]) => {
+    if (!ids.length || pending.current > 0) return;
     pending.current++;
     setBusy(true);
     queue.current = queue.current.then(async () => {
@@ -102,7 +102,7 @@ export function NetworkToolsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (status.connected && !wasConnected.current) runProbes(campusTargets.map((target) => target.id), true);
+    if (status.connected && !wasConnected.current) runProbes(campusTargets.map((target) => target.id));
     wasConnected.current = status.connected;
   }, [status.connected, runProbes]);
 
