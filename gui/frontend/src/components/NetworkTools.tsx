@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { Activity, ArrowDown, ArrowUp, ChevronRight, Info, RefreshCw } from "lucide-react";
+import { ArrowDown, ArrowDownUp, ArrowUp, ChevronRight, Info, RefreshCw, School } from "lucide-react";
 import { NetworkService, errorText, type NetworkTarget, type NetworkView, type ProbeReport, type TrafficBucket } from "../lib/api";
 import { useStore } from "../store";
 import { CardTitle, Spinner } from "./ui";
@@ -124,7 +124,7 @@ export function formatBytes(value: number): string {
 function TrafficCard({ label, bucket }: { label: string; bucket?: TrafficBucket }) {
   return (
     <section className="card traffic-card">
-      <CardTitle icon={Activity} extra={<span className="traffic-count">{bucket ? bucket.connections : "—"} 连接</span>}>{label}</CardTitle>
+      <CardTitle icon={ArrowDownUp} extra={<span className="traffic-count">{bucket ? bucket.connections : "—"} 连接</span>}>{label}</CardTitle>
       <div className="traffic-rates">
         <div><ArrowUp size={15} /><strong>{bucket ? formatBytes(bucket.uploadRate) : "—"}</strong><span>/s</span></div>
         <div><ArrowDown size={15} /><strong>{bucket ? formatBytes(bucket.downloadRate) : "—"}</strong><span>/s</span></div>
@@ -233,7 +233,7 @@ export function CampusChecks() {
   const { busy, probe } = useNetworkTools();
   return (
     <section className="card campus-checks">
-      <CardTitle icon={Activity} extra={<button className="link" disabled={busy} onClick={() => probe(campusTargets.map((target) => target.id))}>刷新</button>}>校园可用性</CardTitle>
+      <CardTitle icon={School} extra={<button className="btn sm" disabled={busy} onClick={() => probe(campusTargets.map((target) => target.id))}>{busy ? "检测中…" : "刷新"}</button>}>校园可用性</CardTitle>
       {campusTargets.map((target) => <ProbeRow key={target.id} target={target} campus />)}
     </section>
   );

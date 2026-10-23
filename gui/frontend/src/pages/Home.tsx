@@ -92,7 +92,7 @@ export function Home() {
       <div className="page-body">
         <div className="stack">
           {!active && status.external && <Banner tone="warning">其他 FDU 正在运行，请先关闭它再启用校内访问</Banner>}
-          <section className="card hero">
+          <section className={`card hero ${tone}`}>
             <div className={`hero-icon ${tone === "off" ? "" : tone}`}>
               <HeroIcon size={28} className={tone === "busy" ? "spin" : undefined} />
             </div>
@@ -102,7 +102,11 @@ export function Home() {
                 {status.connected && status.connectedAt > 0 && <span className="pill success">{formatUptime(status.connectedAt, now)}</span>}
                 {metaPills.map((p) => <span key={p} className="pill">{p}</span>)}
               </div>
-              {status.problem && <div className="note">{status.problem}</div>}
+              <div className="hero-coverage">
+                <Network size={14} /><span className="faint">覆盖范围</span>
+                <span>{status.coverage || (active ? "正在检查覆盖范围…" : "启用后显示实际覆盖范围")}</span>
+              </div>
+              {status.problem && <div className={tone === "bad" ? "note danger" : "note"}>{status.problem}</div>}
               {status.protocol === "atrust" && status.saved && !status.external && !status.tool && (
                 <button className={status.authRequired ? "btn primary" : "link"} style={{ marginTop: 10 }} onClick={relogin}
                   disabled={busy || status.stopping || (status.starting && !status.authRequired && !["campus-unavailable", "authentication"].includes(status.state))}>
@@ -116,23 +120,12 @@ export function Home() {
 
           <div className="grid-2">
             <section className="card">
-              <CardTitle icon={Network}>覆盖范围</CardTitle>
-              <div>{status.coverage || (active ? "正在检查覆盖范围…" : "启用后显示实际覆盖范围")}</div>
-            </section>
-            <section className="card">
-              <CardTitle icon={Globe}>外网节点</CardTitle>
+              <CardTitle icon={Globe} extra={!!nodes?.choices.length && <button className="link" onClick={() => navigate("nodes")}>切换节点 <ArrowRight size={14} /></button>}>外网节点</CardTitle>
               <div className="big-value ellipsis" title={nodes?.current}>{nodes?.current || "—"}</div>
               {(nodesError || nodes?.problem) && <div className="note ellipsis" title={nodesError || nodes?.problem}>{nodesError || nodes?.problem}</div>}
-              {!!nodes?.choices.length && <button className="link" style={{ marginTop: 10 }} onClick={() => navigate("nodes")}>切换节点 <ArrowRight size={14} /></button>}
             </section>
-          </div>
-
-          <TrafficCards />
-          <CampusChecks />
-
-          <section className="card row" style={{ alignItems: "center" }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <CardTitle icon={Route}>校内资源</CardTitle>
+            <section className="card">
+              <CardTitle icon={Route} extra={<button className="link" onClick={() => navigate("rules")}>管理校内资源 <ArrowRight size={14} /></button>}>校内资源</CardTitle>
               {rules ? (
                 <div className="row" style={{ flexWrap: "wrap" }}>
                   <span><span className="stat">{rules.enabled}</span> <span className="muted">项启用</span></span>
@@ -142,9 +135,11 @@ export function Home() {
                   </span>
                 </div>
               ) : <div className="muted">尚未读取校内资源</div>}
-            </div>
-            <button className="btn" onClick={() => navigate("rules")}>管理校内资源</button>
-          </section>
+            </section>
+          </div>
+
+          <CampusChecks />
+          <TrafficCards />
         </div>
       </div>
     </>

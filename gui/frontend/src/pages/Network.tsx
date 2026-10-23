@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Activity, FlaskConical } from "lucide-react";
+import { Bot, FlaskConical } from "lucide-react";
 import { aiProviders, formatBytes, ProbeRow, TrafficCards, useNetworkTools } from "../components/NetworkTools";
 import { CardTitle } from "../components/ui";
 import type { NetworkConnection } from "../lib/api";
@@ -37,7 +37,7 @@ export function Network() {
         <div className="stack">
           <TrafficCards />
           <section className="card connections-card">
-            <CardTitle icon={Activity} extra={<select className="select provider-select" aria-label="筛选 AI 服务商" value={provider} onChange={(event) => setProvider(event.target.value)}>
+            <CardTitle icon={Bot} extra={<select className="select provider-select" aria-label="筛选 AI 服务商" value={provider} onChange={(event) => setProvider(event.target.value)}>
               <option value="all">全部服务商</option>
               {Object.entries(aiProviders).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
             </select>}>AI 当前连接 <span className="faint">{connections.length}</span></CardTitle>

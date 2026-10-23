@@ -153,14 +153,6 @@ export function Settings() {
         <div className="stack">
           <IntegrationSettings key={maintenanceVersion} onDirtyChange={setIntegrationDirty} />
 
-          <UpdateSettings />
-
-          <MaintenanceSettings disabled={dirty || integrationDirty || saving}
-            migrationDisabled={edited || integrationDirty || saving || (dirty && !(!view?.saved && view?.example))} onMigrated={async () => {
-            show(await SettingsService.Current());
-            setMaintenanceVersion((version) => version + 1);
-          }} />
-
           <section className="card section" style={{ padding: 0 }}>
             <div className="section-head"><Palette size={16} />外观与启动</div>
             <Setting label="主题">
@@ -179,6 +171,8 @@ export function Settings() {
               <Switch checked={!!config?.closeToTray} onChange={(closeToTray) => savePrefs({ closeToTray })} label="关闭到托盘" />
             </Setting>
           </section>
+
+          <UpdateSettings />
 
           <section className="card section" style={{ padding: 0 }}>
             <button className={`collapse-head${open.advanced ? " open" : ""}`} aria-expanded={!!open.advanced}
@@ -222,6 +216,12 @@ export function Settings() {
               </>}
             </>}
           </section>
+
+          <MaintenanceSettings disabled={dirty || integrationDirty || saving}
+            migrationDisabled={edited || integrationDirty || saving || (dirty && !(!view?.saved && view?.example))} onMigrated={async () => {
+            show(await SettingsService.Current());
+            setMaintenanceVersion((version) => version + 1);
+          }} />
         </div>
       </div>
       {dirty && open.advanced && (

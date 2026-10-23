@@ -31,8 +31,10 @@ export function Sidebar() {
       ))}
       <div className="sidebar-foot">
         <UpdateControl />
-        <span className={`dot ${tone === "off" ? "" : tone}`} />
-        <span className="ellipsis">{stateLabel(status)}</span>
+        <div className="sidebar-status">
+          <span className={`dot ${tone === "off" ? "" : tone}`} />
+          <span className="ellipsis" title={stateLabel(status)}>{stateLabel(status)}</span>
+        </div>
       </div>
     </nav>
   );

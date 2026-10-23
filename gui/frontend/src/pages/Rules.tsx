@@ -7,7 +7,7 @@ import { Empty, Spinner, Switch } from "../components/ui";
 
 const kinds: Record<RuleType, RuleKind> = { domain: RuleKind.Domain, suffix: RuleKind.Suffix, cidr: RuleKind.CIDR };
 const placeholders: Record<RuleType, string> = { domain: "校内网址或域名，例如 https://jwfw.fudan.edu.cn", suffix: "例如 fudan.edu.cn", cidr: "例如 10.20.0.0/16 或 10.20.26.253" };
-const tagTone: Record<RuleType, string> = { domain: "accent", suffix: "success", cidr: "warning" };
+const tagTone: Record<RuleType, string> = { domain: "accent", suffix: "success", cidr: "violet" };
 
 export function Rules() {
   const { setDirty, confirm, toast, fail, versions } = useStore();
@@ -161,7 +161,7 @@ export function Rules() {
       </header>
       <div className="page-body">
         {loadError ? (
-          <Empty icon={Route} title="无法读取校内资源" action={<button className="btn" onClick={load}>重试</button>}>{loadError}</Empty>
+          <Empty icon={Route} tone="danger" title="无法读取校内资源" action={<button className="btn" onClick={load}>重试</button>}>{loadError}</Empty>
         ) : (
           <div className="stack">
             {preview && imported && (

@@ -52,9 +52,9 @@ export function Banner({ tone = "info", children, action }: { tone?: "info" | "w
   );
 }
 
-export function Empty({ icon: Icon, title, children, action }: { icon: LucideIcon; title: string; children?: ReactNode; action?: ReactNode }) {
+export function Empty({ icon: Icon, title, children, action, tone }: { icon: LucideIcon; title: string; children?: ReactNode; action?: ReactNode; tone?: "danger" }) {
   return (
-    <div className="empty">
+    <div className={tone ? `empty ${tone}` : "empty"}>
       <div className="empty-icon"><Icon size={24} /></div>
       <div className="empty-title">{title}</div>
       {children && <div className="muted">{children}</div>}
