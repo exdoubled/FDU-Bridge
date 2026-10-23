@@ -91,21 +91,31 @@ func DataDir(executableDir string) string {
 	return filepath.Join(home, ".config", "fdu-connect")
 }
 
-func (s *Store) defaults() Config {
+func defaults() Config {
 	// Many Linux desktops hide tray icons, so a hidden window would look like a crash there.
 	return Config{Theme: "system", CloseToTray: runtime.GOOS != "linux", CheckUpdates: true, ClashDir: DefaultClashDir()}
 }
 
-func (s *Store) Load() Config {
-	c := s.defaults()
-	if b, err := os.ReadFile(s.path); err == nil {
-		_ = json.Unmarshal(b, &c)
-	}
-	if c.Theme != "light" && c.Theme != "dark" {
+// Decode applies the same defaults to imported and locally loaded preferences.
+func Decode(data []byte) (Config, error) {
+	c := defaults()
+	err := json.Unmarshal(data, &c)
+	if c.Theme == "" {
 		c.Theme = "system"
 	}
 	if c.ClashDir == "" {
 		c.ClashDir = DefaultClashDir()
+	}
+	return c, err
+}
+
+func (s *Store) Load() Config {
+	c := defaults()
+	if b, err := os.ReadFile(s.path); err == nil {
+		c, _ = Decode(b)
+	}
+	if c.Theme != "light" && c.Theme != "dark" {
+		c.Theme = "system"
 	}
 	c.AutoStart = s.autoStartEnabled()
 	return c

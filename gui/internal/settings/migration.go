@@ -35,24 +35,21 @@ func migrationPath(root, path string, missing bool) error {
 	if !w.Private(path) {
 		return errors.New("只迁移旧 GUI 目录内的受管文件")
 	}
-	for current := path; ; current = filepath.Dir(current) {
-		info, err := os.Lstat(current)
-		if err != nil && !(missing && os.IsNotExist(err)) {
-			return err
-		}
-		if err == nil && (info.Mode()&os.ModeSymlink != 0 || current == path && !info.Mode().IsRegular()) {
-			return errors.New("迁移不支持链接或非常规文件")
-		}
-		// Ancestors above the managed root may be OS aliases, such as macOS /var.
-		if current == w.Dir || filepath.Dir(current) == current {
-			break
-		}
+	if err := fsx.NoLinksBelow(w.Dir, path); err != nil {
+		return err
+	}
+	info, err := os.Stat(path)
+	if err != nil && !(missing && os.IsNotExist(err)) {
+		return err
+	}
+	if err == nil && !info.Mode().IsRegular() {
+		return errors.New("迁移不支持非常规文件")
 	}
 	return nil
 }
 
 // PreviewMigration reads only the selected GUI's preferences, selected managed
-// TOML and its private rule/login files. It never scans/copies a whole directory.
+// TOML and its private rule/login/resource files. It never copies a whole directory.
 func PreviewMigration(source, destination string, autoStart bool) (*Migration, error) {
 	source, err := filepath.Abs(source)
 	if err != nil {
@@ -87,11 +84,8 @@ func PreviewMigration(source, destination string, autoStart bool) (*Migration, e
 	if err != nil {
 		return nil, fmt.Errorf("请选择包含 gui-settings.json 的旧 GUI 目录：%w", err)
 	}
-	if json.Unmarshal(raw, &p.preferences) != nil {
+	if p.preferences, err = appconf.Decode(raw); err != nil {
 		return nil, errors.New("旧 GUI 设置无效")
-	}
-	if p.preferences.Theme == "" {
-		p.preferences.Theme = "system"
 	}
 	if p.preferences.Theme != "system" && p.preferences.Theme != "light" && p.preferences.Theme != "dark" {
 		return nil, errors.New("旧 GUI 主题设置无效")
@@ -105,13 +99,7 @@ func PreviewMigration(source, destination string, autoStart bool) (*Migration, e
 	if raw, err = read(journal, 65536, true); err != nil {
 		return nil, err
 	} else if raw != nil {
-		var state struct {
-			Active  bool `json:"active"`
-			Pending bool `json:"pending"`
-		}
-		if json.Unmarshal(raw, &state) != nil || state.Active || state.Pending {
-			return nil, errors.New("旧目录有未恢复的 Clash 接入，请先在旧程序中停用")
-		}
+		return nil, errors.New("旧目录仍有 Clash 接入记录，请先在旧程序中移除接入，再迁移")
 	}
 	config := p.preferences.ConfigPath
 	if config == "" {
@@ -142,11 +130,11 @@ func PreviewMigration(source, destination string, autoStart bool) (*Migration, e
 		if file.path == "" {
 			continue
 		}
-		data, e := read(file.path, 4*1024*1024, !file.rules)
+		data, e := read(file.path, 4*1024*1024, true)
 		if e != nil {
 			return nil, e
 		}
-		if file.rules {
+		if file.rules && data != nil {
 			if len(data) > 256*1024 {
 				return nil, errors.New("旧规则文件超过 256 KiB")
 			}
@@ -162,6 +150,36 @@ func PreviewMigration(source, destination string, autoStart bool) (*Migration, e
 		return nil, err
 	}
 	p.values = view.Values
+	// Certificates and resource files inside the old portable directory must
+	// move with it. Genuine external references remain external.
+	for _, key := range []string{"cert_file", "resource_file"} {
+		path := resolve(original[key])
+		if path == "" || !old.Private(path) {
+			continue
+		}
+		data, e := read(path, 4*1024*1024, false)
+		if e != nil {
+			return nil, e
+		}
+		rel, _ := filepath.Rel(source, path)
+		target := filepath.Join(destination, rel)
+		if target == w.Target || target == filepath.Join(destination, "gui-settings.json") {
+			return nil, errors.New("旧资源文件与目标设置文件重名，未迁移")
+		}
+		duplicate := false
+		for _, copy := range w.snapshot.Copies {
+			if copy.Destination == target {
+				if copy.Source != path {
+					return nil, errors.New("旧资源文件与目标状态或规则文件重名，未迁移")
+				}
+				duplicate = true
+			}
+		}
+		p.values[key] = target
+		if !duplicate {
+			w.snapshot.Copies = append(w.snapshot.Copies, clashsetup.SettingCopy{Source: path, Destination: target, Hash: fsx.Hash(data), DestinationHash: fsx.HashFile(target)})
+		}
+	}
 	// Workspace normalizes private state/rules. Preserve all external output
 	// paths: moving this GUI does not give it ownership of those external files.
 	for _, key := range []string{"graph_code_file", "debug_pcap_file", "debug_tls_log_file"} {
@@ -203,6 +221,13 @@ func PreviewMigration(source, destination string, autoStart bool) (*Migration, e
 			return nil, e
 		}
 		outputs[copy.Destination] = data
+	}
+	for path := range outputs {
+		if path != filepath.Join(destination, "gui-settings.json") {
+			if _, exists := outputs[path+".bak"]; exists {
+				return nil, errors.New("旧资源文件与迁移备份文件重名，未迁移")
+			}
+		}
 	}
 	for path, data := range outputs {
 		if err = migrationPath(destination, path, true); err != nil {

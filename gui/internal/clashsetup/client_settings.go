@@ -248,7 +248,7 @@ func clientSettings(r Request) (SettingsReply, error) {
 					destHash = digest(existing)
 				}
 				reply.Copies = append(reply.Copies, SettingCopy{old, destination, digest(data), destHash, false})
-			} else {
+			} else if !os.IsNotExist(e) {
 				return reply, fmt.Errorf("无法导入规则文件：%w", e)
 			}
 		}
