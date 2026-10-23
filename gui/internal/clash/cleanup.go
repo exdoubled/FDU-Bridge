@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/mythologyli/zju-connect/gui/internal/clashsetup"
 	"github.com/mythologyli/zju-connect/gui/internal/fsx"
 	"gopkg.in/yaml.v3"
 )
@@ -35,7 +37,7 @@ func (c *Connection) backupChanges(changes []cleanupChange) (string, map[string]
 		name := fmt.Sprintf("%d.bak", i+1)
 		data, err := fsx.ReadBounded(change.path, 8*1024*1024)
 		if err != nil && !os.IsNotExist(err) {
-			return "", nil, err
+			return "", nil, fmt.Errorf("备份 %s：%w", change.path, err)
 		}
 		if err == nil {
 			originals[change.path] = data
@@ -181,9 +183,8 @@ func emptyExtension(m map[string]any) bool {
 	return true
 }
 
-// RemoveCampus removes only the recorded integration of the currently selected
-// client. Old current-format journals are supported by checking their generated
-// entries against the existing planner, plus the journal's feed/profile hashes.
+// RemoveCampus targets the recorded client without changing the user's current
+// binding. All ownership and live-controller checks still apply to that client.
 func (c *Connection) RemoveCampus(a CampusAttachment, values map[string]any, finalize func() error) (string, error) {
 	if _, err := campusProviderBytes(a); err != nil {
 		return "", err
@@ -194,9 +195,51 @@ func (c *Connection) RemoveCampus(a CampusAttachment, values map[string]any, fin
 		}
 		return "", err
 	}
-	if c.RuntimePath() != a.RuntimeFile {
-		return "", ErrClashChanging
+	target := &Connection{Dir: c.Dir, API: c.API, runtimeFile: a.RuntimeFile}
+	if a.RuntimeFile != "" && c.API == nil {
+		c.targetMu.RLock()
+		if clientPathKey(c.runtimeFile) == clientPathKey(a.RuntimeFile) {
+			target.controller = c.controller
+		}
+		c.targetMu.RUnlock()
+		if target.controller == nil {
+			binding, err := ResolveClientTarget(a.RuntimeFile)
+			if err != nil {
+				return "", err
+			}
+			target.controller = binding.Controller
+		}
 	}
+	feed, err := c.campusFeed()
+	if err != nil {
+		return "", err
+	}
+	target.feed = feed // owned and closed by the original Connection
+	return target.removeCampus(a, values, finalize)
+}
+
+func (c *Connection) removeCampus(a CampusAttachment, values map[string]any, finalize func() error) (string, error) {
+	if a.SocksPort != 0 && a.HTTPPort != 0 && a.UpstreamPort != 0 {
+		if values == nil {
+			loaded, err := clashsetup.ReadSettings(a.Config, c.Dir)
+			if err != nil {
+				return "", err
+			}
+			values = loaded.Values
+		}
+		values = maps.Clone(values)
+		route, _ := values["routing"].(map[string]any)
+		route = maps.Clone(route)
+		if route == nil {
+			route = map[string]any{}
+		}
+		values["socks_bind"] = fmt.Sprintf("127.0.0.1:%d", a.SocksPort)
+		values["http_bind"] = fmt.Sprintf("127.0.0.1:%d", a.HTTPPort)
+		route["enabled"], route["rules_file"] = true, a.Rules
+		route["upstream_proxy"] = fmt.Sprintf("socks5://127.0.0.1:%d", a.UpstreamPort)
+		values["routing"] = route
+	}
+	// Legacy journals without ports retain the previous strict planner checks.
 	p, err := c.PrepareCampus(a.Root, a.Config, values)
 	if err != nil {
 		return "", err
@@ -230,19 +273,19 @@ func (c *Connection) RemoveCampus(a CampusAttachment, values map[string]any, fin
 		inputs[path] = hash
 	}
 	readFile := func(path string) ([]byte, error) {
-		// Check through the managed root, without rejecting system aliases
-		// above it (for example, macOS /var -> /private/var).
-		for dir := path; ; dir = filepath.Dir(dir) {
-			info, e := os.Lstat(dir)
-			if e != nil {
-				return nil, e
-			}
-			if info.Mode()&os.ModeSymlink != 0 {
-				return nil, errors.New("不支持链接形式的配置路径")
-			}
-			if dir == a.Root || dir == c.Dir || filepath.Dir(dir) == dir {
+		roots := []string{a.Root, c.Dir}
+		if path == a.RuntimeFile {
+			roots = append(roots, filepath.Dir(a.RuntimeFile))
+		}
+		err := fsx.ErrOutsideRoot
+		for _, root := range roots {
+			err = fsx.NoLinksBelow(root, path)
+			if !errors.Is(err, fsx.ErrOutsideRoot) {
 				break
 			}
+		}
+		if err != nil {
+			return nil, err
 		}
 		raw, e := fsx.ReadBounded(path, 8*1024*1024)
 		if e != nil {
@@ -286,6 +329,9 @@ func (c *Connection) RemoveCampus(a CampusAttachment, values map[string]any, fin
 		return "", err
 	}
 	sourceInstalled := containsRuntimeFDU(runtime)
+	if a.RuntimeFile != "" && sourceInstalled {
+		return "", errors.New("客户端仍安装着 FDU 持久扩展，请先在客户端移除该扩展并刷新配置，再清理接入")
+	}
 	for key, value := range runtimeOverrides(live, api) {
 		runtime[key] = value
 	}
@@ -422,7 +468,7 @@ func (c *Connection) RemoveCampus(a CampusAttachment, values map[string]any, fin
 		return "", errors.New("用户配置仍引用 FDU 项目，请先解除引用")
 	}
 	// Runtime-overlay clients retain their original source file byte for byte.
-	if a.RuntimeFile == "" || sourceInstalled {
+	if a.RuntimeFile == "" {
 		if err = queue(runtimePath, runtime, false); err != nil {
 			return "", err
 		}

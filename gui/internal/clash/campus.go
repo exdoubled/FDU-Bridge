@@ -30,6 +30,9 @@ type CampusAttachment struct {
 	Global       string   `json:"global"`
 	Outside      string   `json:"outside"`
 	MixedPort    int      `json:"mixed_port"`
+	SocksPort    int      `json:"socks_port,omitempty"`
+	HTTPPort     int      `json:"http_port,omitempty"`
+	UpstreamPort int      `json:"upstream_port,omitempty"`
 	UnsafeNodes  []string `json:"unsafe_nodes"`
 	Active       bool     `json:"active"`
 	RuntimeFile  string   `json:"runtime_file,omitempty"`
@@ -196,6 +199,7 @@ func (c *Connection) ImportCampus(plan Plan) (string, CampusAttachment, error) {
 	}
 	a = CampusAttachment{Root: root, ProfileUID: plan.ProfileUID, Config: plan.Config, Rules: plan.Rules, ProviderPath: plan.ProviderPath, ProviderHash: fsx.HashFile(plan.ProviderPath), ClashMode: plan.ClashMode, Global: global, Outside: outside, MixedPort: plan.MixedPort, UnsafeNodes: append([]string(nil), plan.UnsafeNodes...)}
 	a.RuntimeFile, a.RuntimeHash = plan.RuntimeFile, plan.RuntimeHash
+	a.SocksPort, a.HTTPPort, a.UpstreamPort = plan.SocksPort, plan.HTTPPort, plan.UpstreamPort
 	c.targetMu.Lock()
 	c.previousRuntime = ""
 	c.targetMu.Unlock()

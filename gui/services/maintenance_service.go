@@ -64,13 +64,6 @@ func (s *MaintenanceService) RemoveIntegration() (string, error) {
 	if a == nil {
 		return "", errors.New("没有可核验的 FDU 接入记录；未修改客户端")
 	}
-	root, err := s.b.campusRoot()
-	if err != nil {
-		return "", err
-	}
-	if root != a.Root {
-		return "", errors.New("当前选择的客户端与接入记录不一致")
-	}
 	view := s.b.currentView()
 	if view == nil {
 		return "", errors.New("无法读取受管配置")

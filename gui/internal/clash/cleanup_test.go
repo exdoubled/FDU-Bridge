@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/mythologyli/zju-connect/gui/internal/fsx"
+	"github.com/pelletier/go-toml/v2"
 	"gopkg.in/yaml.v3"
 )
 
@@ -138,6 +139,76 @@ func TestCleanupAcceptsInternetChoiceChangedAfterImport(t *testing.T) {
 	}
 }
 
+func TestCleanupUsesInstalledPortsAfterSettingsChange(t *testing.T) {
+	for _, edited := range []bool{false, true} {
+		t.Run(map[bool]string{false: "saved settings", true: "edited installed entry"}[edited], func(t *testing.T) {
+			c, f, a, _ := importedCleanupFixture(t, false)
+			var values map[string]any
+			if err := toml.Unmarshal(mustRead(t, a.Config), &values); err != nil {
+				t.Fatal(err)
+			}
+			values["socks_bind"], values["http_bind"] = "127.0.0.1:1180", "127.0.0.1:1181"
+			values["routing"].(map[string]any)["upstream_proxy"] = "socks5://127.0.0.1:17999"
+			raw, _ := toml.Marshal(values)
+			_ = os.WriteFile(a.Config, raw, 0600)
+			if edited {
+				path := filepath.Join(a.Root, "clash-verge.yaml")
+				_ = os.WriteFile(path, []byte(strings.ReplaceAll(string(mustRead(t, path)), "port: 1080", "port: 1180")), 0600)
+			}
+			_, err := c.RemoveCampus(a, values, nil)
+			if edited {
+				if err == nil || f.cleaned || fsx.HashFile(a.ProviderPath) == "" {
+					t.Fatal("cleanup accepted an edited installed entry")
+				}
+				return
+			}
+			if err != nil || !f.cleaned || fsx.HashFile(a.Config) != fsx.Hash(raw) {
+				t.Fatalf("cleanup must use installation ports without rewriting saved settings: %v", err)
+			}
+		})
+	}
+}
+
+func TestCleanupTargetsRecordedClientWithoutChangingSelection(t *testing.T) {
+	for _, runtime := range []bool{false, true} {
+		t.Run(map[bool]string{false: "verge", true: "runtime"}[runtime], func(t *testing.T) {
+			c, f, a, _ := importedCleanupFixture(t, runtime)
+			other := filepath.Join(t.TempDir(), "other.yaml")
+			c.ConfigureTarget(other, nil)
+			if _, err := c.RemoveCampus(a, nil, nil); err != nil {
+				t.Fatal(err)
+			}
+			if !f.cleaned || c.RuntimePath() != other || fsx.HashFile(a.ProviderPath) != "" {
+				t.Fatal("cleanup changed current selection or missed recorded client")
+			}
+		})
+	}
+}
+
+func TestCleanupRefusesPersistentRuntimePatch(t *testing.T) {
+	c, f, a, p := importedCleanupFixture(t, true)
+	if err := os.WriteFile(a.RuntimeFile, []byte(p.Payload), 0600); err != nil {
+		t.Fatal(err)
+	}
+	p, err := c.PrepareCampus(a.Root, a.Config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, a, err = c.ImportCampus(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := fsx.HashFile(a.RuntimeFile)
+	f.payload = ""
+	finalized := false
+	if _, err = c.RemoveCampus(a, nil, func() error { finalized = true; return nil }); err == nil || !strings.Contains(err.Error(), "扩展") {
+		t.Fatalf("persistent source patch needs explicit removal instructions: %v", err)
+	}
+	if finalized || f.payload != "" || fsx.HashFile(a.RuntimeFile) != before || fsx.HashFile(a.ProviderPath) == "" {
+		t.Fatal("cleanup orphaned persistent integration")
+	}
+}
+
 func importedCleanupFixture(t *testing.T, runtime bool) (*Connection, *cleanupAPI, CampusAttachment, Plan) {
 	t.Helper()
 	return importedCleanupFixtureAt(t, runtime, t.TempDir())
@@ -183,6 +254,24 @@ func TestCleanupAllowsLinkedParent(t *testing.T) {
 	}
 	if !f.cleaned || fsx.HashFile(a.ProviderPath) != "" {
 		t.Fatal("integration was not removed")
+	}
+}
+
+func TestCleanupAllowsExplicitlySelectedLinkedRoot(t *testing.T) {
+	for _, runtime := range []bool{false, true} {
+		t.Run(map[bool]string{false: "verge", true: "runtime"}[runtime], func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.Symlink(t.TempDir(), filepath.Join(dir, "client")); err != nil {
+				t.Skipf("directory symlink unavailable: %v", err)
+			}
+			c, f, a, _ := importedCleanupFixtureAt(t, runtime, dir)
+			if _, err := c.RemoveCampus(a, nil, nil); err != nil {
+				t.Fatal(err)
+			}
+			if !f.cleaned || fsx.HashFile(a.ProviderPath) != "" {
+				t.Fatal("integration was not removed")
+			}
+		})
 	}
 }
 
