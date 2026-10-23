@@ -64,6 +64,7 @@ func main() {
 			application.NewService(services.NewMaintenanceService(backend)),
 			application.NewService(services.NewAppService(backend)),
 			application.NewService(services.NewUpdateService(backend)),
+			application.NewService(services.NewNetworkService(backend)),
 		},
 		Assets: application.AssetOptions{Handler: application.AssetFileServerFS(assets)},
 		SingleInstance: &application.SingleInstanceOptions{

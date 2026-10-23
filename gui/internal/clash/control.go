@@ -47,7 +47,7 @@ type ControlAPI struct {
 func allowed(method, path string) bool {
 	switch method {
 	case http.MethodGet:
-		return path == "/configs" || path == "/proxies" || path == "/version"
+		return path == "/configs" || path == "/proxies" || path == "/version" || diagnosticRead(path)
 	case http.MethodPut:
 		return (strings.HasPrefix(path, "/proxies/") && !strings.ContainsAny(strings.TrimPrefix(path, "/proxies/"), "/?#") && len(path) > len("/proxies/")) || path == "/configs?force=true" || path == "/providers/rules/FDU-CAMPUS"
 	}
