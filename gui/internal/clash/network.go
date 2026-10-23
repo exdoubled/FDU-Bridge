@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/url"
 	"time"
+
+	"github.com/mythologyli/zju-connect/routing"
 )
 
 // Diagnostics add only bounded, read-only controller requests.
@@ -21,7 +23,7 @@ func diagnosticRead(path string) bool {
 	}
 	host := q.Get("name")
 	return (q.Get("type") == "A" || q.Get("type") == "AAAA") &&
-		(host == "library.fudan.edu.cn" || host == "icourse.fudan.edu.cn")
+		(routing.AIProvider(host) != "" || host == "library.fudan.edu.cn" || host == "icourse.fudan.edu.cn")
 }
 
 // Only fields needed for local accounting and allowlisted AI diagnostics are read.

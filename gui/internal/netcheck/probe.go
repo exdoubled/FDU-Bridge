@@ -3,7 +3,10 @@ package netcheck
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha1"
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
@@ -11,6 +14,7 @@ import (
 	"net/http/httptrace"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -21,6 +25,7 @@ type Target struct {
 	Host     string `json:"host"`
 	Provider string `json:"provider"`
 	URL      string `json:"url"`
+	wsURL    string
 }
 
 type Check struct {
@@ -51,6 +56,10 @@ func Targets() []Target {
 	return []Target{
 		{ID: "library", Name: "复旦图书馆", Host: "library.fudan.edu.cn", Provider: "campus", URL: "https://library.fudan.edu.cn/"},
 		{ID: "icourse", Name: "复旦课程平台", Host: "icourse.fudan.edu.cn", Provider: "campus", URL: "https://icourse.fudan.edu.cn/"},
+		{ID: "openai", Name: "OpenAI", Host: "api.openai.com", Provider: "openai", URL: "https://api.openai.com/v1/models", wsURL: "https://api.openai.com/v1/realtime"},
+		{ID: "anthropic", Name: "Anthropic", Host: "api.anthropic.com", Provider: "anthropic", URL: "https://api.anthropic.com/v1/models"},
+		{ID: "gemini", Name: "Gemini", Host: "generativelanguage.googleapis.com", Provider: "gemini", URL: "https://generativelanguage.googleapis.com/v1beta/models"},
+		{ID: "grok", Name: "Grok", Host: "api.x.ai", Provider: "grok", URL: "https://api.x.ai/v1/models"},
 	}
 }
 
@@ -158,7 +167,13 @@ func probeTarget(ctx context.Context, target Target, opts Options, transport *ht
 		response.Body.Close()
 	}
 	result.Checks = append(result.Checks, check)
-
+	if target.Provider != "campus" {
+		ws := Check{Kind: "websocket", Status: "unsupported", Detail: "未配置可免认证的 WebSocket 测试入口"}
+		if target.wsURL != "" {
+			ws = checkWebSocket(ctx, client, target.wsURL)
+		}
+		result.Checks = append(result.Checks, ws)
+	}
 	return result
 }
 
@@ -281,4 +296,51 @@ func errorDetail(err error) string {
 		}
 	}
 	return "网络请求失败"
+}
+
+func checkWebSocket(ctx context.Context, client *http.Client, endpoint string) Check {
+	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	defer cancel()
+	start := time.Now()
+	check := Check{Kind: "websocket", Status: "error"}
+	var nonce [16]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		check.Detail = "无法生成 WebSocket 握手随机数"
+		return check
+	}
+	key := base64.StdEncoding.EncodeToString(nonce[:])
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "websocket")
+	req.Header.Set("Sec-WebSocket-Version", "13")
+	req.Header.Set("Sec-WebSocket-Key", key)
+	response, err := client.Do(req)
+	check.Millis = time.Since(start).Milliseconds()
+	if err != nil {
+		check.Detail = "WebSocket 握手失败：" + errorDetail(err)
+		return check
+	}
+	defer response.Body.Close()
+	check.Status, check.Detail = responseDetail(response)
+	if response.StatusCode == http.StatusSwitchingProtocols {
+		sum := sha1.Sum([]byte(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"))
+		expected := base64.StdEncoding.EncodeToString(sum[:])
+		if !headerToken(response.Header.Get("Connection"), "upgrade") || !strings.EqualFold(response.Header.Get("Upgrade"), "websocket") || response.Header.Get("Sec-WebSocket-Accept") != expected {
+			check.Status, check.Detail = "error", "WebSocket 升级响应无效"
+		} else {
+			check.Status, check.Detail = "ok", "WebSocket 握手通过；已关闭，未发送应用数据"
+		}
+	} else if check.Status == "ok" {
+		check.Status, check.Detail = "error", check.Detail+"；未升级为 WebSocket"
+	}
+	return check
+}
+
+func headerToken(value, token string) bool {
+	for _, part := range strings.Split(value, ",") {
+		if strings.EqualFold(strings.TrimSpace(part), token) {
+			return true
+		}
+	}
+	return false
 }

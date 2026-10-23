@@ -6,7 +6,7 @@ func TestDiagnosticReadAllowlist(t *testing.T) {
 	for path, want := range map[string]bool{
 		"http://other.example/dns/query?name=api.openai.com&type=A": false,
 		"/connections":                                       true,
-		"/dns/query?name=api.openai.com&type=A":              false,
+		"/dns/query?name=api.openai.com&type=A":              true,
 		"/dns/query?name=icourse.fudan.edu.cn&type=AAAA":     true,
 		"/dns/query?name=unrelated.example&type=A":           false,
 		"/dns/query?name=api.openai.com.evil.example&type=A": false,
