@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -323,4 +324,41 @@ func TestDialContextResolvesThroughConfiguredLocalDNSServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = conn.Close()
+}
+
+func TestWindowsSystemDNSDoesNotBindToUnderlay(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows system DNS routing")
+	}
+	addresses, err := net.InterfaceAddrs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var host string
+	for _, address := range addresses {
+		ip, _, _ := net.ParseCIDR(address.String())
+		if ip.To4() != nil && !ip.IsLoopback() {
+			host = ip.String()
+			break
+		}
+	}
+	if host == "" {
+		t.Skip("no non-loopback IPv4 address")
+	}
+	listener, err := net.ListenPacket("udp4", net.JoinHostPort(host, "0"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	resolver := newUnderlayResolver("missing-dns-test-interface", "")
+	conn, err := resolver.Dial(t.Context(), "udp4", listener.LocalAddr().String())
+	if err != nil {
+		t.Fatalf("system DNS was forced onto the underlay interface: %v", err)
+	}
+	conn.Close()
+	resolver = newUnderlayResolver("missing-dns-test-interface", listener.LocalAddr().String())
+	if conn, err := resolver.Dial(t.Context(), "udp4", listener.LocalAddr().String()); err == nil {
+		conn.Close()
+		t.Fatal("explicit non-loopback DNS override lost its interface binding")
+	}
 }

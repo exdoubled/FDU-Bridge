@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
@@ -179,7 +180,9 @@ func newUnderlayResolver(interfaceName, localDNSServer string) *net.Resolver {
 				target = localDNSServer
 			}
 			boundInterface := interfaceName
-			if isLoopbackAddress(target) {
+			// Windows system DNS may point at the active TUN adapter. Let DNS
+			// follow its route while keeping the VPN destination interface-bound.
+			if isLoopbackAddress(target) || runtime.GOOS == "windows" && localDNSServer == "" {
 				boundInterface = ""
 			}
 			dialer := &platformdialer.Dialer{InterfaceName: boundInterface}
