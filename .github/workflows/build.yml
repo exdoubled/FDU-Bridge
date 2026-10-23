@@ -182,4 +182,5 @@ jobs:
             prerelease=true
             latest=false
           fi
-          gh release edit "$RELEASE_TAG" --draft=false --prerelease="$prerelease" --latest="$latest"
+          gh release edit "$RELEASE_TAG" --notes-file release-notes.md \
+            --draft=false --prerelease="$prerelease" --latest="$latest"
