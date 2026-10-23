@@ -83,6 +83,12 @@ func bypassConflicts(patterns []string, file string) ([]string, error) {
 	}
 	var conflicts []string
 	for _, pattern := range patterns {
+		// Keep the narrow icourse compatibility bypass. Broad campus/IP
+		// exclusions still need the normal coverage warning.
+		compat := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(pattern), "."))
+		if compat == "icourse.fudan.edu.cn" || compat == "*.icourse.fudan.edu.cn" || compat == ".icourse.fudan.edu.cn" {
+			continue
+		}
 		matched := false
 		for index, list := range [][]string{rules.Domains, rules.DomainSuffixes, rules.IPCIDRs} {
 			blocked := [][]string{disabled.Domains, disabled.DomainSuffixes, disabled.IPCIDRs}[index]

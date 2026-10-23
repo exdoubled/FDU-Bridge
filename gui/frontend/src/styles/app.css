@@ -120,6 +120,42 @@ input, textarea, select, button { font: inherit; color: inherit; }
 .stat { font-size: 22px; font-weight: 600; letter-spacing: 0.2px; }
 .big-value { font-size: 17px; font-weight: 600; margin-bottom: 2px; }
 
+/* Network diagnostics */
+.campus-checks { padding-top: 14px; padding-bottom: 12px; }
+.campus-checks > .card-title { margin-bottom: 4px; }
+.link:disabled { opacity: 0.5; cursor: default; text-decoration: none; }
+.probe-row { display: flex; align-items: flex-start; gap: 8px; border-top: 1px solid var(--border); }
+.card-title + .probe-row { border-top: 0; }
+.probe-details { flex: 1; min-width: 0; }
+.probe-details > summary { display: flex; align-items: center; gap: 9px; cursor: pointer; list-style: none; min-height: 61px; padding: 9px 0; }
+.probe-details > summary::-webkit-details-marker { display: none; }
+.probe-chevron { flex: none; color: var(--text-3); transition: transform 0.15s; }
+.probe-details[open] .probe-chevron { transform: rotate(90deg); }
+.probe-target { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.probe-target > .mono { font-size: 12px; overflow-wrap: anywhere; }
+.probe-name { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-weight: 500; }
+.probe-status { display: inline-flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 7px; font-size: 12px; }
+.probe-status .pill { height: 24px; font-size: 12px; padding: 0 8px; }
+.probe-status .mono { font-size: 12px; }
+.probe-refresh { flex: none; margin-top: 17px; }
+.probe-detail-body { padding: 0 0 12px 23px; font-size: 12px; }
+.probe-detail-body > .field-error { margin-top: 0; margin-bottom: 6px; overflow-wrap: anywhere; }
+.probe-meta { display: flex; flex-wrap: wrap; gap: 12px; color: var(--text-2); margin-bottom: 8px; }
+.probe-checks { display: flex; flex-direction: column; gap: 5px; }
+.probe-check { display: grid; grid-template-columns: 38px 60px 62px minmax(0, 1fr); align-items: start; gap: 7px; }
+.probe-check > .mono { font-size: 12px; padding-top: 2px; }
+.probe-check .pill { justify-self: start; height: 22px; padding: 0 7px; font-size: 12px; }
+.probe-check-detail { color: var(--text-2); overflow-wrap: anywhere; padding-top: 2px; }
+.probe-answers { color: var(--text-3); font-size: 12px; margin-top: 7px; overflow-wrap: anywhere; }
+.compat-note { position: relative; display: inline-flex; align-items: center; gap: 3px; color: var(--text-3); font-size: 11px; font-weight: 400; cursor: help; }
+.compat-tooltip { display: none; position: absolute; z-index: 5; top: calc(100% + 7px); left: -55px; width: min(320px, 45vw); padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--card); color: var(--text-2); box-shadow: var(--shadow-pop); font-size: 12px; line-height: 1.7; }
+.compat-note:hover .compat-tooltip, .compat-note:focus .compat-tooltip { display: block; }
+.probe-details > summary:focus-visible, .compat-note:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+@media (max-width: 920px) {
+  .probe-check { grid-template-columns: 38px 60px 62px; }
+  .probe-check-detail { grid-column: 1 / -1; padding-top: 0; }
+}
+
 /* Nodes */
 .node-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
 .node { position: relative; text-align: left; border: 1px solid var(--border); background: var(--card); border-radius: 10px; padding: 0 14px; cursor: pointer; height: 52px; display: flex; flex-direction: column; justify-content: center; transition: border-color 0.15s, background 0.15s, transform 0.1s; box-shadow: var(--shadow); }
