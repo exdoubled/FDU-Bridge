@@ -11,6 +11,7 @@ import { Nodes } from "./pages/Nodes";
 import { Rules } from "./pages/Rules";
 import { Logs } from "./pages/Logs";
 import { Settings } from "./pages/Settings";
+import { NetworkToolsProvider } from "./components/NetworkTools";
 
 const pages = { home: Home, nodes: Nodes, rules: Rules, logs: Logs, settings: Settings };
 
@@ -73,7 +74,7 @@ function Shell() {
 export function App() {
   return (
     <StoreProvider>
-      <UpdateProvider><Shell /></UpdateProvider>
+      <UpdateProvider><NetworkToolsProvider><Shell /></NetworkToolsProvider></UpdateProvider>
     </StoreProvider>
   );
 }

@@ -5,6 +5,7 @@ import { counts, type Draft } from "../lib/rulesDraft";
 import { formatUptime, stateLabel, stateTone } from "../lib/status";
 import { useStore } from "../store";
 import { Banner, CardTitle, Spinner, Switch } from "../components/ui";
+import { CampusChecks } from "../components/NetworkTools";
 
 function useNow(active: boolean) {
   const [now, setNow] = useState(Date.now());
@@ -125,6 +126,8 @@ export function Home() {
               {!!nodes?.choices.length && <button className="link" style={{ marginTop: 10 }} onClick={() => navigate("nodes")}>切换节点 <ArrowRight size={14} /></button>}
             </section>
           </div>
+
+          <CampusChecks />
 
           <section className="card row" style={{ alignItems: "center" }}>
             <div style={{ flex: 1, minWidth: 0 }}>

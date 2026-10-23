@@ -6,6 +6,7 @@ export {
   RulesService,
   SettingsService,
   MaintenanceService,
+  NetworkService,
   UpdateService,
   ClashOverview,
   CoreStatus,
@@ -19,6 +20,8 @@ export type { View as SettingsView } from "../../bindings/github.com/mythologyli
 export type { SettingField } from "../../bindings/github.com/mythologyli/zju-connect/gui/internal/clashsetup";
 export type { Config as AppConfig } from "../../bindings/github.com/mythologyli/zju-connect/gui/internal/appconf";
 export type { UpdateStatus } from "../../bindings/github.com/mythologyli/zju-connect/gui/services";
+export type { ProbeReport } from "../../bindings/github.com/mythologyli/zju-connect/gui/services";
+export type { Target as NetworkTarget } from "../../bindings/github.com/mythologyli/zju-connect/gui/internal/netcheck";
 
 /** Go errors arrive as rejected promises; show their message, never a stack. */
 export function errorText(error: unknown): string {
