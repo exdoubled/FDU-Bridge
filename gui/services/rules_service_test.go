@@ -128,3 +128,36 @@ func TestLogsAndRulesShareExportProtection(t *testing.T) {
 		t.Fatalf("exported logs: %q %v", data, err)
 	}
 }
+
+func TestExportsAllowDownloadsBesidePortableFiles(t *testing.T) {
+	downloads := filepath.Join(t.TempDir(), "Downloads")
+	executable := filepath.Join(downloads, "Renamed-FDU.exe")
+	b, err := NewBackend(downloads, executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.logs = []string{"redacted log"}
+	logs, resources := NewCoreService(b), NewRulesService(b)
+	for _, path := range []string{filepath.Join(downloads, "campus-export.json"), filepath.Join(downloads, "reports", "campus.json")} {
+		if _, err := resources.exportFile(path, rules.Empty()); err != nil {
+			t.Fatalf("cannot export beside portable files: %v", err)
+		}
+		if _, err := logs.exportLogs(path + ".log"); err != nil {
+			t.Fatalf("cannot export logs beside portable files: %v", err)
+		}
+	}
+	for _, path := range []string{executable, b.runtime.Core, filepath.Join(downloads, "config.toml.example"), filepath.Join(downloads, "client_data.json"), filepath.Join(downloads, "client_data.json.bak"), filepath.Join(downloads, "gui-settings.json")} {
+		if err := os.WriteFile(path, []byte("private"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := resources.exportFile(path, rules.Empty()); err == nil {
+			t.Fatalf("rule export accepted portable program/state file: %s", path)
+		}
+		if _, err := logs.exportLogs(path); err == nil {
+			t.Fatalf("log export accepted portable program/state file: %s", path)
+		}
+		if data, _ := os.ReadFile(path); string(data) != "private" {
+			t.Fatalf("overwrote portable file: %s", path)
+		}
+	}
+}

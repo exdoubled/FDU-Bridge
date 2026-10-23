@@ -62,12 +62,13 @@ func init() {
 
 // Backend holds the state shared by every bound service.
 type Backend struct {
-	Dir     string // user data: config, rules, login state
-	exeDir  string // program files: core and example config
-	App     *application.App
-	Window  *application.WebviewWindow
-	OnState func(CoreStatus)               // tray hook
-	Quit    func(force bool) (bool, error) // set by main; stops the core then exits
+	Dir        string // user data: config, rules, login state
+	exeDir     string // program files: core and example config
+	executable string // actual GUI path, including portable executables renamed by the user
+	App        *application.App
+	Window     *application.WebviewWindow
+	OnState    func(CoreStatus)               // tray hook
+	Quit       func(force bool) (bool, error) // set by main; stops the core then exits
 
 	conf       *appconf.Store
 	runtime    *core.Runtime
@@ -121,7 +122,7 @@ func NewBackend(dir, executable string) (*Backend, error) {
 	if alternative := filepath.Join(dir, core.CoreName); !fileExists(runtime.Core) && fileExists(alternative) {
 		runtime.Core = alternative
 	}
-	b := &Backend{Dir: dir, exeDir: exeDir, conf: appconf.New(dir, executable), runtime: runtime, workspace: workspace,
+	b := &Backend{Dir: dir, exeDir: exeDir, executable: executable, conf: appconf.New(dir, executable), runtime: runtime, workspace: workspace,
 		conn: &clash.Connection{Dir: dir}, state: "idle"}
 	b.config = b.conf.Load()
 	b.loadCampusSession()

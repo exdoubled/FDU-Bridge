@@ -119,8 +119,29 @@ func (s *RulesService) exportFile(path string, document rules.Document) (string,
 
 func (b *Backend) exportPaths() ([]string, []string) {
 	b.mu.Lock()
-	paths := []string{b.config.ConfigPath, b.config.FduConfig, b.config.Integration.RuntimeFile}
-	directories := []string{b.Dir, b.exeDir, b.config.ClashDir}
+	paths := []string{b.executable, b.config.ConfigPath, b.config.FduConfig, b.config.Integration.RuntimeFile}
+	directories := []string{b.config.ClashDir}
+	// A portable install may live directly in Downloads. Protect our own
+	// files and recovery tree without claiming the entire parent directory.
+	for _, dir := range []string{b.Dir, b.exeDir} {
+		if dir == "" {
+			continue
+		}
+		for _, name := range []string{
+			"FDU-Connect-GUI.exe", "FDU-Connect-GUI", "fdu-connect.exe", "fdu-connect", "LICENSE", "config.toml.example",
+			"config.toml", "client.toml", "gui-settings.json", "client_data.json", "routing-rules.json", "routing-rules.json.status.json",
+			"campus-session.json", "campus-feed.json", "fdu-campus-runtime.yaml",
+		} {
+			paths = append(paths, filepath.Join(dir, name))
+		}
+		directories = append(directories, filepath.Join(dir, "connection-backups"))
+	}
+	if b.runtime != nil {
+		paths = append(paths, b.runtime.Core)
+	}
+	if b.workspace != nil {
+		paths = append(paths, b.workspace.Target)
+	}
 	addRules := func(path string) {
 		if path != "" {
 			paths = append(paths, path, path+".status.json")
@@ -175,6 +196,11 @@ func (b *Backend) exportPaths() ([]string, []string) {
 			directories = append(directories, updater.pending.Root)
 		}
 		updater.mu.Unlock()
+	}
+	for _, path := range paths {
+		if path != "" {
+			paths = append(paths, path+".bak")
+		}
 	}
 	return paths, directories
 }
