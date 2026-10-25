@@ -74,7 +74,12 @@ func (b *Backend) automaticTarget(preferred, oldVerge string) (clash.ClientTarge
 	}
 	if preferred != "" {
 		target, err := clash.ResolveClientTarget(preferred)
-		if err == nil && target.Kind == "runtime" {
+		if (err == nil && target.Kind == "runtime") || errors.Is(err, clash.ErrClientNotRunning) {
+			for _, client := range clients {
+				if client.Kind == "runtime" {
+					return clash.ClientTarget{}, errors.New("已保存的运行配置不属于当前可确认的内核，请重新选择客户端或改用手动接入")
+				}
+			}
 			return clash.ClientTarget{}, clash.ErrClientNotRunning
 		}
 		return target, err

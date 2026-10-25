@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -159,6 +161,18 @@ func TestStartupWaitRequiresAuthorization(t *testing.T) {
 
 func TestStartupWaitProceedsToNormalPreparation(t *testing.T) {
 	b := startupBackend(t)
+	var waiting atomic.Bool
+	preparing := make(chan CoreStatus, 1)
+	b.OnState = func(status CoreStatus) {
+		if strings.Contains(status.Problem, "正在等待 Clash 启动") {
+			waiting.Store(true)
+		} else if waiting.Load() && status.State == "preparing" && status.Problem == "" {
+			select {
+			case preparing <- status:
+			default:
+			}
+		}
+	}
 	api := &startupAPI{seen: make(chan struct{}, 1)}
 	b.conn.API = api
 	if err := b.beginConnect(false, false, true); err != nil {
@@ -182,6 +196,101 @@ func TestStartupWaitProceedsToNormalPreparation(t *testing.T) {
 	// normal preflight error exactly once, rather than retry arbitrary errors.
 	if got := b.Status(); got.State != "error" || got.Problem != "未找到 VPN 配置" || got.Starting {
 		t.Fatalf("normal preparation did not run: %+v", got)
+	}
+	select {
+	case <-preparing:
+	default:
+		t.Fatal("no preparing status cleared the obsolete Clash waiting message")
+	}
+}
+
+func startDiscoveryHelper(t *testing.T, name string, args ...string) {
+	t.Helper()
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	helper := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(helper, contents, 0700); err != nil {
+		t.Fatal(err)
+	}
+	child := exec.Command(helper, append([]string{"-test.run=^TestStartupWaitAutoCLIController$", "--"}, args...)...)
+	child.Env = append(os.Environ(), "FDU_TEST_CLI_STARTUP=1")
+	input, err := child.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := child.Start(); err != nil {
+		_ = input.Close()
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = input.Close(); _ = child.Process.Kill(); _ = child.Wait() })
+}
+
+func TestSavedRuntimeMismatchRequiresReselection(t *testing.T) {
+	other := filepath.Join(t.TempDir(), "other.yaml")
+	if err := os.WriteFile(other, []byte("proxies: []\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	startDiscoveryHelper(t, "mihomo", "-f", other, "-ext-ctl", "127.0.0.1:19099")
+	for _, cliOnly := range []bool{false, true} {
+		for _, startup := range []bool{false, true} {
+			t.Run(fmt.Sprintf("cliOnly=%v/startup=%v", cliOnly, startup), func(t *testing.T) {
+				b := startupBackend(t)
+				b.config.Integration.Mode = "auto"
+				if cliOnly {
+					if err := os.WriteFile(b.config.Integration.RuntimeFile, []byte("proxies: []\n"), 0600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				_, err := b.automaticTarget(b.config.Integration.RuntimeFile, "")
+				if err == nil || errors.Is(err, clash.ErrClientNotRunning) || !strings.Contains(err.Error(), "重新选择客户端或改用手动接入") {
+					t.Fatalf("wrong guidance for running mismatched core: %v", err)
+				}
+				if startup {
+					err = b.beginConnect(false, false, true)
+				} else {
+					err = b.connect(false)
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				b.mu.Lock()
+				done := b.startDone
+				b.mu.Unlock()
+				if done != nil {
+					select {
+					case <-done:
+					case <-time.After(5 * time.Second):
+						t.Fatal("mismatched core left connection waiting")
+					}
+				}
+				if got := b.Status(); got.State != "error" || !strings.Contains(got.Problem, "重新选择客户端或改用手动接入") {
+					t.Fatalf("guidance lost in lifecycle: %+v", got)
+				}
+			})
+		}
+	}
+}
+
+func TestSavedRuntimeStillWaitsWhenOnlyVergeGUIIsPresent(t *testing.T) {
+	root := t.TempDir()
+	for _, file := range []string{"profiles.yaml", "verge.yaml", "clash-verge.yaml"} {
+		if err := os.WriteFile(filepath.Join(root, file), []byte("proxies: []\nexternal-controller: 127.0.0.1:19100\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	startDiscoveryHelper(t, "clash-verge", "-d", root)
+	b := startupBackend(t)
+	if _, err := b.automaticTarget(b.config.Integration.RuntimeFile, ""); !errors.Is(err, clash.ErrClientNotRunning) {
+		t.Fatalf("Verge GUI without the selected core must remain retryable: %v", err)
 	}
 }
 

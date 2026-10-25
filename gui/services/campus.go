@@ -195,6 +195,9 @@ func (b *Backend) startCampus(ctx context.Context, done chan struct{}, approved,
 			// Preferences can change while the readiness probe is in flight.
 			err = b.startupAllowed(ctx)
 		}
+		if err == nil {
+			b.connectionProblem("preparing", "")
+		}
 	}
 	if err == nil {
 		err = b.prepareCampus(ctx, approved)
