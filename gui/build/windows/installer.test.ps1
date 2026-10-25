@@ -11,11 +11,20 @@ $shortcutDirectory = Join-Path $programsDirectory $product
 $savedFixtureDirectory = $env:FDU_INSTALLER_TEST_DIR
 $savedFixtureMode = $env:FDU_INSTALLER_TEST_MODE
 New-Item -ItemType Directory -Path $directory | Out-Null
+$restrictedDirectory = Join-Path $directory 'restricted temp'
+New-Item -ItemType Directory -Path $restrictedDirectory | Out-Null
+$savedAcl = Get-Acl -LiteralPath $restrictedDirectory
 
-function Run-Setup([string]$Path, [string]$InstallDirectory) {
-    $process = Start-Process -FilePath $Path -ArgumentList @('/S', "/D=$InstallDirectory") -WindowStyle Hidden -PassThru
+function Run-Setup([string]$Path, [string]$InstallDirectory, [hashtable]$Environment) {
+    $startInfo = [Diagnostics.ProcessStartInfo]::new($Path, "/S /D=$InstallDirectory")
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardError = $true
+    foreach ($name in $Environment.Keys) { $startInfo.EnvironmentVariables[$name] = $Environment[$name] }
+    $process = [Diagnostics.Process]::Start($startInfo)
     try {
         if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'Fixture installer did not finish.' }
+        $script:launcherError = $process.StandardError.ReadToEnd()
         return $process.ExitCode
     } finally { $process.Dispose() }
 }
@@ -58,6 +67,17 @@ function Remove-FixtureInstallation([string]$InstallDirectory, [string]$Expected
 }
 
 try {
+    $restrictedAcl = Get-Acl -LiteralPath $restrictedDirectory
+    $deny = [Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.WindowsIdentity]::GetCurrent().User,
+        [Security.AccessControl.FileSystemRights]::Write,
+        ([Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit),
+        [Security.AccessControl.PropagationFlags]::None, [Security.AccessControl.AccessControlType]::Deny)
+    $restrictedAcl.AddAccessRule($deny)
+    Set-Acl -LiteralPath $restrictedDirectory -AclObject $restrictedAcl
+    $accessDenied = $false
+    try { [IO.File]::WriteAllText((Join-Path $restrictedDirectory 'probe'), 'must fail') }
+    catch [UnauthorizedAccessException] { $accessDenied = $true }
+    if (-not $accessDenied) { throw 'Fixture did not reproduce an existing but unwritable temporary directory.' }
     $source = @'
 package main
 import (
@@ -71,6 +91,9 @@ func main() {
     if dir == "" { os.Exit(91) }
     if len(os.Args) == 2 && os.Args[1] == "--hold" { time.Sleep(30*time.Second); return }
     if len(os.Args) == 2 && os.Args[1] == "--check-webview2" {
+        work, err := os.CreateTemp(os.Getenv("TEMP"),"runtime-probe-")
+        if err != nil { os.Exit(93) }; work.Close(); os.Remove(work.Name())
+        os.WriteFile(filepath.Join(dir,"runtime-temp"),[]byte(os.Getenv("TEMP")),0600)
         data, err := os.ReadFile(filepath.Join(dir,"runtime-ready"))
         if err != nil { os.Exit(1) }
         ready, err := strconv.ParseInt(string(data),10,64)
@@ -99,12 +122,14 @@ func main() {
     Copy-Item -LiteralPath $gui -Destination (Join-Path $directory 'fake-webview2.exe')
     foreach ($name in @('LICENSE', 'config.toml.example')) { [IO.File]::WriteAllText((Join-Path $directory $name), "fixture $name") }
     $setup = Join-Path $directory 'fixture-setup.exe'
+    $innerSetup = Join-Path $directory 'fixture-nsis.exe'
     Invoke-MakeNSIS @{
         PAYLOAD_DIR = $directory; LICENSE_FILE = (Join-Path $directory 'LICENSE')
-        WEBVIEW2_INSTALLER = (Join-Path $directory 'fake-webview2.exe'); OUTPUT_FILE = $setup
+        WEBVIEW2_INSTALLER = (Join-Path $directory 'fake-webview2.exe'); OUTPUT_FILE = $innerSetup
         APP_VERSION = 'v1.2.3-test'; PRODUCT_VERSION = '1.2.3.0'; APP_ID = $identity; PRODUCT_NAME = $product
         DEPENDENCY_TIMEOUT = '250'; RUNTIME_WAIT = '1000'
     }
+    New-SetupLauncher $innerSetup $setup 'v1.2.3-test' '1.2.3.0'
     $env:FDU_INSTALLER_TEST_DIR = $directory
     foreach ($mode in @('already', 'install', 'failure', 'timeout')) {
         $env:FDU_INSTALLER_TEST_MODE = $mode
@@ -113,10 +138,17 @@ func main() {
             if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path }
         }
         if ($mode -eq 'already') { [IO.File]::WriteAllText((Join-Path $directory 'runtime-ready'), '1') }
-        $installDirectory = Join-Path $directory "installed $mode"
+        $installDirectory = Join-Path $directory ("installed $mode " + [char]0x4e2d + [char]0x6587)
         New-Item -ItemType Directory -Path $installDirectory | Out-Null
         [IO.File]::WriteAllText((Join-Path $installDirectory 'gui-settings.json'), 'preserve user settings')
-        $exitCode = Run-Setup $setup $installDirectory
+        $processEnvironment = if ($mode -eq 'already') { @{ TEMP = $restrictedDirectory; TMP = $restrictedDirectory } } else { @{} }
+        $exitCode = Run-Setup $setup $installDirectory $processEnvironment
+        if ($mode -eq 'already' -and $exitCode -eq 0) {
+            $usedTemp = [IO.File]::ReadAllText((Join-Path $directory 'runtime-temp'))
+            if ($usedTemp -ceq $restrictedDirectory -or (Test-Path -LiteralPath $usedTemp)) {
+                throw "Setup did not use and clean a private writable temporary directory: $usedTemp; $script:launcherError"
+            }
+        }
         if ($mode -eq 'failure' -or $mode -eq 'timeout') {
             if ($exitCode -eq 0 -or (Test-Path -LiteralPath (Join-Path $installDirectory 'FDU-Connect-GUI.exe')) -or
                 (Test-Path -LiteralPath $uninstallKey) -or (Test-Path -LiteralPath $shortcutDirectory)) {
@@ -124,7 +156,7 @@ func main() {
             }
             continue
         }
-        if ($exitCode -ne 0) { throw "Fixture installation failed: $mode/$exitCode" }
+        if ($exitCode -ne 0) { throw "Fixture installation failed: $mode/$exitCode; $script:launcherError" }
         foreach ($name in @('FDU-Connect-GUI.exe', 'fdu-connect.exe', 'config.toml.example', 'LICENSE', 'Uninstall.exe')) {
             if (-not (Test-Path -LiteralPath (Join-Path $installDirectory $name))) { throw "Installer omitted $name." }
         }
@@ -151,7 +183,11 @@ func main() {
                 $blocker.Dispose()
             }
             New-ItemProperty -LiteralPath $uninstallKey -Name 'DisplayVersion' -Value 'v0.0.1-old-setup' -PropertyType String -Force | Out-Null
-            if ((Run-Setup $setup $installDirectory) -ne 0) { throw 'Closed application could not be repaired.' }
+            $invalidTemp = Join-Path $directory 'temp-is-a-file'
+            [IO.File]::WriteAllText($invalidTemp, 'not a directory')
+            if ((Run-Setup $setup $installDirectory @{ TEMP = $invalidTemp; TMP = $invalidTemp }) -ne 0) {
+                throw 'Closed application could not be repaired with an invalid temporary path.'
+            }
             if ($null -ne (Get-ItemProperty -LiteralPath $uninstallKey).PSObject.Properties['DisplayVersion']) {
                 throw 'Repair retained the stale version from an older setup.'
             }
@@ -180,6 +216,7 @@ func main() {
     }
     Write-Output 'Windows installer integration checks passed.'
 } finally {
+    Set-Acl -LiteralPath $restrictedDirectory -AclObject $savedAcl
     $env:FDU_INSTALLER_TEST_DIR = $savedFixtureDirectory
     $env:FDU_INSTALLER_TEST_MODE = $savedFixtureMode
     Remove-FixtureAutoStart
