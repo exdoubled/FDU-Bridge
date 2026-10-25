@@ -38,6 +38,40 @@ func TestDiagnosisReportProjectsOnlySafeFields(t *testing.T) {
 	}
 }
 
+func TestDiagnosisReportLabelsKnownConnectionStatesAndHidesUnknownState(t *testing.T) {
+	for _, tc := range []struct{ state, want string }{
+		{"idle", "未连接"},
+		{"preparing", "准备中"},
+		{"connecting", "连接中"},
+		{"enabling", "启用中"},
+		{"adapting", "适配 Clash 中"},
+		{"authentication", "认证中"},
+		{"reconnecting", "恢复连接中"},
+		{"auth-required", "需要重新登录"},
+		{"connected", "已连接"},
+		{"paused", "已暂停"},
+		{"error", "启用失败"},
+		{"campus-unavailable", "校园连接不可用"},
+		{"stopped", "已停止"},
+		{"tool-running", "正在执行工具"},
+		{"tool-finished", "工具已结束"},
+		{"unrecognized-state", "未确认"},
+		{"error\nCookie=state-secret 10.18.7.3 C:\\Users\\Alice", "未确认"},
+	} {
+		t.Run(tc.state, func(t *testing.T) {
+			s := NewNetworkService(&Backend{})
+			s.saveDiagnosis(CampusDiagnosis{State: tc.state})
+			report, err := s.PreviewDiagnosisReport()
+			if err != nil || !strings.Contains(report, "\n连接状态: "+tc.want+"\n") {
+				t.Fatalf("state %q did not produce its safe label %q: %q %v", tc.state, tc.want, report, err)
+			}
+			if tc.want == "未确认" && strings.Contains(report, tc.state) {
+				t.Fatalf("report leaked an unknown raw state: %q", report)
+			}
+		})
+	}
+}
+
 func TestDiagnosisReportHidesCustomHostsAndURLSecrets(t *testing.T) {
 	for _, tc := range []struct{ host, want string }{
 		{"https://alice:secret@LIBRARY.FUDAN.EDU.CN/path?token=secret#secret", "library.fudan.edu.cn"},

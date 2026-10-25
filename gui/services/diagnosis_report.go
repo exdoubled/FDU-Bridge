@@ -103,7 +103,13 @@ func formatDiagnosisReport(d CampusDiagnosis) string {
 	line("平台: %s/%s", runtime.GOOS, runtime.GOARCH)
 	line("目标主机: %s", publicDiagnosisHost(d.Host))
 	line("接入方式: %s", reportLabel(d.Integration, map[string]string{"auto": "自动接入", "manual": "手动接入", "proxy": "仅本地代理"}))
-	line("连接状态: %s", reportLabel(d.State, map[string]string{"connected": "已连接", "connecting": "连接中", "preparing": "准备中", "authentication": "认证中", "paused": "已暂停", "idle": "未连接", "stopped": "已停止", "campus-unavailable": "校园连接不可用"}))
+	line("连接状态: %s", reportLabel(d.State, map[string]string{
+		"idle": "未连接", "preparing": "准备中", "connecting": "连接中",
+		"enabling": "启用中", "adapting": "适配 Clash 中", "authentication": "认证中",
+		"reconnecting": "恢复连接中", "auth-required": "需要重新登录", "connected": "已连接",
+		"paused": "已暂停", "error": "启用失败", "campus-unavailable": "校园连接不可用",
+		"stopped": "已停止", "tool-running": "正在执行工具", "tool-finished": "工具已结束",
+	}))
 	line("隧道已连接: %t", d.Connected)
 	line("需要重新认证: %t", d.AuthRequired)
 	line("代理覆盖: 入口检测不能确认所有应用均被代理覆盖")
