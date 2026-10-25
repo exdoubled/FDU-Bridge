@@ -240,16 +240,22 @@ input, textarea, select, button { font: inherit; color: inherit; }
 .diagnosis-input { display: flex; gap: 8px; }
 .diagnosis-input .input { flex: 1; min-width: 0; }
 .diagnosis-input .btn { flex: none; }
-.campus-diagnosis-result { border-top: 1px solid var(--border); margin-top: 16px; padding-top: 16px; }
-.campus-diagnosis-result > .probe-meta { overflow-wrap: anywhere; }
+.campus-diagnosis-result { border-top: 1px solid var(--border); margin-top: 16px; font-size: 13px; }
+.campus-diagnosis-result > .muted { margin-top: 12px; overflow-wrap: anywhere; }
 .diagnosis-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
 .diagnosis-columns section { min-width: 0; }
-.campus-diagnostics h3 { font-size: 13px; font-weight: 600; margin: 14px 0 8px; }
+.campus-diagnostics h3 { font-size: 13px; font-weight: 600; margin: 16px 0 8px; }
 .campus-diagnostics p { line-height: 1.7; margin: 8px 0; }
-.diagnosis-facts { display: grid; grid-template-columns: 72px 1fr; gap: 10px 12px; font-size: 12px; line-height: 1.7; }
-.diagnosis-facts dt { color: var(--text-3); }
+.diagnosis-facts { display: grid; grid-template-columns: 76px 1fr; gap: 6px 12px; margin: 12px 0 0; line-height: 1.6; }
+.diagnosis-facts dt { color: var(--text-2); }
 .diagnosis-facts dd { margin: 0; overflow-wrap: anywhere; }
-.diagnosis-suggestions ul { padding-left: 20px; margin: 8px 0 0; color: var(--text-2); line-height: 1.8; font-size: 12px; }
+.diagnosis-facts .mono, .campus-diagnosis-result .probe-detail-body .mono { font-size: 13px; }
+.campus-diagnosis-result .probe-detail-body { padding: 0; font-size: 13px; }
+.campus-diagnosis-result .probe-check { grid-template-columns: 44px 60px 64px minmax(0, 1fr); }
+.diagnosis-suggestions ul { padding-left: 20px; margin: 8px 0 0; color: var(--text-2); line-height: 1.7; }
+.diagnosis-actions { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+.diagnosis-actions > .faint { margin-left: auto; font-size: 13px; font-variant-numeric: tabular-nums; }
+.success-text { color: var(--success); }
 .diagnostics-body .log-view { flex: none; min-height: 240px; max-height: 50vh; }
 @media (max-width: 920px) { .diagnosis-columns { grid-template-columns: 1fr; gap: 0; } }
 .log-view { flex: 1; min-height: 0; margin: 0 28px 24px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--card); overflow: auto; padding: 12px 14px; font-family: var(--mono); font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-all; user-select: text; position: relative; }

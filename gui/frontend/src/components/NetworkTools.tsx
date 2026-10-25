@@ -200,7 +200,8 @@ export function ProbeDetails({ host, report, error }: { host?: string; report?: 
               <span className="mono">{checkNames[check.kind] ?? check.kind}</span>
               <span className={`pill ${checkTones[check.status] ?? ""}`}>{checkLabels[check.status] ?? check.status}</span>
               <span className="mono muted">{check.millis > 0 ? `${Math.round(check.millis)} ms` : "—"}</span>
-              <span className="probe-check-detail selectable">{check.detail}</span>
+              {/* Details lead with the finding and append caveats after "；"; keep the caveats in the tooltip. */}
+              <span className="probe-check-detail selectable" title={check.detail.includes("；") ? check.detail : undefined}>{check.detail.split("；")[0]}</span>
             </div>
           ))}
         </div>
