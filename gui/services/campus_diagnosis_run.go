@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"path/filepath"
 	"time"
 
@@ -57,13 +58,19 @@ func (s *NetworkService) DiagnoseCampus(input string) (CampusDiagnosis, error) {
 	defer cancel()
 	opts, via, err := s.campusProbeOptions(mode, status.Running)
 	if err != nil {
-		diagnosis.Problem = err.Error()
+		if diagnosis.Problem != "" {
+			diagnosis.Problem += "；"
+		}
+		diagnosis.Problem += err.Error()
 	} else {
 		result, probeErr := netcheck.ProbeCampus(ctx, target.URL, opts)
 		if probeErr != nil {
-			diagnosis.Problem = "无法开始网址检测，请检查输入和本机代理入口"
+			if diagnosis.Problem != "" {
+				diagnosis.Problem += "；"
+			}
+			diagnosis.Problem += "无法开始网址检测，请检查输入和本机代理入口"
 		} else {
-			if opts.Lookup != nil {
+			if opts.Lookup != nil && net.ParseIP(target.Host) == nil {
 				for i := range result.Checks {
 					if result.Checks[i].Kind == "dns" {
 						result.Checks[i].Detail = "Clash DNS 候选结果；" + result.Checks[i].Detail
@@ -162,9 +169,6 @@ func campusSuggestions(d CampusDiagnosis) []string {
 		} else if !d.Rule.Applied {
 			suggestions = append(suggestions, "规则尚未确认同步，请等待 FDU 和 Clash 完成同步后重试。")
 		}
-		if d.Coverage != "" {
-			suggestions = append(suggestions, "请按代理覆盖提示检查 Clash TUN／系统代理，并确认浏览器使用当前 Clash 入口。")
-		}
 	}
 	if d.Probe == nil {
 		suggestions = append(suggestions, "请检查当前接入方式和本机代理入口；检测未改走系统直连。")
@@ -179,6 +183,9 @@ func campusSuggestions(d CampusDiagnosis) []string {
 		case check.Kind == "http" && check.Status == "auth":
 			suggestions = append(suggestions, "站点已响应但要求认证或限制访问，请在浏览器中完成站点登录并检查访问权限。")
 		case check.Kind == "http" && check.Status == "error":
+			if d.Integration != "proxy" && d.Coverage != "" {
+				suggestions = append(suggestions, "请按代理覆盖提示检查 Clash TUN／系统代理，并确认浏览器使用当前 Clash 入口。")
+			}
 			suggestions = append(suggestions, "请结合 DNS／TCP／TLS 阶段定位失败；入口正常时仍失败，请检查目标服务状态。")
 		case check.Kind == "http" && check.Status == "ok":
 			suggestions = append(suggestions, "HTTP 已响应，仅证明本次指定入口可达；请在浏览器中验证实际访问路径和站点登录。")

@@ -119,18 +119,18 @@ func TestWebSocketIsNotAttemptedAfterHTTPTransportFailure(t *testing.T) {
 }
 
 func TestDNSFailureDoesNotSuppressHTTPAndAnswersAreCandidates(t *testing.T) {
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) }))
 	defer server.Close()
-	result := localProbe(t, server, Options{Lookup: func(context.Context, string) ([]string, error) {
+	result, err := ProbeCampus(context.Background(), "http://library.fudan.edu.cn/", Options{ProxyURL: server.URL, Lookup: func(context.Context, string) ([]string, error) {
 		return nil, errors.New("lookup failed")
 	}})
-	if findCheck(t, result, "dns").Status != "error" || result.HTTPStatus != http.StatusNoContent {
+	if err != nil || findCheck(t, result, "dns").Status != "error" || result.HTTPStatus != http.StatusNoContent {
 		t.Fatalf("DNS failure suppressed HTTP: %+v", result)
 	}
-	result = localProbe(t, server, Options{Lookup: func(context.Context, string) ([]string, error) {
+	result, err = ProbeCampus(context.Background(), "http://library.fudan.edu.cn/", Options{ProxyURL: server.URL, Lookup: func(context.Context, string) ([]string, error) {
 		return []string{"203.0.113.8", "invalid", "203.0.113.8"}, nil
 	}})
-	if len(result.Answers) != 1 || result.Answers[0] != "203.0.113.8" || !strings.Contains(findCheck(t, result, "dns").Detail, "候选") {
+	if err != nil || len(result.Answers) != 1 || result.Answers[0] != "203.0.113.8" || !strings.Contains(findCheck(t, result, "dns").Detail, "候选") {
 		t.Fatalf("candidate answers = %+v", result)
 	}
 }
