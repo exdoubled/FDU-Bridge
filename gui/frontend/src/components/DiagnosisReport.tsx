@@ -56,7 +56,7 @@ export function DiagnosisReport({ disabled = false }: { disabled?: boolean }) {
     {report && <div className="overlay" onMouseDown={(event) => event.target === event.currentTarget && close()}>
       <div className="dialog wide" role="dialog" aria-modal="true" aria-labelledby="diagnosis-report-title" aria-describedby="diagnosis-report-note">
         <h2 className="dialog-title" id="diagnosis-report-title">脱敏诊断报告</h2>
-        <p className="muted" id="diagnosis-report-note">仅包含本次诊断的安全摘要，不含原始配置或完整日志。自定义校园主机及 IP 同样隐藏，请在分享前检查下方内容。</p>
+        <p className="muted" id="diagnosis-report-note">本次诊断的摘要，已隐藏配置、日志、自定义主机和 IP。</p>
         <textarea ref={field} className="textarea diagnosis-report-preview" readOnly value={report} aria-label="脱敏诊断报告内容" rows={16} autoFocus />
         <div className="dialog-actions">
           <button className="btn" disabled={busy} onClick={close}>关闭</button>

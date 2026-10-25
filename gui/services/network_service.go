@@ -195,13 +195,6 @@ func (s *NetworkService) Probe(id string) (ProbeReport, error) {
 		return ProbeReport{}, err
 	}
 	result, err := netcheck.Probe(ctx, strings.TrimSpace(id), opts)
-	if opts.Lookup != nil {
-		for i := range result.Checks {
-			if result.Checks[i].Kind == "dns" {
-				result.Checks[i].Detail = "Clash DNS 候选结果；" + result.Checks[i].Detail
-			}
-		}
-	}
 	return ProbeReport{Result: result, Via: via}, err
 }
 
@@ -221,7 +214,7 @@ func (s *NetworkService) probeOptions(running bool) (netcheck.Options, string, e
 		if port <= 0 || port > 65535 {
 			return opts, via, errors.New("当前 Clash 未提供 HTTP/mixed 检测入口")
 		}
-		opts.ProxyURL, opts.Lookup = "http://127.0.0.1:"+strconv.Itoa(int(port)), lookupClash(api)
+		opts.ProxyURL, opts.Lookup, opts.LookupName = "http://127.0.0.1:"+strconv.Itoa(int(port)), lookupClash(api), "Clash DNS"
 		via = "Clash 当前配置"
 	} else if running {
 		s.b.mu.Lock()

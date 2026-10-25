@@ -1,15 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowDownUp, ArrowUp, ChevronRight, Info, RefreshCw, School } from "lucide-react";
+import { ArrowDown, ArrowDownUp, ArrowUp, ChevronRight, RefreshCw, School } from "lucide-react";
 import { NetworkService, errorText, type NetworkTarget, type NetworkView, type ProbeReport, type TrafficBucket } from "../lib/api";
 import { useStore } from "../store";
-import { CardTitle, Spinner } from "./ui";
+import { CardTitle, Hint, Spinner } from "./ui";
 
 export const aiProviders: Record<string, string> = { openai: "OpenAI", anthropic: "Anthropic", gemini: "Gemini", grok: "Grok" };
 const campusTargets = [
   { id: "library", name: "图书馆", host: "library.fudan.edu.cn" },
   { id: "icourse", name: "复旦课程", host: "icourse.fudan.edu.cn" },
 ];
-const compatibilityNote = "icourse 在开启系统代理时可能无法访问。如遇此情况，请将 icourse.fudan.edu.cn 加入系统代理绕过列表；校外访问仍需校园网或有效的 TUN/FDU 路径。";
+const compatibilityNote = "开着系统代理时 icourse 可能打不开，把 icourse.fudan.edu.cn 加入系统代理的绕过列表即可。在校外还需要开启 Clash TUN。";
 
 interface NetworkToolsState {
   view: NetworkView | null;
@@ -121,15 +121,19 @@ export function formatBytes(value: number): string {
   return `${(bytes / 1024 ** power).toFixed(power === 1 ? 0 : 1)} ${units[power - 1]}`;
 }
 
-function TrafficCard({ label, bucket }: { label: string; bucket?: TrafficBucket }) {
+function TrafficCard({ label, bucket, hint }: { label: string; bucket?: TrafficBucket; hint?: string }) {
   return (
     <section className="card traffic-card">
-      <CardTitle icon={ArrowDownUp} extra={<span className="traffic-count">{bucket ? bucket.connections : "—"} 连接</span>}>{label}</CardTitle>
+      <CardTitle icon={ArrowDownUp}>{label}{hint && <Hint text={hint} label="流量统计" end />}</CardTitle>
       <div className="traffic-rates">
         <div><ArrowUp size={15} /><strong>{bucket ? formatBytes(bucket.uploadRate) : "—"}</strong><span>/s</span></div>
         <div><ArrowDown size={15} /><strong>{bucket ? formatBytes(bucket.downloadRate) : "—"}</strong><span>/s</span></div>
       </div>
-      <div className="traffic-total">{label === "非 FDU" ? "累计估算" : "累计"} <span>↑ {bucket ? formatBytes(bucket.upload) : "—"}</span><span>↓ {bucket ? formatBytes(bucket.download) : "—"}</span></div>
+      <div className="traffic-total">
+        <span>{bucket ? bucket.connections : "—"} 连接</span>
+        <span>{label === "非 FDU" ? "累计估算" : "累计"} ↑ {bucket ? formatBytes(bucket.upload) : "—"}</span>
+        <span>↓ {bucket ? formatBytes(bucket.download) : "—"}</span>
+      </div>
     </section>
   );
 }
@@ -137,16 +141,20 @@ function TrafficCard({ label, bucket }: { label: string; bucket?: TrafficBucket 
 export function TrafficCards() {
   const { view, observeError } = useNetworkTools();
   const sources = [view?.coreAvailable && "FDU", view?.clashAvailable && "Clash"].filter(Boolean).join(" / ");
+  // Only abnormal sampling gets a visible caption; the normal scope stays in the hint.
+  const problem = observeError ? view ? "采样失败 · 显示上次数据" : "暂时无法读取流量" : view && !sources ? "暂无可用流量来源" : "";
+  const hint = view && sources ? [`统计本次运行的 ${sources} 流量`, view.scope].filter(Boolean).join("\n") : undefined;
   return (
     <div className="traffic-section">
       <div className="grid-2">
         <TrafficCard label="FDU" bucket={view?.fdu} />
-        <TrafficCard label="非 FDU" bucket={view?.nonFdu} />
+        <TrafficCard label="非 FDU" bucket={view?.nonFdu} hint={hint} />
       </div>
-      <div className={`network-caption${observeError ? " warning-text" : ""}`} title={observeError || view?.scope}>
-        {observeError ? view ? "采样失败 · 显示上次数据" : "暂时无法读取流量" : !view ? "正在读取流量…" : sources ? `本次运行 · ${sources} 可观测流量` : "暂无可用流量来源"}
-        {view?.truncated && <span> · 连接列表已截断</span>}
-      </div>
+      {(problem || view?.truncated) && (
+        <div className={`network-caption${problem ? " warning-text" : ""}`} title={observeError || view?.scope}>
+          {[problem, view?.truncated && "连接列表已截断"].filter(Boolean).join(" · ")}
+        </div>
+      )}
     </div>
   );
 }
@@ -176,22 +184,24 @@ function ProbeStatus({ report, error, loading }: { report?: ProbeReport; error?:
     tone = "danger";
     label = "连接异常";
   }
-  return <span className="probe-status"><span className={`pill ${tone}`}>{label}</span>{http && http.millis > 0 && <span className="muted mono">{Math.round(http.millis)} ms</span>}</span>;
+  return <span className={`pill ${tone}`}>{label}{http && http.millis > 0 && ` · ${Math.round(http.millis)} ms`}</span>;
 }
 
-export function ProbeDetails({ report, error }: { report?: ProbeReport; error?: string }) {
+export function ProbeDetails({ host, report, error }: { host?: string; report?: ProbeReport; error?: string }) {
   return (
     <div className="probe-detail-body">
       {error && <div className="field-error selectable">{error}{report ? "（下方为上次结果）" : ""}</div>}
+      {host && !report && <div className="probe-meta"><span className="mono selectable">{host}</span></div>}
       {report && <>
-        <div className="probe-meta">入口：{report.via || "未确认"}{report.result.httpStatus > 0 && <span>HTTP {report.result.httpStatus}</span>}{report.result.checkedAt > 0 && <span>{new Date(report.result.checkedAt).toLocaleTimeString("zh-CN", { hour12: false })}</span>}</div>
+        <div className="probe-meta">{host && <span className="mono selectable">{host}</span>}<span>入口：{report.via || "未确认"}</span>{report.result.httpStatus > 0 && <span>HTTP {report.result.httpStatus}</span>}{report.result.checkedAt > 0 && <span>{new Date(report.result.checkedAt).toLocaleTimeString("zh-CN", { hour12: false })}</span>}</div>
         <div className="probe-checks">
           {(report.result.checks ?? []).map((check, index) => (
             <div className="probe-check" key={`${check.kind}-${index}`}>
               <span className="mono">{checkNames[check.kind] ?? check.kind}</span>
               <span className={`pill ${checkTones[check.status] ?? ""}`}>{checkLabels[check.status] ?? check.status}</span>
               <span className="mono muted">{check.millis > 0 ? `${Math.round(check.millis)} ms` : "—"}</span>
-              <span className="probe-check-detail selectable">{check.detail}</span>
+              {/* Details lead with the finding and append caveats after "；"; keep the caveats in the tooltip. */}
+              <span className="probe-check-detail selectable" title={check.detail.includes("；") ? check.detail : undefined}>{check.detail.split("；")[0]}</span>
             </div>
           ))}
         </div>
@@ -210,21 +220,19 @@ export function ProbeRow({ target, campus = false }: { target: Pick<NetworkTarge
   return (
     <div className="probe-row">
       <details className="probe-details">
-        <summary>
+        <summary title={target.host}>
           <ChevronRight className="probe-chevron" size={14} />
-          <div className="probe-target">
-            <span className="probe-name">{target.name}{target.id === "icourse" && <span className="compat-note" tabIndex={0} aria-label={`代理兼容：${compatibilityNote}`}>
-              代理兼容 <Info size={12} /><span className="compat-tooltip" role="tooltip">{compatibilityNote}</span>
-            </span>}</span>
-            <span className="mono muted">{target.host}</span>
-          </div>
+          <span className="probe-name">{target.name}{target.id === "icourse" && <Hint text={compatibilityNote} label="代理兼容" />}</span>
           <ProbeStatus report={report} error={error} loading={loading} />
         </summary>
-        <ProbeDetails report={report} error={error} />
+        <ProbeDetails host={target.host} report={report} error={error} />
       </details>
-      <button className="btn icon-btn sm ghost probe-refresh" onClick={() => probe([target.id])} disabled={busy} aria-label={`${campus ? "刷新" : "检测"}${target.name}`} title={campus ? "刷新" : "检测"}>
-        {loading ? <Spinner /> : <RefreshCw size={14} />}
-      </button>
+      {/* The campus card refreshes every row from its title. */}
+      {!campus && (
+        <button className="btn icon-btn sm ghost probe-refresh" onClick={() => probe([target.id])} disabled={busy} aria-label={`检测${target.name}`} title="检测">
+          {loading ? <Spinner /> : <RefreshCw size={14} />}
+        </button>
+      )}
     </div>
   );
 }

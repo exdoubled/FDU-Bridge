@@ -49,6 +49,8 @@ type Result struct {
 type Options struct {
 	ProxyURL string
 	Lookup   func(context.Context, string) ([]string, error)
+	// LookupName names Lookup in the DNS check detail.
+	LookupName string
 }
 
 // Targets returns a copy so callers cannot modify the probe allowlist.
@@ -120,7 +122,10 @@ func probeTarget(ctx context.Context, target Target, opts Options, transport *ht
 	defer cancel()
 	result := Result{TargetID: target.ID, Name: target.Name, Host: target.Host, Provider: target.Provider, CheckedAt: time.Now().UnixMilli(), Answers: []string{}, Checks: []Check{}}
 	lookup := opts.Lookup
-	source := "指定 DNS"
+	source := opts.LookupName
+	if source == "" {
+		source = "指定 DNS"
+	}
 	if lookup == nil {
 		lookup = net.DefaultResolver.LookupHost
 		source = "系统 DNS"
@@ -131,7 +136,6 @@ func probeTarget(ctx context.Context, target Target, opts Options, transport *ht
 	targetIP := net.ParseIP(target.Host)
 	if targetIP != nil {
 		answers = []string{targetIP.String()}
-		source = "目标为 IP 地址，无需解析"
 	} else {
 		dnsCtx, dnsCancel := context.WithTimeout(ctx, 3*time.Second)
 		answers, dnsErr = lookup(dnsCtx, target.Host)
@@ -149,13 +153,16 @@ func probeTarget(ctx context.Context, target Target, opts Options, transport *ht
 			}
 		}
 	}
-	dns := Check{Kind: "dns", Status: "ok", Millis: time.Since(start).Milliseconds(), Detail: source + "；IP 仅为候选，非实际连接地址"}
-	if opts.ProxyURL != "" && targetIP == nil {
-		dns.Detail += "；代理 DNS 可能不同"
+	dns := Check{Kind: "dns", Status: "ok", Millis: time.Since(start).Milliseconds(), Detail: source + " 解析"}
+	if targetIP != nil {
+		dns.Detail = "目标是 IP，无需解析"
 	}
 	if dnsErr != nil || len(result.Answers) == 0 {
 		dns.Status = "error"
-		dns.Detail += "；解析失败或无 IP"
+		dns.Detail = source + " 解析失败"
+	}
+	if opts.ProxyURL != "" && targetIP == nil {
+		dns.Detail += "；连接时由代理重新解析"
 	}
 	result.Checks = append(result.Checks, dns)
 
@@ -174,13 +181,13 @@ func probeTarget(ctx context.Context, target Target, opts Options, transport *ht
 		check.Status, check.Detail = responseDetail(response)
 		if target.Provider != "campus" && check.Status == "error" {
 			check.Status = "ok"
-			check.Detail += "；仅证明 HTTP 可达，不代表模型可用"
+			check.Detail += "；网络已通"
 		}
 		response.Body.Close()
 	}
 	result.Checks = append(result.Checks, check)
 	if target.Provider != "campus" {
-		ws := Check{Kind: "websocket", Status: "unsupported", Detail: "未配置可免认证的 WebSocket 测试入口"}
+		ws := Check{Kind: "websocket", Status: "unsupported", Detail: "该服务没有免认证的 WebSocket 测试地址"}
 		if target.wsURL != "" {
 			if result.HTTPStatus == 0 {
 				ws.Status, ws.Detail = "skipped", "HTTP 未收到响应，未尝试 WebSocket 握手"
@@ -240,9 +247,9 @@ func (t *connectionTrace) checks(proxy bool) []Check {
 	if tlsCheck.Kind == "" {
 		tlsCheck = Check{Kind: "tls", Status: "unsupported", Detail: "尚未进入 TLS 阶段"}
 	}
-	label := "目标 TCP；DNS IP 仅为候选"
+	label := "直连目标"
 	if proxy {
-		label = "本机 HTTP 代理入口 TCP；未观测目标 IP"
+		label = "连接本机代理入口"
 	}
 	if tcp.Detail != "" {
 		label += "；" + tcp.Detail
@@ -253,12 +260,12 @@ func (t *connectionTrace) checks(proxy bool) []Check {
 
 func responseDetail(response *http.Response) (string, string) {
 	code := response.StatusCode
-	detail := fmt.Sprintf("HTTP %d，已响应（请求总耗时）", code)
+	detail := fmt.Sprintf("HTTP %d 已响应", code)
 	if code == http.StatusUnauthorized {
 		return "auth", detail + "；需要认证"
 	}
 	if code == http.StatusForbidden {
-		return "auth", detail + "；认证、访问策略或地区限制可能拒绝访问"
+		return "auth", detail + "；被拒绝访问（权限或地区限制）"
 	}
 	if code >= 300 && code < 400 {
 		detail += "；未跟随跳转"
@@ -344,7 +351,7 @@ func checkWebSocket(ctx context.Context, client *http.Client, endpoint string) C
 		if !headerToken(response.Header.Get("Connection"), "upgrade") || !strings.EqualFold(response.Header.Get("Upgrade"), "websocket") || response.Header.Get("Sec-WebSocket-Accept") != expected {
 			check.Status, check.Detail = "error", "WebSocket 升级响应无效"
 		} else {
-			check.Status, check.Detail = "ok", "WebSocket 握手通过；已关闭，未发送应用数据"
+			check.Status, check.Detail = "ok", "WebSocket 握手成功"
 		}
 	} else if check.Status == "ok" {
 		check.Status, check.Detail = "error", check.Detail+"；未升级为 WebSocket"

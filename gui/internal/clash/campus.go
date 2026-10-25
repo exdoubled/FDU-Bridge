@@ -155,7 +155,7 @@ func (c *Connection) CampusCoverage(root string, rulesFiles ...string) (string, 
 		return "", err
 	}
 	if tun, _ := config["tun"].(map[string]any); tun != nil && tun["enable"] == true {
-		return "全部经 Clash TUN 接管的应用", nil
+		return "所有应用（Clash TUN 已开启）", nil
 	}
 	port := number(config["mixed-port"])
 	if port == 0 {

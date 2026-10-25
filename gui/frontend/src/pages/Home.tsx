@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ArrowRight, Globe, LoaderCircle, Network, Route, Shield, ShieldAlert, ShieldCheck } from "lucide-react";
+import { ArrowRight, Globe, LoaderCircle, Route, Shield, ShieldAlert, ShieldCheck } from "lucide-react";
 import { ClashService, CoreService, RulesService, errorText, type ApplyState, type NodeState } from "../lib/api";
 import { counts, type Draft } from "../lib/rulesDraft";
 import { formatUptime, stateLabel, stateTone } from "../lib/status";
@@ -79,10 +79,12 @@ export function Home() {
     }
   };
 
-  const metaPills = [
-    status.server && status.server,
+  const meta = [
+    status.server,
     status.protocol && (status.protocol === "atrust" ? "aTrust" : "EasyConnect"),
   ].filter(Boolean) as string[];
+  const uptime = status.connected && status.connectedAt > 0;
+  const canRelogin = status.protocol === "atrust" && status.saved && !status.external && !status.tool;
 
   return (
     <>
@@ -98,38 +100,39 @@ export function Home() {
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="hero-title">{stateLabel(status)}</div>
-              <div className="hero-meta">
-                {status.connected && status.connectedAt > 0 && <span className="pill success">{formatUptime(status.connectedAt, now)}</span>}
-                {metaPills.map((p) => <span key={p} className="pill">{p}</span>)}
-              </div>
-              <div className="hero-coverage">
-                <Network size={14} /><span className="faint">覆盖范围</span>
-                <span>{status.coverage || (active ? "正在检查覆盖范围…" : "启用后显示实际覆盖范围")}</span>
-              </div>
-              {status.problem && <div className={tone === "bad" ? "note danger" : "note"}>{status.problem}</div>}
-              {status.protocol === "atrust" && status.saved && !status.external && !status.tool && (
-                <button className={status.authRequired ? "btn primary" : "link"} style={{ marginTop: 10 }} onClick={relogin}
-                  disabled={busy || status.stopping || (status.starting && !status.authRequired && !["campus-unavailable", "authentication"].includes(status.state))}>
-                  重新登录
-                </button>
+              {(uptime || meta.length > 0) && (
+                <div className="hero-meta">
+                  {uptime && <span className="hero-uptime">{formatUptime(status.connectedAt, now)}</span>}
+                  {meta.map((p) => <span key={p}>{p}</span>)}
+                </div>
               )}
+              {active && <div className="hero-coverage selectable">覆盖范围：{status.coverage || "正在检查…"}</div>}
+              {status.problem && <div className={tone === "bad" ? "note danger" : "note"}>{status.problem}</div>}
             </div>
             {busy && <Spinner size={18} />}
+            {canRelogin && (
+              <button className={`btn sm ${status.authRequired ? "primary" : "ghost hero-relogin"}`} onClick={relogin}
+                disabled={busy || status.stopping || (status.starting && !status.authRequired && !["campus-unavailable", "authentication"].includes(status.state))}>
+                重新登录
+              </button>
+            )}
             <Switch large checked={active} disabled={busy || status.stopping || (!active && status.external)} onChange={togglePower} label="启用校内访问" />
           </section>
 
           <div className="grid-2">
             <section className="card">
-              <CardTitle icon={Globe} extra={!!nodes?.choices.length && <button className="link" onClick={() => navigate("nodes")}>切换节点 <ArrowRight size={14} /></button>}>外网节点</CardTitle>
+              <CardTitle icon={Globe} extra={!!nodes?.choices.length && <button className="link" onClick={() => navigate("nodes")}>切换 <ArrowRight size={14} /></button>}>外网节点</CardTitle>
               <div className="big-value ellipsis" title={nodes?.current}>{nodes?.current || "—"}</div>
               {(nodesError || nodes?.problem) && <div className="note ellipsis" title={nodesError || nodes?.problem}>{nodesError || nodes?.problem}</div>}
             </section>
             <section className="card">
-              <CardTitle icon={Route} extra={<button className="link" onClick={() => navigate("rules")}>管理校内资源 <ArrowRight size={14} /></button>}>校内资源</CardTitle>
+              <CardTitle icon={Route} extra={<button className="link" onClick={() => navigate("rules")}>管理 <ArrowRight size={14} /></button>}>校内资源</CardTitle>
               {rules ? (
                 <div className="row" style={{ flexWrap: "wrap" }}>
-                  <span><span className="stat">{rules.enabled}</span> <span className="muted">项启用</span></span>
-                  {rules.disabled > 0 && <span className="muted">{rules.disabled} 项停用</span>}
+                  <span title={rules.disabled > 0 ? `${rules.disabled} 项停用` : undefined}>
+                    <span className="stat">{rules.enabled}</span>
+                    <span className="muted"> {rules.disabled > 0 ? `/ ${rules.enabled + rules.disabled} ` : ""}项启用</span>
+                  </span>
                   <span className={`pill ${rules.status.applied ? "success" : ""}`} title={rules.status.message}>
                     {rules.status.applied ? "已生效" : active ? "待生效" : "启用后生效"}
                   </span>

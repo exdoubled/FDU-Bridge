@@ -74,7 +74,7 @@ func TestDiagnoseCampusDNSLabelReflectsActualLookup(t *testing.T) {
 					continue
 				}
 				dnsFound = true
-				if check.Status != "ok" || strings.Contains(check.Detail, "Clash DNS 候选") == ipLiteral {
+				if check.Status != "ok" || strings.Contains(check.Detail, "Clash DNS") == ipLiteral {
 					t.Fatalf("misleading DNS label: %+v", check)
 				}
 				if ipLiteral && (lookups != 0 || !strings.Contains(check.Detail, "无需解析")) {
@@ -175,7 +175,7 @@ func TestCampusSuggestionsOnlyChecksCoverageAfterHTTPFailure(t *testing.T) {
 			}
 			coverageAdvice := false
 			for _, suggestion := range campusSuggestions(d) {
-				coverageAdvice = coverageAdvice || strings.Contains(suggestion, "代理覆盖")
+				coverageAdvice = coverageAdvice || strings.Contains(suggestion, "TUN 或系统代理")
 			}
 			if coverageAdvice != (status == "error") {
 				t.Fatalf("unexpected coverage advice for HTTP %s: %v", status, campusSuggestions(d))
@@ -218,7 +218,7 @@ func TestDiagnoseCampusCannotInferRouteFromUnreadableRules(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := NewNetworkService(b).DiagnoseCampus("library.fudan.edu.cn")
-	if err != nil || got.Rule.Known || !strings.Contains(got.Rule.Message, "无法读取") || !strings.Contains(got.ExpectedPath, "无法确认") {
+	if err != nil || got.Rule.Known || !strings.Contains(got.Rule.Message, "无法读取") || !strings.Contains(got.ExpectedPath, "无法判断") {
 		t.Fatalf("unknown rules presented as valid: %+v / %v", got, err)
 	}
 	for _, suggestion := range got.Suggestions {

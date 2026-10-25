@@ -130,7 +130,7 @@ func TestDNSFailureDoesNotSuppressHTTPAndAnswersAreCandidates(t *testing.T) {
 	result, err = ProbeCampus(context.Background(), "http://library.fudan.edu.cn/", Options{ProxyURL: server.URL, Lookup: func(context.Context, string) ([]string, error) {
 		return []string{"203.0.113.8", "invalid", "203.0.113.8"}, nil
 	}})
-	if err != nil || len(result.Answers) != 1 || result.Answers[0] != "203.0.113.8" || !strings.Contains(findCheck(t, result, "dns").Detail, "候选") {
+	if err != nil || len(result.Answers) != 1 || result.Answers[0] != "203.0.113.8" || !strings.Contains(findCheck(t, result, "dns").Detail, "由代理重新解析") {
 		t.Fatalf("candidate answers = %+v", result)
 	}
 }

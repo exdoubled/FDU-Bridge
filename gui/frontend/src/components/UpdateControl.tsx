@@ -96,8 +96,9 @@ export function UpdateSettings() {
     <section className="card section" style={{ padding: 0 }}>
       <div className="section-head"><Download size={16} />应用更新</div>
       <div className="setting">
-        <div className="setting-label">当前版本{message && !failed && <span className="setting-hint">{message}</span>}</div>
+        <div className="setting-label">当前版本</div>
         <div className="setting-control">
+          {message && !failed && <span className="muted">{message}</span>}
           <span className="mono selectable">{update?.current || "—"}</span>
           <button className="btn" onClick={check} disabled={busy}>
             {update?.phase === "checking" ? <Spinner /> : <RefreshCw size={15} />}检查更新

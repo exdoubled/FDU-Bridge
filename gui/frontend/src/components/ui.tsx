@@ -77,4 +77,14 @@ export function CardTitle({ icon: Icon, children, extra }: { icon: LucideIcon; c
   );
 }
 
+/** Keeps secondary explanations one hover away instead of as captions. */
+export function Hint({ text, label = "说明", end }: { text: string; label?: string; end?: boolean }) {
+  return (
+    <span className={`hint${end ? " end" : ""}`} tabIndex={0} aria-label={`${label}：${text}`} onClick={(e) => e.preventDefault()}>
+      <Info size={13} />
+      <span className="hint-tip" role="tooltip">{text}</span>
+    </span>
+  );
+}
+
 export const toastIcons = { success: CircleCheck, error: CircleX, info: Info };
