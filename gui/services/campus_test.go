@@ -87,7 +87,7 @@ func TestFailedEnableCanQuitWithoutRecoveringAnUnownedSession(t *testing.T) {
 			}
 			done := make(chan struct{})
 			b.starting, b.startDone = true, done
-			b.startCampus(context.Background(), done, false)
+			b.startCampus(context.Background(), done, false, false)
 			if b.startDone != nil || b.runtime.Running() {
 				t.Fatal("failed preflight retained a fictitious owned session")
 			}

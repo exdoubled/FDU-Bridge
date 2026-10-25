@@ -31,6 +31,8 @@ type ClientTarget struct {
 
 type clientProcess struct{ name, line string }
 
+var ErrClientNotRunning = errors.New("未找到可读取本机控制接口的代理运行配置，请启动客户端，或手动选择 Verge 配置目录或 Mihomo 运行配置文件")
+
 // DiscoverClients reads process arguments and associated client paths. It does not
 // connect to controllers, scan subscription caches, or change client files.
 func DiscoverClients() ([]ClientTarget, error) {
@@ -93,7 +95,7 @@ func selectClientTarget(targets []ClientTarget) (ClientTarget, error) {
 	if len(targets) > 1 {
 		return ClientTarget{}, errors.New("检测到多个代理客户端或内核，请选择要接入的 Verge 配置目录或 Mihomo 运行配置文件")
 	}
-	return ClientTarget{}, errors.New("未找到可读取本机控制接口的代理运行配置，请启动客户端，或手动选择 Verge 配置目录或 Mihomo 运行配置文件")
+	return ClientTarget{}, ErrClientNotRunning
 }
 
 func clientProcessName(name string) bool {

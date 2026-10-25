@@ -2,12 +2,22 @@ package clash
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 )
+
+func TestAbsentClientIsRetryableButAmbiguousClientsAreNot(t *testing.T) {
+	if _, err := selectClientTarget(nil); !errors.Is(err, ErrClientNotRunning) {
+		t.Fatalf("absent client not classified: %v", err)
+	}
+	if _, err := selectClientTarget([]ClientTarget{{Kind: "verge"}, {Kind: "runtime"}}); err == nil || errors.Is(err, ErrClientNotRunning) {
+		t.Fatalf("ambiguous targets must require user selection: %v", err)
+	}
+}
 
 const discoveryRuntime = "external-controller: 127.0.0.1:19090\nsecret: private-controller-secret\nproxies: [{name: test, type: ss, server: example.invalid, port: 443, password: private-proxy-password}]\nproxy-groups: []\nrules: ['MATCH,DIRECT']\n"
 
