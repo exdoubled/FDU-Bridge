@@ -20,7 +20,7 @@ func NormalizeCampusURL(input string) (Target, error) {
 		return Target{}, invalid
 	}
 	if !strings.Contains(input, "://") {
-		if strings.ContainsAny(input, "/?#@:") {
+		if strings.HasPrefix(input, "/") {
 			return Target{}, invalid
 		}
 		input = "https://" + input
