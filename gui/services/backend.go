@@ -156,7 +156,7 @@ func (b *Backend) Start(autoConnect bool) {
 				b.appendLog("检测到其他 FDU 正在运行，已跳过自动连接。")
 				return
 			}
-			if err := b.connect(false); err != nil {
+			if err := b.beginConnect(false, false, true); err != nil {
 				b.appendLog("自动连接失败：" + err.Error())
 			}
 		}()

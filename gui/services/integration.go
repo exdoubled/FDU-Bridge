@@ -12,6 +12,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// discoverClients is the only process scan behind client selection; tests replace
+// it so Clash clients running on the developer's machine cannot change results.
+var discoverClients = clash.DiscoverClients
+
 func (b *Backend) proxyOnly() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -52,7 +56,7 @@ func followingClient(previous clash.ClientTarget, clients []clash.ClientTarget) 
 }
 
 func (b *Backend) automaticTarget(preferred, oldVerge string) (clash.ClientTarget, error) {
-	clients, err := clash.DiscoverClients()
+	clients, err := discoverClients()
 	if err != nil {
 		return clash.ClientTarget{}, err
 	}
@@ -73,9 +77,14 @@ func (b *Backend) automaticTarget(preferred, oldVerge string) (clash.ClientTarge
 		return matching[0], nil
 	}
 	if preferred != "" {
-		target, err := clash.ResolveClientTarget(preferred)
-		if err == nil && target.Kind == "runtime" {
-			return clash.ClientTarget{}, errors.New("已保存的运行配置不属于当前可确认的内核，请重新选择客户端或改用手动接入")
+		target, err := clash.ResolveDiscoveredTarget(preferred, clients)
+		if (err == nil && target.Kind == "runtime") || errors.Is(err, clash.ErrClientNotRunning) {
+			for _, client := range clients {
+				if client.Kind == "runtime" {
+					return clash.ClientTarget{}, errors.New("已保存的运行配置不属于当前可确认的内核，请重新选择客户端或改用手动接入")
+				}
+			}
+			return clash.ClientTarget{}, clash.ErrClientNotRunning
 		}
 		return target, err
 	}
@@ -88,7 +97,7 @@ func (b *Backend) automaticTarget(preferred, oldVerge string) (clash.ClientTarge
 	if selected, err := appconf.ResolveClashDir(oldVerge); err == nil {
 		return clash.ClientTarget{Kind: "verge", Root: selected, Name: "Clash Verge Rev"}, nil
 	}
-	return clash.ResolveClientTarget("")
+	return clash.ResolveDiscoveredTarget("", clients)
 }
 
 // Saving a binding never installs anything into the selected client.

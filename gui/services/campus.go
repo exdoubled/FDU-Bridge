@@ -43,7 +43,7 @@ func (b *Backend) campusRoot() (string, error) {
 	var err error
 	if b.runtime.Running() && b.autoTarget != nil {
 		var clients []clash.ClientTarget
-		clients, err = clash.DiscoverClients()
+		clients, err = discoverClients()
 		if err == nil {
 			target, err = followingClient(*b.autoTarget, clients)
 		}
@@ -104,6 +104,10 @@ func (b *Backend) connect(approved bool) error {
 }
 
 func (b *Backend) connectWithLogin(approved, fresh bool) error {
+	return b.beginConnect(approved, fresh, false)
+}
+
+func (b *Backend) beginConnect(approved, fresh, waitClash bool) error {
 	b.clashBusy.Lock()
 	defer b.clashBusy.Unlock()
 	if b.runtime.Running() || b.runtime.ExternalRunning() {
@@ -126,7 +130,7 @@ func (b *Backend) connectWithLogin(approved, fresh bool) error {
 	b.follow, b.followTarget, b.followRetry = true, nil, time.Time{}
 	b.mu.Unlock()
 	b.publish()
-	go b.startCampus(ctx, done, approved)
+	go b.startCampus(ctx, done, approved, waitClash)
 	return nil
 }
 
@@ -183,8 +187,21 @@ func (b *Backend) ownsCampus() bool {
 	return b.campusOwned
 }
 
-func (b *Backend) startCampus(ctx context.Context, done chan struct{}, approved bool) {
-	err := b.prepareCampus(ctx, approved)
+func (b *Backend) startCampus(ctx context.Context, done chan struct{}, approved, waitClash bool) {
+	var err error
+	if waitClash {
+		err = b.waitForStartupClash(ctx)
+		if err == nil {
+			// Preferences can change while the readiness probe is in flight.
+			err = b.startupAllowed(ctx)
+		}
+		if err == nil {
+			b.connectionProblem("preparing", "")
+		}
+	}
+	if err == nil {
+		err = b.prepareCampus(ctx, approved)
+	}
 	if err == nil {
 		err = b.waitForCampus(ctx)
 	}

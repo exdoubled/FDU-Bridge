@@ -31,6 +31,8 @@ type ClientTarget struct {
 
 type clientProcess struct{ name, line string }
 
+var ErrClientNotRunning = errors.New("未找到可读取本机控制接口的代理运行配置，请启动客户端，或手动选择 Verge 配置目录或 Mihomo 运行配置文件")
+
 // DiscoverClients reads process arguments and associated client paths. It does not
 // connect to controllers, scan subscription caches, or change client files.
 func DiscoverClients() ([]ClientTarget, error) {
@@ -53,11 +55,17 @@ func DiscoverClients() ([]ClientTarget, error) {
 // ResolveClientTarget honors a remembered manual selection before automatic discovery.
 func ResolveClientTarget(preferred string) (ClientTarget, error) {
 	targets, err := DiscoverClients()
+	if err != nil && strings.TrimSpace(preferred) == "" {
+		return ClientTarget{}, err
+	}
+	return ResolveDiscoveredTarget(preferred, targets)
+}
+
+// ResolveDiscoveredTarget resolves against an existing discovery snapshot, so a
+// caller can make every decision from a single process scan.
+func ResolveDiscoveredTarget(preferred string, targets []ClientTarget) (ClientTarget, error) {
 	if preferred = strings.TrimSpace(preferred); preferred != "" {
 		return resolvePreferredClientTarget(preferred, targets)
-	}
-	if err != nil {
-		return ClientTarget{}, err
 	}
 	return selectClientTarget(targets)
 }
@@ -81,6 +89,9 @@ func resolvePreferredClientTarget(preferred string, targets []ClientTarget) (Cli
 	}
 	controller, err := clientRuntimeController(path, nil)
 	if err != nil {
+		if errors.Is(err, ErrClientNotRunning) {
+			return ClientTarget{}, err
+		}
 		return ClientTarget{}, errors.New("所选路径不是兼容的 Verge 目录或含本机控制接口的 Mihomo 运行配置，请重新选择")
 	}
 	return ClientTarget{Kind: "runtime", Name: clientLabel("", path), Root: filepath.Dir(path), RuntimeFile: path, Controller: controller}, nil
@@ -93,7 +104,7 @@ func selectClientTarget(targets []ClientTarget) (ClientTarget, error) {
 	if len(targets) > 1 {
 		return ClientTarget{}, errors.New("检测到多个代理客户端或内核，请选择要接入的 Verge 配置目录或 Mihomo 运行配置文件")
 	}
-	return ClientTarget{}, errors.New("未找到可读取本机控制接口的代理运行配置，请启动客户端，或手动选择 Verge 配置目录或 Mihomo 运行配置文件")
+	return ClientTarget{}, ErrClientNotRunning
 }
 
 func clientProcessName(name string) bool {
@@ -412,6 +423,12 @@ func clientRuntimeController(path string, args []string) (*ControlAPI, error) {
 			controller.Network, controller.Address = "tcp", config.TCP
 			return controller, nil
 		}
+	}
+	// Some clients pass their local controller only through core CLI flags.
+	// Retry discovery only for a valid runtime with no configured endpoint;
+	// malformed or explicitly unsafe endpoints remain terminal errors.
+	if len(args) == 0 && config.TCP == "" && config.Unix == "" && config.Pipe == "" {
+		return nil, ErrClientNotRunning
 	}
 	return nil, invalid
 }
