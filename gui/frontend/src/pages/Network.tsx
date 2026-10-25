@@ -43,10 +43,10 @@ export function Network() {
             <CardTitle icon={Bot} extra={<select className="select provider-select" aria-label="筛选 AI 服务商" value={provider} onChange={(event) => setProvider(event.target.value)}>
               <option value="all">全部服务商</option>
               {Object.entries(aiProviders).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-            </select>}>AI 当前连接 <span className="faint">{connections.length}</span><Hint text="仅展示 TCP / UDP；加密连接无法据此区分 HTTP / WS。" /></CardTitle>
+            </select>}>AI 当前连接 <span className="faint">{connections.length}</span><Hint text="按 TCP / UDP 列出连接，不区分 HTTP 与 WebSocket。" /></CardTitle>
             <div className="connection-table-wrap">
               <table className="connection-table">
-                <thead><tr><th>服务商</th><th>域名 / 端口</th><th title="来源记录的目标 IP；远端解析可能未知，FDU 前的 DNS 答案不是实际 VPN 目标">目标 IP</th><th>传输</th><th>路径</th><th>节点</th><th>流量</th></tr></thead>
+                <thead><tr><th>服务商</th><th>域名 / 端口</th><th title="Clash / FDU 记录的目标地址；由 VPN 远端解析的显示为未确认">目标 IP</th><th>传输</th><th>路径</th><th>节点</th><th>流量</th></tr></thead>
                 <tbody>
                   {connections.map((connection) => <ConnectionRow key={`${connection.source}-${connection.id}`} connection={connection} />)}
                   {connections.length === 0 && <tr><td colSpan={7} className="connection-empty">{observeError ? "暂时无法读取连接" : !view ? "正在读取连接…" : "暂无可观测的 AI 连接"}</td></tr>}
@@ -57,7 +57,7 @@ export function Network() {
           </section>
           <section className="card ai-probes">
             <CardTitle icon={FlaskConical} extra={<button className="btn sm" disabled={busy || !aiTargets.length} onClick={() => probe(aiTargets.map((target) => target.id))}>{busy ? "检测中…" : "检测全部"}</button>}>
-              固定目标检测<Hint text="经当前入口检测；HTTP 401 表示网络已响应，模型访问仍需有效认证。入口不代表最终路径。" />
+              固定目标检测<Hint text="通过当前代理入口访问各服务。返回 401 说明网络已通，调用模型还需要 API Key。" />
             </CardTitle>
             {aiTargets.map((target) => <ProbeRow key={target.id} target={target} />)}
             {targetsError && <div className="note" title={targetsError}>无法读取检测目标</div>}

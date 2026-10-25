@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net"
 	"path/filepath"
 	"time"
 
@@ -35,24 +34,24 @@ func (s *NetworkService) DiagnoseCampus(input string) (CampusDiagnosis, error) {
 		Integration: mode, State: status.State, Connected: status.Connected, AuthRequired: status.AuthRequired,
 		Coverage: status.Coverage, Problem: status.Problem, Suggestions: []string{}}
 	diagnosis.Rule = s.diagnoseRule(target.Host)
-	diagnosis.ExpectedPath = "未命中启用的校园规则；不能预期经校园 VPN 访问"
+	diagnosis.ExpectedPath = "没有命中启用的规则，不经过校园 VPN"
 	if !diagnosis.Rule.Known {
-		diagnosis.ExpectedPath = "无法确认已保存校园规则，尚不能推断预期路径"
+		diagnosis.ExpectedPath = "读取不到校内资源规则，无法判断路径"
 	}
 	if diagnosis.Rule.Matched && !diagnosis.Rule.Enabled {
-		diagnosis.ExpectedPath = "命中的校园规则已禁用；不能预期经校园 VPN 访问"
+		diagnosis.ExpectedPath = "命中的规则已停用，不经过校园 VPN"
 	}
 	if diagnosis.Rule.Enabled {
-		diagnosis.ExpectedPath = "配置预期：Clash 校园规则 → FDU → 校园 VPN；此处为规则推断"
+		diagnosis.ExpectedPath = "Clash 校园规则 → FDU → 校园 VPN"
 		if !diagnosis.Rule.Applied {
-			diagnosis.ExpectedPath += "，规则尚未确认同步"
+			diagnosis.ExpectedPath += "（规则同步中）"
 		}
 	}
 	if mode == "proxy" {
-		diagnosis.ExpectedPath = "本次检测使用 FDU 本地 HTTP 入口；校园分流由外部客户端管理，保存的规则不代表外部客户端已应用"
+		diagnosis.ExpectedPath = "经 FDU 本地 HTTP 代理检测；分流由外部客户端决定"
 	}
 	if !diagnosis.Connected {
-		diagnosis.ExpectedPath += "；当前登录／隧道未就绪"
+		diagnosis.ExpectedPath += "；隧道未就绪"
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -70,13 +69,6 @@ func (s *NetworkService) DiagnoseCampus(input string) (CampusDiagnosis, error) {
 			}
 			diagnosis.Problem += "无法开始网址检测，请检查输入和本机代理入口"
 		} else {
-			if opts.Lookup != nil && net.ParseIP(target.Host) == nil {
-				for i := range result.Checks {
-					if result.Checks[i].Kind == "dns" {
-						result.Checks[i].Detail = "Clash DNS 候选结果；" + result.Checks[i].Detail
-					}
-				}
-			}
 			diagnosis.Probe = &ProbeReport{Result: result, Via: via}
 		}
 	}
@@ -157,38 +149,38 @@ func campusSuggestions(d CampusDiagnosis) []string {
 	if d.AuthRequired {
 		suggestions = append(suggestions, "登录已失效，请重新登录 UIS 后重试。")
 	} else if !d.Connected {
-		suggestions = append(suggestions, "请先连接 FDU，并等待登录和隧道就绪后重新检测。")
+		suggestions = append(suggestions, "先在首页开启校内访问，连接就绪后再检测。")
 	}
 	if d.Integration != "proxy" {
 		if !d.Rule.Known {
-			suggestions = append(suggestions, "请在校内资源页重新读取并检查已保存规则，确认规则有效后再判断分流。")
+			suggestions = append(suggestions, "到校内资源页重新读取规则。")
 		} else if !d.Rule.Matched {
-			suggestions = append(suggestions, "请在校内资源页确认已保存规则；确认该站点属于校园资源后再添加域名规则。")
+			suggestions = append(suggestions, "如果这是校内网站，到校内资源页添加它的域名。")
 		} else if !d.Rule.Enabled {
-			suggestions = append(suggestions, "请在校内资源页启用命中的规则并保存。")
+			suggestions = append(suggestions, "到校内资源页启用这条规则并保存。")
 		} else if !d.Rule.Applied {
-			suggestions = append(suggestions, "规则尚未确认同步，请等待 FDU 和 Clash 完成同步后重试。")
+			suggestions = append(suggestions, "规则正在同步，稍后再试。")
 		}
 	}
 	if d.Probe == nil {
-		suggestions = append(suggestions, "请检查当前接入方式和本机代理入口；检测未改走系统直连。")
+		suggestions = append(suggestions, "检查接入方式和本机代理端口。")
 		return suggestions
 	}
 	for _, check := range d.Probe.Result.Checks {
 		switch {
 		case check.Kind == "dns" && check.Status == "error":
-			suggestions = append(suggestions, "请检查当前 DNS 配置；DNS 候选查询失败不等于代理访问失败，请结合 HTTP 结果判断。")
+			suggestions = append(suggestions, "DNS 解析失败；HTTP 正常时可以忽略。")
 		case check.Kind == "tls" && check.Status == "error":
-			suggestions = append(suggestions, "请检查系统时间和站点证书，不要关闭证书验证。")
+			suggestions = append(suggestions, "检查系统时间和网站证书。")
 		case check.Kind == "http" && check.Status == "auth":
-			suggestions = append(suggestions, "站点已响应但要求认证或限制访问，请在浏览器中完成站点登录并检查访问权限。")
+			suggestions = append(suggestions, "网站要求登录或没有访问权限，在浏览器中登录后再试。")
 		case check.Kind == "http" && check.Status == "error":
 			if d.Integration != "proxy" && d.Coverage != "" {
-				suggestions = append(suggestions, "请按代理覆盖提示检查 Clash TUN／系统代理，并确认浏览器使用当前 Clash 入口。")
+				suggestions = append(suggestions, "检查 Clash 的 TUN 或系统代理是否开启，并确认浏览器走 Clash。")
 			}
-			suggestions = append(suggestions, "请结合 DNS／TCP／TLS 阶段定位失败；入口正常时仍失败，请检查目标服务状态。")
+			suggestions = append(suggestions, "看是哪一步失败；前面几步都通过时，多半是网站本身不可用。")
 		case check.Kind == "http" && check.Status == "ok":
-			suggestions = append(suggestions, "HTTP 已响应，仅证明本次指定入口可达；请在浏览器中验证实际访问路径和站点登录。")
+			suggestions = append(suggestions, "网站可以访问；浏览器仍打不开时，确认浏览器走 Clash。")
 		}
 	}
 	return suggestions

@@ -47,7 +47,7 @@ export function MaintenanceSettings({ disabled, migrationDisabled, onMigrated }:
       <div className="setting-control"><button className="btn danger" disabled={locked || disabled} onClick={remove}>{busy && <Spinner />}移除接入</button></div>
     </div>
     <div className="setting">
-      <div className="setting-label">从旧目录迁移<Hint text="仅复制受管配置、规则和登录状态" /></div>
+      <div className="setting-label">从旧目录迁移<Hint text="复制配置、规则和登录状态，旧目录保持不变" /></div>
       <div className="setting-control"><button className="btn" disabled={locked || migrationDisabled} onClick={migrate}>选择旧目录</button></div>
     </div>
   </section>;

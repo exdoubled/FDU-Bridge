@@ -112,7 +112,7 @@ func bypassConflicts(patterns []string, file string) ([]string, error) {
 func proxyCoverage(port int, rulesFile string) string {
 	bypass, enabled, err := systemProxyBypass(port)
 	if err != nil {
-		return "未开 TUN；无法自动检查系统代理，请确认应用已使用 Clash 代理。" + err.Error()
+		return "未开 TUN，读不到系统代理设置（" + err.Error() + "）；请确认应用走 Clash 代理"
 	}
 	if !enabled {
 		return "未开 TUN，系统代理未指向当前 Clash；请打开 Clash 的系统代理，或为应用手动设置代理"
@@ -129,5 +129,5 @@ func proxyCoverage(port int, rulesFile string) string {
 			return "部分校内资源被系统代理绕过：" + strings.Join(conflicts, "、") + "。请开启 Clash TUN，或在系统代理绕过列表中移除这些冲突项"
 		}
 	}
-	return "未开 TUN；使用系统代理或手动指向 Clash 的应用可访问校内资源，其他应用不受接管"
+	return "使用 Clash 代理的应用（未开 TUN）"
 }

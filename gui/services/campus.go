@@ -367,7 +367,7 @@ func (b *Backend) waitForCampus(ctx context.Context) error {
 		}
 		if b.proxyOnly() {
 			b.mu.Lock()
-			b.enabled, b.state, b.problem, b.coverage = true, "connected", "", "仅覆盖指向本地 FDU 代理的连接；分流由外部应用管理"
+			b.enabled, b.state, b.problem, b.coverage = true, "connected", "", "设置了 FDU 本地代理的应用"
 			b.connectedAt = time.Now()
 			b.mu.Unlock()
 			return nil
@@ -433,7 +433,7 @@ func (b *Backend) waitForCampus(ctx context.Context) error {
 			return err
 		}
 		if coverageErr != nil {
-			coverage = "已接入；暂时无法确认 Clash TUN 覆盖范围"
+			coverage = "已接入，暂时读不到 Clash TUN 状态"
 		}
 		b.mu.Lock()
 		b.enabled, b.state, b.problem, b.coverage = true, "connected", "", coverage

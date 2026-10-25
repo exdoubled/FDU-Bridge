@@ -5,7 +5,7 @@ import { ProbeDetails } from "./NetworkTools";
 import { CardTitle, Hint, Spinner } from "./ui";
 import { DiagnosisReport } from "./DiagnosisReport";
 
-const diagnosisHelp = "保留网址路径，移除查询参数和片段；不携带登录凭证，不跟随跳转。不会更改规则或系统设置。";
+const diagnosisHelp = "只访问网址本身（去掉 ? 和 # 之后的部分），不带登录信息，不改任何设置。";
 const integrationNames: Record<string, string> = { auto: "自动接入 Clash", manual: "手动接入 Clash", proxy: "仅本地代理" };
 const ruleNames: Record<string, string> = { domain: "精确域名", suffix: "域名及子域名", cidr: "IPv4 网段" };
 
@@ -20,14 +20,14 @@ export function CampusDiagnosticResult({ diagnosis: d, input }: { diagnosis: Cam
           <p className="selectable">{d.expectedPath}</p>
           <dl className="diagnosis-facts">
             <dt>接入方式</dt><dd>{integrationNames[d.integration] ?? d.integration}</dd>
-            <dt>登录／隧道</dt><dd>{d.authRequired ? "需重新登录" : d.connected ? "已登录" : "登录尚未确认"} · {d.connected ? "隧道已就绪" : "隧道未就绪"}</dd>
+            <dt>登录／隧道</dt><dd>{d.authRequired ? "需重新登录" : d.connected ? "已登录" : "未登录"} · {d.connected ? "隧道已就绪" : "隧道未就绪"}</dd>
             <dt>保存的规则</dt><dd>{!d.rule.known ? "无法确认" : d.rule.matched ? <><span className={d.rule.enabled ? "success-text" : "warning-text"}>{d.rule.enabled ? "已启用" : "已禁用"}</span> · {ruleNames[d.rule.kind] ?? d.rule.kind} <span className="mono selectable">{d.rule.value}</span></> : "未命中"}</dd>
-            <dt>规则同步</dt><dd>{d.rule.message || (d.rule.applied ? "已同步" : "尚未确认同步")}</dd>
-            <dt>代理覆盖</dt><dd>{d.coverage || "尚未确认应用的代理覆盖范围"}</dd>
+            <dt>规则同步</dt><dd>{d.rule.message || (d.rule.applied ? "已同步" : "同步中")}</dd>
+            <dt>代理覆盖</dt><dd>{d.coverage || "—"}</dd>
           </dl>
         </section>
         <section aria-label="实测证据">
-          <h3>实测证据<Hint text="DNS 地址仅为候选；代理入口 TCP 和 HTTP 响应不单独证明浏览器的实际路径。" /></h3>
+          <h3>实测证据<Hint text="从 Clash 当前入口发起访问；浏览器也走 Clash 时，结果与浏览器一致。" /></h3>
           {d.probe ? <ProbeDetails report={d.probe} /> : <div className="muted">未执行网络探测</div>}
           {d.problem && <p className="field-error selectable">{d.problem}</p>}
         </section>

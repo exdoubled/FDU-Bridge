@@ -220,7 +220,7 @@ func (s *RulesService) Status(hash string) rules.ApplyState {
 
 func (s *RulesService) applyStatus(store *rules.Store, hash string) rules.ApplyState {
 	if s.b.proxyOnly() {
-		return rules.ApplyState{Message: "仅本地代理：校园分流由外部客户端管理，当前列表保留供自动／手动接入使用"}
+		return rules.ApplyState{Message: "仅本地代理模式下由外部客户端分流，此列表在自动／手动接入时生效"}
 	}
 	s.b.mu.Lock()
 	enabled := s.b.enabled

@@ -236,7 +236,7 @@ func (s *Store) ApplyStatus(expectedHash string) ApplyState {
 	_, loaded, failure, ok := s.Acknowledgement()
 	switch {
 	case !ok:
-		return ApplyState{Message: "已保存，尚未收到运行中 FDU 的加载确认"}
+		return ApplyState{Message: "已保存，等待 FDU 加载"}
 	case failure != "":
 		return ApplyState{Message: "FDU 未接受新规则，仍保留上一份有效规则：" + failure}
 	case !strings.EqualFold(loaded, expectedHash):

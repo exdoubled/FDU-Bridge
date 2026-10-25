@@ -200,7 +200,7 @@ func (s *NetworkService) sample(core routing.TrafficSnapshot, coreFresh bool, ob
 		view.NonFDU.UploadRate += upload
 		view.NonFDU.DownloadRate += download
 	}
-	view.Scope = "统计当前 FDU 与 Clash；Clash 非 FDU 流量为采样估算，短连接可能漏采。"
+	view.Scope = "非 FDU 流量按 Clash 连接采样估算。"
 	if !coreFresh {
 		view.Scope += " FDU 核心统计暂不可用。"
 	}

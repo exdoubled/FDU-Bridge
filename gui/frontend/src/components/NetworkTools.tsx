@@ -9,7 +9,7 @@ const campusTargets = [
   { id: "library", name: "图书馆", host: "library.fudan.edu.cn" },
   { id: "icourse", name: "复旦课程", host: "icourse.fudan.edu.cn" },
 ];
-const compatibilityNote = "icourse 在开启系统代理时可能无法访问。如遇此情况，请将 icourse.fudan.edu.cn 加入系统代理绕过列表；校外访问仍需校园网或有效的 TUN/FDU 路径。";
+const compatibilityNote = "开着系统代理时 icourse 可能打不开，把 icourse.fudan.edu.cn 加入系统代理的绕过列表即可。在校外还需要开启 Clash TUN。";
 
 interface NetworkToolsState {
   view: NetworkView | null;
@@ -143,7 +143,7 @@ export function TrafficCards() {
   const sources = [view?.coreAvailable && "FDU", view?.clashAvailable && "Clash"].filter(Boolean).join(" / ");
   // Only abnormal sampling gets a visible caption; the normal scope stays in the hint.
   const problem = observeError ? view ? "采样失败 · 显示上次数据" : "暂时无法读取流量" : view && !sources ? "暂无可用流量来源" : "";
-  const hint = view && sources ? [`本次运行 · ${sources} 可观测流量`, view.scope].filter(Boolean).join("\n") : undefined;
+  const hint = view && sources ? [`统计本次运行的 ${sources} 流量`, view.scope].filter(Boolean).join("\n") : undefined;
   return (
     <div className="traffic-section">
       <div className="grid-2">
