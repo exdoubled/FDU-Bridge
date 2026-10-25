@@ -297,6 +297,7 @@ input, textarea, select, button { font: inherit; color: inherit; }
 .dialog-title { font-size: 16px; font-weight: 600; margin: 0 0 10px; }
 .dialog-body { color: var(--text-2); white-space: pre-line; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.diagnosis-report-preview { margin-top: 12px; max-height: 50vh; line-height: 1.6; resize: vertical; }
 .captcha { position: relative; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border); background: var(--field); margin-top: 12px; }
 .captcha img { display: block; width: 100%; height: auto; }
 .captcha.clickable img { cursor: crosshair; }
