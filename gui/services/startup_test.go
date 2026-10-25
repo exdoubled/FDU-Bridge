@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -60,7 +61,22 @@ func startupBackend(t *testing.T) *Backend {
 	}
 	b.config.AutoConnect, b.config.CampusConsent = true, true
 	b.config.Integration.Mode, b.config.Integration.RuntimeFile = "manual", file
+	ownCores(b)
 	return b
+}
+
+// ownCores keeps real FDU core detection but reports only the given helper
+// PIDs, so FDU cores running on the developer's machine cannot change results.
+func ownCores(b *Backend, pids ...int) {
+	b.runtime.FindCores = func(exclude uint32) []uint32 {
+		var owned []uint32
+		for _, pid := range sysproc.FindCores(exclude) {
+			if slices.Contains(pids, int(pid)) {
+				owned = append(owned, pid)
+			}
+		}
+		return owned
+	}
 }
 
 func TestStartupWaitContinuesWhenControllerAppears(t *testing.T) {
@@ -381,6 +397,11 @@ func TestStartupWaitStopsForAnotherFDU(t *testing.T) {
 	sysproc.CoreNames = []string{filepath.Base(executable)}
 	defer func() { sysproc.CoreNames = names }()
 	b := startupBackend(t)
+	ownCores(b, child.Process.Pid)
+	// Without the helper, this test would pass vacuously.
+	if !b.runtime.ExternalRunning() {
+		t.Fatal("helper FDU process was not detected")
+	}
 	b.conn.API = forbiddenAPI{t}
 	if err := b.waitForStartupClash(context.Background()); err == nil {
 		t.Fatal("startup ignored another FDU process")

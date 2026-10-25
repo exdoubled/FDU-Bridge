@@ -33,6 +33,10 @@ var Tools = map[string]bool{"auth-info": true, "trust-device": true, "untrust-de
 type Runtime struct {
 	Core string   // path to fdu-connect.exe
 	Env  []string // extra environment, used by tests
+	// FindCores is the only scan for FDU cores this GUI did not start; nil uses
+	// sysproc.FindCores. Tests replace it so cores on the developer's machine
+	// cannot change results.
+	FindCores func(exclude uint32) []uint32
 
 	OnLog       func(line string)
 	OnState     func(state string)
@@ -102,7 +106,14 @@ func (r *Runtime) Tool() string {
 }
 
 // ExternalRunning reports FDU cores this GUI did not start.
-func (r *Runtime) ExternalRunning() bool { return len(sysproc.FindCores(r.PID())) > 0 }
+func (r *Runtime) ExternalRunning() bool { return len(r.findCores(r.PID())) > 0 }
+
+func (r *Runtime) findCores(exclude uint32) []uint32 {
+	if r.FindCores != nil {
+		return r.FindCores(exclude)
+	}
+	return sysproc.FindCores(exclude)
+}
 
 func lookup(values map[string]any, key string) any {
 	var current any = values
@@ -130,7 +141,7 @@ func secretsOf(values map[string]any) []string {
 }
 
 func (r *Runtime) preflight(values map[string]any) error {
-	if len(sysproc.FindCores(0)) > 0 {
+	if len(r.findCores(0)) > 0 {
 		return errors.New("已有 FDU 在运行，请先自行关闭；本窗口不会接管或关闭它")
 	}
 	for _, key := range []string{"socks_bind", "http_bind"} {
