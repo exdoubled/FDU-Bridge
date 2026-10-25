@@ -11,6 +11,7 @@ import (
 
 var (
 	progressUser32       = windows.NewLazySystemDLL("user32.dll")
+	progressGDI32        = windows.NewLazySystemDLL("gdi32.dll")
 	progressCreateWindow = progressUser32.NewProc("CreateWindowExW")
 	progressSendMessage  = progressUser32.NewProc("SendMessageW")
 	progressGetItem      = progressUser32.NewProc("GetDlgItem")
@@ -38,10 +39,48 @@ type progressMessage struct {
 	private        uint32
 }
 
+type progressLogFont struct {
+	height, width, escapement, orientation, weight int32
+	italic, underline, strikeOut, charSet          byte
+	outPrecision, clipPrecision, quality, family   byte
+	faceName                                       [32]uint16
+}
+
+type progressNonclientMetrics struct {
+	size                                                                uint32
+	borderWidth, scrollWidth, scrollHeight, captionWidth, captionHeight int32
+	captionFont                                                         progressLogFont
+	smallCaptionWidth, smallCaptionHeight                               int32
+	smallCaptionFont                                                    progressLogFont
+	menuWidth, menuHeight                                               int32
+	menuFont, statusFont, messageFont                                   progressLogFont
+	paddedBorderWidth                                                   int32
+}
+
+func progressFont(dpi uintptr) (uintptr, error) {
+	metrics := progressNonclientMetrics{}
+	metrics.size = uint32(unsafe.Sizeof(metrics))
+	ok, _, err := progressUser32.NewProc("SystemParametersInfoForDpi").Call(
+		0x29, uintptr(metrics.size), uintptr(unsafe.Pointer(&metrics)), 0, dpi) // SPI_GETNONCLIENTMETRICS
+	if ok == 0 {
+		return 0, fmt.Errorf("读取安装窗口字体: %w", err)
+	}
+	font, _, _ := progressGDI32.NewProc("CreateFontIndirectW").Call(uintptr(unsafe.Pointer(&metrics.messageFont)))
+	if font == 0 {
+		return 0, fmt.Errorf("创建安装窗口字体失败")
+	}
+	return font, nil
+}
+
 // showInstallProgress uses only user32 controls, so it also works before WebView2
 // is installed and without a Common Controls v6 manifest. The moving indicator
 // shows activity rather than an invented installation percentage.
 func showInstallProgress() (func(), error) {
+	dpi, _, _ := progressUser32.NewProc("GetDpiForSystem").Call()
+	return showInstallProgressAtDPI(dpi)
+}
+
+func showInstallProgressAtDPI(dpi uintptr) (func(), error) {
 	type readyWindow struct {
 		window uintptr
 		err    error
@@ -64,22 +103,31 @@ func showInstallProgress() (func(), error) {
 			ready <- readyWindow{err: progressClassError}
 			return
 		}
+		font, err := progressFont(dpi)
+		if err != nil {
+			ready <- readyWindow{err: err}
+			return
+		}
+		defer progressGDI32.NewProc("DeleteObject").Call(font)
+		scale := func(value uintptr) uintptr { return (value*dpi + 48) / 96 }
 		width, _, _ := progressUser32.NewProc("GetSystemMetrics").Call(0)
 		height, _, _ := progressUser32.NewProc("GetSystemMetrics").Call(1)
+		windowWidth, windowHeight := scale(500), scale(220)
 		window, _, err := progressCreateWindow.Call(0x40000, uintptr(unsafe.Pointer(progressClass)),
 			uintptr(unsafe.Pointer(windows.StringToUTF16Ptr("FDU Connect — 首次启动"))),
-			0x00C80000, (width-500)/2, (height-220)/2, 500, 220, 0, 0, instance, 0)
+			0x00C80000, uintptr((int(width)-int(windowWidth))/2), uintptr((int(height)-int(windowHeight))/2),
+			windowWidth, windowHeight, 0, 0, instance, 0)
 		if window == 0 {
 			ready <- readyWindow{err: fmt.Errorf("创建安装状态窗口: %w", err)}
 			return
 		}
 		defer progressUser32.NewProc("DestroyWindow").Call(window)
 		menu, _, _ := progressUser32.NewProc("GetSystemMenu").Call(window, 0)
-		progressUser32.NewProc("EnableMenuItem").Call(menu, 0xF060, 1)                         // SC_CLOSE, MF_GRAYED
-		font, _, _ := windows.NewLazySystemDLL("gdi32.dll").NewProc("GetStockObject").Call(17) // DEFAULT_GUI_FONT
+		progressUser32.NewProc("EnableMenuItem").Call(menu, 0xF060, 1) // SC_CLOSE, MF_GRAYED
 		createStatic := func(parent, id, style, x, y, width, height uintptr, text string) (uintptr, error) {
 			control, _, err := progressCreateWindow.Call(0, uintptr(unsafe.Pointer(windows.StringToUTF16Ptr("STATIC"))),
-				uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(text))), 0x50000000|style, x, y, width, height, parent, id, instance, 0)
+				uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(text))), 0x50000000|style,
+				scale(x), scale(y), scale(width), scale(height), parent, id, instance, 0)
 			if control == 0 {
 				return 0, err
 			}
@@ -148,7 +196,10 @@ func progressWindowProc(window, message, wParam, lParam uintptr) uintptr {
 		if position > 70 {
 			position = 140 - position
 		}
-		progressUser32.NewProc("SetWindowPos").Call(block, 0, 2+position*5, 2, 80, 16, 0x14)
+		var bounds struct{ left, top, right, bottom int32 }
+		progressUser32.NewProc("GetClientRect").Call(track, uintptr(unsafe.Pointer(&bounds)))
+		progressUser32.NewProc("SetWindowPos").Call(block, 0,
+			(2+position*5)*uintptr(bounds.right)/440, 2*uintptr(bounds.bottom)/20, 0, 0, 0x15) // Preserve scaled size.
 		if ticks%20 == 0 {
 			note, _, _ := progressGetItem.Call(window, 1004)
 			text := windows.StringToUTF16Ptr(fmt.Sprintf("已等待 %d 秒，请勿重复启动。", ticks/20))

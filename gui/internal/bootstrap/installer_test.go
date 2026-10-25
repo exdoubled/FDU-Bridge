@@ -16,11 +16,13 @@ func TestEnsureRuntime(t *testing.T) {
 	for _, tc := range []struct {
 		name                                                                        string
 		installed, installer, badHash, missingHash, runFail, staysMissing, timesOut bool
+		unreadableInstaller                                                         bool
 		want                                                                        string
 	}{
 		{name: "existing runtime skips installer and hash", installed: true},
 		{name: "missing runtime installs bundled file", installer: true},
 		{name: "missing installer", want: "安装器"},
+		{name: "installer path is directory", unreadableInstaller: true, want: "安装器"},
 		{name: "missing build hash", installer: true, missingHash: true, want: "SHA256"},
 		{name: "modified installer", installer: true, badHash: true, want: "SHA256"},
 		{name: "installer failure", installer: true, runFail: true, want: "install failed"},
@@ -38,6 +40,11 @@ func TestEnsureRuntime(t *testing.T) {
 			digest := fmt.Sprintf("%x", sha256.Sum256(data))
 			if tc.installer {
 				if err := os.WriteFile(filepath.Join(dir, WebView2InstallerName), data, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tc.unreadableInstaller {
+				if err := os.Mkdir(filepath.Join(dir, WebView2InstallerName), 0700); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -80,6 +87,13 @@ func TestEnsureRuntime(t *testing.T) {
 			}
 			if tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)) {
 				t.Fatalf("error = %v, want containing %q", err, tc.want)
+			}
+			if !tc.installed && (tc.missingHash || tc.badHash || !tc.installer) {
+				for _, want := range []string{"*-Windows-x64-offline.zip", "完整解压后重试"} {
+					if !strings.Contains(err.Error(), want) {
+						t.Fatalf("recovery error = %v, want containing %q", err, want)
+					}
+				}
 			}
 			shouldRun := tc.installer && !tc.installed && !tc.badHash && !tc.missingHash
 			if shouldRun && (runs != 1 || notices != 1 || closes != 1) {

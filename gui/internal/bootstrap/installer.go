@@ -37,24 +37,24 @@ func (r runtimeInstaller) ensure(directory, digest string) error {
 	}
 	expected, err := hex.DecodeString(digest)
 	if err != nil || len(expected) != sha256.Size {
-		return errors.New("安装包缺少有效的 WebView2 安装器 SHA256，请重新下载完整 Windows 安装包")
+		return errors.New("安装包缺少有效的 WebView2 安装器 SHA256，请下载 *-Windows-x64-offline.zip 并完整解压后重试")
 	}
 	installer := filepath.Join(directory, WebView2InstallerName)
 	file, err := os.Open(installer)
 	if err != nil {
-		return fmt.Errorf("无法读取 WebView2 离线安装器，请将完整安装包解压后重试: %w", err)
+		return fmt.Errorf("无法读取 WebView2 离线安装器，请下载 *-Windows-x64-offline.zip 并完整解压后重试: %w", err)
 	}
 	hash := sha256.New()
 	_, err = io.Copy(hash, file)
 	closeErr := file.Close()
 	if err != nil {
-		return fmt.Errorf("读取 WebView2 安装器: %w", err)
+		return fmt.Errorf("读取 WebView2 安装器失败，请下载 *-Windows-x64-offline.zip 并完整解压后重试: %w", err)
 	}
 	if closeErr != nil {
-		return closeErr
+		return fmt.Errorf("关闭 WebView2 安装器失败，请下载 *-Windows-x64-offline.zip 并完整解压后重试: %w", closeErr)
 	}
 	if !strings.EqualFold(hex.EncodeToString(hash.Sum(nil)), digest) {
-		return errors.New("WebView2 安装器 SHA256 校验失败，请重新下载完整 Windows 安装包")
+		return errors.New("WebView2 安装器 SHA256 校验失败，请下载 *-Windows-x64-offline.zip 并完整解压后重试")
 	}
 	closeProgress, err := r.progress()
 	if err != nil {
