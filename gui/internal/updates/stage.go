@@ -201,7 +201,7 @@ func publicFile(name string) bool {
 	switch name {
 	case "config.toml.example", "LICENSE":
 		return true
-	case "FDU-Connect-GUI.exe", "fdu-connect.exe":
+	case "FDU-Connect-GUI.exe", "fdu-connect.exe", "MicrosoftEdgeWebView2RuntimeInstallerX64.exe":
 		return runtime.GOOS == "windows"
 	case "fdu-connect-gui", "fdu-connect", "fdu-connect.desktop", "fdu-connect.png":
 		return runtime.GOOS == "linux"

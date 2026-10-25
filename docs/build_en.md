@@ -12,7 +12,9 @@ Install the Go version required by [gui/go.mod](../gui/go.mod), Node.js, and pnp
 
 The build script produces `dist\FDU-Connect-GUI.exe` and its `fdu-connect.exe` core; keep them in the same directory. Exit programs running from the output directory before building, or use `-OutputDirectory` to choose another directory. Use `./build.ps1 -Test` to also run the existing tests.
 
-Use `./build.ps1 -Package` to create a portable Windows x64 ZIP containing only the GUI, core, example configuration, and license. Personal configurations and login caches are excluded. The first Clash import carries over the example routing rules; existing rule files are preserved.
+Use `./build.ps1 -Package` to create a Windows x64 ZIP containing the GUI, core, example configuration, license, and Microsoft's full WebView2 x64 offline installer. Personal configurations and login caches are excluded. Packaging downloads and verifies the installer's Microsoft signature and embeds its SHA256 in the GUI; the first launch automatically uses the bundled installer if the Runtime is missing. The installer substantially increases the package size; keep all extracted files. The first Clash import carries over the example routing rules; existing rule files are preserved.
+
+A development build without `-Package` does not download the offline installer and requires an existing WebView2 Runtime. Distribute the complete `-Package` output to other users.
 
 ## macOS / Linux GUI
 

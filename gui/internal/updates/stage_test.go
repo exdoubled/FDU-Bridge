@@ -16,7 +16,7 @@ func TestStageDownloadedWindowsArchive(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("fixture matches the Windows Compress-Archive release layout")
 	}
-	for _, kind := range []string{"public files", "traversal", "missing core", "symlink"} {
+	for _, kind := range []string{"public files", "with installer", "traversal", "missing core", "symlink"} {
 		t.Run(kind, func(t *testing.T) {
 			base, err := filepath.EvalSymlinks(t.TempDir())
 			if err != nil {
@@ -30,6 +30,9 @@ func TestStageDownloadedWindowsArchive(t *testing.T) {
 			var archive bytes.Buffer
 			writer := zip.NewWriter(&archive)
 			names := []string{gui, core, "LICENSE", "config.toml.example", "config.toml", "profile-lenovo.yaml"}
+			if kind == "with installer" {
+				names = append(names, "MicrosoftEdgeWebView2RuntimeInstallerX64.exe", "unrelated.exe")
+			}
 			if kind == "traversal" {
 				names = append(names, "../escaped.txt")
 			}
@@ -68,16 +71,20 @@ func TestStageDownloadedWindowsArchive(t *testing.T) {
 				t.Fatalf("check = %+v, %v", release, err)
 			}
 			pending, err := Stage(context.Background(), client, release, filepath.Join(install, gui), nil)
-			if kind == "public files" {
+			if kind == "public files" || kind == "with installer" {
 				if err != nil || pending == nil {
 					t.Fatalf("stage = %+v, %v", pending, err)
 				}
-				if len(pending.Files) != 4 {
+				wantFiles := 4
+				if kind == "with installer" {
+					wantFiles++
+				}
+				if len(pending.Files) != wantFiles {
 					t.Fatalf("staged files = %+v", pending.Files)
 				}
 				for _, file := range pending.Files {
 					name := filepath.Base(file.Source)
-					if name != gui && name != core && name != "LICENSE" && name != "config.toml.example" {
+					if name != gui && name != core && name != "LICENSE" && name != "config.toml.example" && name != "MicrosoftEdgeWebView2RuntimeInstallerX64.exe" {
 						t.Fatalf("personal file staged: %s", name)
 					}
 					if value, err := os.ReadFile(file.Source); err != nil || string(value) != "new-"+name || file.Target != filepath.Join(install, name) {

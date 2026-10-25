@@ -4,7 +4,7 @@ package main
 
 import (
 	"embed"
-	"log"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 
 	"github.com/mythologyli/zju-connect/gui/internal/appconf"
+	"github.com/mythologyli/zju-connect/gui/internal/bootstrap"
 	"github.com/mythologyli/zju-connect/gui/internal/updates"
 	"github.com/mythologyli/zju-connect/gui/services"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -36,9 +37,16 @@ func main() {
 	if updates.RunHelper() {
 		return
 	}
+	startup, err := bootstrap.Prepare()
+	if err != nil {
+		startup.Fail(err)
+		os.Exit(1)
+	}
+	defer startup.Close()
 	exe, err := os.Executable()
 	if err != nil {
-		log.Fatal(err)
+		startup.Fail(err)
+		os.Exit(1)
 	}
 	dir := appconf.DataDir(filepath.Dir(exe))
 	if override := os.Getenv("FDU_GUI_DIR"); override != "" {
@@ -47,15 +55,29 @@ func main() {
 	minimized := slices.Contains(os.Args[1:], "--minimized")
 	backend, err := services.NewBackend(dir, exe)
 	if err != nil {
-		log.Fatal(err)
+		startup.Fail(err)
+		os.Exit(1)
 	}
 	clash := services.NewClashService(backend)
 	var window *application.WebviewWindow
 	var t *tray
 	var quitting atomic.Bool
+	var errorHandler func(error)
+	if startup.Logger != nil {
+		errorHandler = func(err error) {
+			var fatal *application.FatalError
+			if errors.As(err, &fatal) {
+				startup.Fail(err)
+			} else {
+				startup.HandleError(err)
+			}
+		}
+	}
 	app := application.New(application.Options{
-		Name:        "FDU Connect",
-		Description: "复旦大学 VPN 与分流管理",
+		Logger:       startup.Logger,
+		ErrorHandler: errorHandler,
+		Name:         "FDU Connect",
+		Description:  "复旦大学 VPN 与分流管理",
 		Services: []application.Service{
 			application.NewService(services.NewCoreService(backend)),
 			application.NewService(clash),
@@ -143,6 +165,7 @@ func main() {
 		t.start(backend.Status())
 	})
 	if err := app.Run(); err != nil {
-		log.Fatal(err)
+		startup.Fail(err)
+		os.Exit(1)
 	}
 }

@@ -72,7 +72,8 @@ In global mode, the return listener is pinned to `INTERNET` to avoid looping bac
 <details>
 <summary>Requirements, login browser, data directories, and upgrades</summary>
 
-- **Requirements**: Windows needs WebView2 Runtime. The macOS app is not notarized; open it the first time by right-clicking it in Finder and choosing Open. Linux needs GTK 4 and WebKitGTK 6.0.
+- **Requirements**: full Windows release packages include the WebView2 offline installer. If the Runtime is missing, the first launch prompts and installs it automatically without another download; extract the entire package before running. The macOS app is not notarized; open it the first time by right-clicking it in Finder and choosing Open. Linux needs GTK 4 and WebKitGTK 6.0.
+- **Windows startup failures**: startup preparation and interface initialization failures display a native error message. The log is at `%LOCALAPPDATA%\FDU Connect\logs\startup.log`.
 - **Login browser**: automatic UIS login needs Edge, Chrome, Chromium, or Brave. A compatible default browser is preferred, and no callback URL needs pasting.
 - **Recovery and expired login**: selective Clash connections retry transient failures automatically. An expired session pauses retries; click **Relogin (重新登录)** on Home to authenticate again. Disabling campus access stops retries and keeps rules and settings.
 - **Automatic connection on startup**: after integration consent and auto-connect are enabled, FDU waits for the Clash client and local controller to start before enabling campus access. Disable access from Home or the tray, or quit, to cancel the wait. Invalid settings, ambiguous targets, and rejected controller requests stop the attempt and display an error. Local proxy mode does not wait for Clash.

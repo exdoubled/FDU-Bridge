@@ -28,6 +28,15 @@ $running = Get-CimInstance Win32_Process -Filter "Name='FDU-Connect-GUI.exe' OR 
     Where-Object { $_.ExecutablePath -and $programs -contains $_.ExecutablePath }
 if ($running) { throw '输出目录中的程序仍在运行，请先退出，或用 -OutputDirectory 指定其他目录。' }
 
+if ($Package) {
+    if ($Test) { & (Join-Path $PSScriptRoot 'build\windows\webview2.test.ps1') }
+    . (Join-Path $PSScriptRoot 'build\windows\webview2.ps1')
+    $webView2Installer = Get-WebView2Installer $output
+    $guiFlags += " -X github.com/mythologyli/zju-connect/gui/internal/bootstrap.WebView2InstallerSHA256=$($webView2Installer.SHA256)"
+} else {
+    Write-Host 'Development build: WebView2 offline installer is omitted. A machine without the Runtime requires a complete -Package build.'
+}
+
 function Invoke-Checked([string]$Description, [scriptblock]$Command) {
     & $Command
     if ($LASTEXITCODE -ne 0) { throw "$Description failed." }
@@ -88,6 +97,7 @@ if ($Package) {
         (Join-Path $output 'FDU-Connect-GUI.exe'),
         (Join-Path $output 'fdu-connect.exe'),
         (Join-Path $output 'config.toml.example'),
+        $webView2Installer.Path,
         (Join-Path $root 'LICENSE')
     )
     Compress-Archive -LiteralPath $packageFiles -DestinationPath $archive -Force
