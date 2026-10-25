@@ -130,7 +130,7 @@ func (b *Backend) exportPaths() ([]string, []string) {
 		}
 		for _, name := range []string{
 			"FDU-Connect-GUI.exe", "FDU-Connect-GUI", "fdu-connect.exe", "fdu-connect", "LICENSE", "config.toml.example",
-			"MicrosoftEdgeWebView2RuntimeInstallerX64.exe",
+			"Uninstall.exe",
 			"config.toml", "client.toml", "gui-settings.json", "client_data.json", "routing-rules.json", "routing-rules.json.status.json",
 			"campus-session.json", "campus-feed.json", "fdu-campus-runtime.yaml",
 		} {

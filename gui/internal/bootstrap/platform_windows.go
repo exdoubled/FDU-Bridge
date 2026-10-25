@@ -1,18 +1,12 @@
 package bootstrap
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
-	"syscall"
-	"time"
 	"unsafe"
 
-	"github.com/mythologyli/zju-connect/gui/internal/sysproc"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
@@ -31,22 +25,7 @@ func LogPath() (string, error) {
 func Prepare() (*Startup, error) {
 	s := startupDiagnostics(LogPath, showError)
 	s.Logger.Info("Starting FDU Connect")
-	exe, err := os.Executable()
-	if err != nil {
-		return s, err
-	}
-	err = sysproc.WithMutex(`Local\FDUConnect.WebView2Bootstrap`, 6*time.Minute, func() error {
-		return (runtimeInstaller{
-			probe: installedRuntime,
-			run:   runInstaller,
-			progress: func() (func(), error) {
-				s.Logger.Info("Installing bundled WebView2 Runtime")
-				return showInstallProgress()
-			},
-			timeout: 5 * time.Minute,
-		}).ensure(filepath.Dir(exe), WebView2InstallerSHA256)
-	})
-	return s, err
+	return s, checkRuntime(RuntimeAvailable)
 }
 
 func startupDiagnostics(logPath func() (string, error), showError func(string)) *Startup {
@@ -63,7 +42,9 @@ func startupDiagnostics(logPath func() (string, error), showError func(string)) 
 	return s
 }
 
-func installedRuntime() (bool, error) {
+// RuntimeAvailable only inspects the registration and files used by Wails. The
+// setup executable calls it before launching any user interface or opening logs.
+func RuntimeAvailable() (bool, error) {
 	return findInstalledRuntime(func(root registry.Key) (string, error) {
 		key, err := registry.OpenKey(root, runtimeKey, registry.QUERY_VALUE|registry.WOW64_32KEY)
 		if err != nil {
@@ -91,13 +72,6 @@ func findInstalledRuntime(readFolder func(registry.Key) (string, error)) (bool, 
 		}
 	}
 	return false, readErr
-}
-
-func runInstaller(ctx context.Context, path string) error {
-	cmd := exec.CommandContext(ctx, path, "/silent", "/install")
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	// Direct CreateProcess inherits the asInvoker token; never use runas or download.
-	return cmd.Run()
 }
 
 func showError(message string) { messageBox(message, 0x10) }

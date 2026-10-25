@@ -164,12 +164,12 @@ func TestExportsAllowDownloadsBesidePortableFiles(t *testing.T) {
 	}
 }
 
-func TestAllExportsProtectBundledWebView2Installer(t *testing.T) {
+func TestAllExportsProtectUninstaller(t *testing.T) {
 	b := &Backend{Dir: t.TempDir(), exeDir: t.TempDir(), logs: []string{"log"}}
 	network := NewNetworkService(b)
 	network.saveDiagnosis(CampusDiagnosis{})
 	for _, dir := range []string{b.Dir, b.exeDir} {
-		path := filepath.Join(dir, "MicrosoftEdgeWebView2RuntimeInstallerX64.exe")
+		path := filepath.Join(dir, "Uninstall.exe")
 		if err := os.WriteFile(path, []byte("installer"), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -182,10 +182,10 @@ func TestAllExportsProtectBundledWebView2Installer(t *testing.T) {
 			},
 		} {
 			if err := export(); err == nil {
-				t.Errorf("%s export accepted installer destination %s", name, path)
+				t.Errorf("%s export accepted uninstaller destination %s", name, path)
 			}
 			if data, err := os.ReadFile(path); err != nil || string(data) != "installer" {
-				t.Fatalf("%s export changed installer: %q, %v", name, data, err)
+				t.Fatalf("%s export changed uninstaller: %q, %v", name, data, err)
 			}
 		}
 	}

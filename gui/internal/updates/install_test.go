@@ -72,9 +72,9 @@ func writeInstallFile(t *testing.T, path, value string) {
 
 func TestApplyReplacesPairAndPreservesPersonalFiles(t *testing.T) {
 	p := installFixture(t)
-	installer := filepath.Join(filepath.Dir(p.Executable), "MicrosoftEdgeWebView2RuntimeInstallerX64.exe")
+	uninstaller := filepath.Join(filepath.Dir(p.Executable), "Uninstall.exe")
 	if runtime.GOOS == "windows" {
-		writeInstallFile(t, installer, "existing-installer")
+		writeInstallFile(t, uninstaller, "existing-uninstaller")
 	}
 	personal := filepath.Join(filepath.Dir(p.Executable), "config.toml")
 	if runtime.GOOS == "darwin" {
@@ -95,94 +95,41 @@ func TestApplyReplacesPairAndPreservesPersonalFiles(t *testing.T) {
 		t.Fatalf("personal configuration changed: %q, %v", value, err)
 	}
 	if runtime.GOOS == "windows" {
-		if value, err := os.ReadFile(installer); err != nil || string(value) != "existing-installer" {
-			t.Fatalf("legacy update changed omitted installer: %q, %v", value, err)
+		if value, err := os.ReadFile(uninstaller); err != nil || string(value) != "existing-uninstaller" {
+			t.Fatalf("update changed omitted uninstaller: %q, %v", value, err)
 		}
 	}
 }
 
-func TestBundledWebView2InstallerUpdate(t *testing.T) {
+func TestApplyRejectsSetupPrograms(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		t.Skip("macOS updates replace an app bundle")
 	}
-	const installer = "MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
-	for _, kind := range []string{"replace", "new file", "rollback", "tampered", "outside target", "unrelated exe"} {
-		t.Run(kind, func(t *testing.T) {
+	for _, name := range []string{"MicrosoftEdgeWebView2RuntimeInstallerX64.exe", "Uninstall.exe", "FDU-Connect-v1.0.0-Windows-x64-setup.exe"} {
+		t.Run(name, func(t *testing.T) {
 			p := installFixture(t)
-			name := installer
-			if kind == "unrelated exe" {
-				name = "unrelated.exe"
-			}
 			target := filepath.Join(filepath.Dir(p.Executable), name)
 			source := filepath.Join(p.Root, "payload", name)
-			if kind != "new file" {
-				writeInstallFile(t, target, "old-installer")
-			}
-			writeInstallFile(t, source, "new-installer")
+			writeInstallFile(t, target, "existing-program")
+			writeInstallFile(t, source, "replacement-program")
 			digest, err := Digest(source)
 			if err != nil {
 				t.Fatal(err)
 			}
-			file := File{Source: source, Target: target, SHA256: digest}
-			if kind == "outside target" {
-				file.Target = filepath.Join(filepath.Dir(p.Root), name)
+			p.Files = append(p.Files, File{Source: source, Target: target, SHA256: digest})
+			if err := Apply(p); err == nil {
+				t.Fatal("update accepted a setup-only program")
 			}
-			// Put the installer first so a later failure must roll it back.
-			p.Files = append([]File{file}, p.Files...)
-			if kind == "tampered" {
-				writeInstallFile(t, source, "tampered")
-			}
-			if runtime.GOOS != "windows" || kind == "tampered" || kind == "outside target" || kind == "unrelated exe" {
-				if err := Apply(p); err == nil {
-					t.Fatal("unsafe installer update accepted")
-				}
-				if kind != "new file" {
-					if data, err := os.ReadFile(target); err != nil || string(data) != "old-installer" {
-						t.Fatalf("rejected update changed installer: %q, %v", data, err)
-					}
-				}
-				return
-			}
-			if kind == "rollback" {
-				failed := false
-				_, err := apply(p, func(from, to string) error {
-					if from == p.Files[len(p.Files)-1].Source && !failed {
-						failed = true
-						return fmt.Errorf("simulated rename failure")
-					}
-					return os.Rename(from, to)
-				})
-				if err == nil || !failed {
-					t.Fatalf("expected replacement failure: %v", err)
-				}
-				if data, err := os.ReadFile(target); err != nil || string(data) != "old-installer" {
-					t.Fatalf("installer not restored: %q, %v", data, err)
-				}
-				if err := Validate(p); err != nil {
-					t.Fatalf("rollback is not retryable: %v", err)
-				}
-				return
-			}
-			if err := Apply(p); err != nil {
-				t.Fatal(err)
-			}
-			if got, err := Digest(target); err != nil || got != digest {
-				t.Fatalf("installed installer digest = %q, %v", got, err)
-			}
-			if kind == "replace" {
-				if data, err := os.ReadFile(filepath.Join(p.Root, "backup", "0")); err != nil || string(data) != "old-installer" {
-					t.Fatalf("installer backup missing: %q, %v", data, err)
-				}
+			if data, err := os.ReadFile(target); err != nil || string(data) != "existing-program" {
+				t.Fatalf("rejected update changed setup program: %q, %v", data, err)
 			}
 		})
 	}
 }
-
-func TestPublicFileRestrictsInstallerToExactWindowsName(t *testing.T) {
-	for _, name := range []string{"MicrosoftEdgeWebView2RuntimeInstallerX64.exe", "unrelated.exe", "MicrosoftEdgeWebView2RuntimeInstallerX86.exe", "nested/MicrosoftEdgeWebView2RuntimeInstallerX64.exe"} {
-		want := runtime.GOOS == "windows" && name == "MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
-		if got := publicFile(name); got != want {
-			t.Errorf("publicFile(%q) = %v; want %v", name, got, want)
+func TestPublicFileExcludesSetupPrograms(t *testing.T) {
+	for _, name := range []string{"MicrosoftEdgeWebView2RuntimeInstallerX64.exe", "Uninstall.exe", "FDU-Connect-v1.0.0-Windows-x64-setup.exe", "unrelated.exe"} {
+		if publicFile(name) {
+			t.Errorf("publicFile(%q) accepted a setup-only program", name)
 		}
 	}
 }

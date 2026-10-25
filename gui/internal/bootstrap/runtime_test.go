@@ -2,10 +2,47 @@ package bootstrap
 
 import (
 	"encoding/binary"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestCheckRuntimeDirectsMissingRuntimeToSetup(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		available bool
+		probeErr  error
+	}{
+		{name: "installed", available: true},
+		{name: "not installed"},
+		{name: "registration unreadable", probeErr: errors.New("runtime registration unavailable")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			checks := 0
+			err := checkRuntime(func() (bool, error) {
+				checks++
+				return tc.available, tc.probeErr
+			})
+			if checks != 1 {
+				t.Fatalf("startup runtime checks = %d, want exactly one detection", checks)
+			}
+			if tc.available {
+				if err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), "*-Windows-x64-setup.exe") {
+				t.Fatalf("missing runtime must direct user to installer: %v", err)
+			}
+			if tc.probeErr != nil && !errors.Is(err, tc.probeErr) {
+				t.Fatalf("runtime detection error was lost: %v", err)
+			}
+		})
+	}
+}
 
 func TestRuntimePresentRequiresMatchingRuntimeFiles(t *testing.T) {
 	for _, tc := range []struct {

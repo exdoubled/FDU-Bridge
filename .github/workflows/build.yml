@@ -36,6 +36,9 @@ jobs:
       - name: Install pnpm
         run: npm install --global pnpm@11.21.0
 
+      - name: Install NSIS
+        run: choco install nsis --yes --no-progress
+
       - name: Test core
         run: go test ./...
 
@@ -47,7 +50,9 @@ jobs:
         run: |
           $version = if ($env:BUILD_REF.StartsWith('refs/tags/')) { $env:BUILD_TAG } else { 'dev' }
           .\build.ps1 -Test -Package -Version $version -OutputDirectory release
-          Get-ChildItem -LiteralPath release -Filter '*.zip' -File | ForEach-Object {
+          Get-ChildItem -LiteralPath release -File | Where-Object {
+            $_.Name -like 'FDU-Connect*-Windows-x64.zip' -or $_.Name -like 'FDU-Connect*-Windows-x64-setup.exe'
+          } | ForEach-Object {
             $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $($_.Name)"
           } | Set-Content -LiteralPath release/SHA256SUMS.txt -Encoding utf8NoBOM
@@ -56,7 +61,8 @@ jobs:
         with:
           name: fdu-connect-windows-x64
           path: |
-            release/*.zip
+            release/*-Windows-x64.zip
+            release/*-Windows-x64-setup.exe
             release/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 7
@@ -150,7 +156,7 @@ jobs:
 
           cat >> release-notes.md <<'EOF'
 
-          Windows 首次下载请选择 `*-Windows-x64-offline.zip`，其中包含 WebView2 离线安装器，无需另行下载依赖。`*-Windows-x64.zip` 是应用内更新使用的精简包，需要系统已有 WebView2 Runtime。
+          Windows 首次下载请选择 `*-Windows-x64-setup.exe`，安装时会自动处理 WebView2 依赖，无需另行下载。`*-Windows-x64.zip` 是应用内更新使用的精简包，需要系统已有 WebView2 Runtime。
 
           感谢 [AkiraSalvare/fdu-connect](https://github.com/AkiraSalvare/fdu-connect)、[Mythologyli/zju-connect](https://github.com/Mythologyli/zju-connect)、[lyc8503/EasierConnect](https://github.com/lyc8503/EasierConnect) 及所有贡献者。
           EOF
@@ -164,7 +170,7 @@ jobs:
             gh release create "$RELEASE_TAG" --verify-tag --draft \
               --title "FDU Connect $RELEASE_TAG" --notes-file release-notes.md
           fi
-          gh release upload "$RELEASE_TAG" release/*.zip release/*.tar.gz release/SHA256SUMS.txt --clobber
+          gh release upload "$RELEASE_TAG" release/*.zip release/*.tar.gz release/*-setup.exe release/SHA256SUMS.txt --clobber
           prerelease=false
           latest=true
           if [[ "$RELEASE_TAG" == *-* ]]; then

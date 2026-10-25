@@ -1,3 +1,5 @@
+. (Join-Path $PSScriptRoot 'installer.ps1')
+
 function New-WindowsPackages([string]$OutputDirectory, [string]$LicensePath, [string]$InstallerPath, [string]$Version) {
     $prefix = if ($Version -eq 'dev') { 'FDU-Connect' } else { "FDU-Connect-$Version" }
     # Package public files explicitly; never archive the user's output directory.
@@ -13,8 +15,7 @@ function New-WindowsPackages([string]$OutputDirectory, [string]$LicensePath, [st
     if ((Get-Item -LiteralPath $archive).Length -gt 256MB) {
         throw 'Windows update package exceeds the 256 MiB downloader limit.'
     }
-    $offlineArchive = Join-Path $OutputDirectory "$prefix-Windows-x64-offline.zip"
-    Compress-Archive -LiteralPath ($files + $InstallerPath) -DestinationPath $offlineArchive -Force
+    $setup = New-WindowsInstaller $OutputDirectory $LicensePath $InstallerPath $Version
     Write-Output $archive
-    Write-Output $offlineArchive
+    Write-Output $setup
 }

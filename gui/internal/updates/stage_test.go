@@ -31,7 +31,7 @@ func TestStageDownloadedWindowsArchive(t *testing.T) {
 			writer := zip.NewWriter(&archive)
 			names := []string{gui, core, "LICENSE", "config.toml.example", "config.toml", "profile-lenovo.yaml"}
 			if kind == "with installer" {
-				names = append(names, "MicrosoftEdgeWebView2RuntimeInstallerX64.exe", "unrelated.exe")
+				names = append(names, "MicrosoftEdgeWebView2RuntimeInstallerX64.exe", "Uninstall.exe", "unrelated.exe")
 			}
 			if kind == "traversal" {
 				names = append(names, "../escaped.txt")
@@ -76,15 +76,12 @@ func TestStageDownloadedWindowsArchive(t *testing.T) {
 					t.Fatalf("stage = %+v, %v", pending, err)
 				}
 				wantFiles := 4
-				if kind == "with installer" {
-					wantFiles++
-				}
 				if len(pending.Files) != wantFiles {
 					t.Fatalf("staged files = %+v", pending.Files)
 				}
 				for _, file := range pending.Files {
 					name := filepath.Base(file.Source)
-					if name != gui && name != core && name != "LICENSE" && name != "config.toml.example" && name != "MicrosoftEdgeWebView2RuntimeInstallerX64.exe" {
+					if name != gui && name != core && name != "LICENSE" && name != "config.toml.example" {
 						t.Fatalf("personal file staged: %s", name)
 					}
 					if value, err := os.ReadFile(file.Source); err != nil || string(value) != "new-"+name || file.Target != filepath.Join(install, name) {

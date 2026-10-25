@@ -2,12 +2,25 @@ package bootstrap
 
 import (
 	"debug/pe"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 )
+
+func checkRuntime(probe func() (bool, error)) error {
+	available, err := probe()
+	if err != nil {
+		return fmt.Errorf("无法检测 Microsoft WebView2 Runtime，请运行 *-Windows-x64-setup.exe 安装或修复后重试: %w", err)
+	}
+	if !available {
+		return errors.New("缺少 Microsoft WebView2 Runtime，请运行 *-Windows-x64-setup.exe 安装或修复后重试")
+	}
+	return nil
+}
 
 // Match the installed Runtime layout used by Wails' WebView2 loader. An Edge
 // browser registration alone cannot satisfy this check.

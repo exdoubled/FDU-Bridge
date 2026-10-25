@@ -37,6 +37,12 @@ func main() {
 	if updates.RunHelper() {
 		return
 	}
+	if len(os.Args) == 2 && os.Args[1] == "--check-webview2" {
+		if available, err := bootstrap.RuntimeAvailable(); err != nil || !available {
+			os.Exit(1)
+		}
+		return
+	}
 	startup, err := bootstrap.Prepare()
 	if err != nil {
 		startup.Fail(err)

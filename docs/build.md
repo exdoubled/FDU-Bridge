@@ -12,14 +12,14 @@
 
 构建脚本会同时生成 `dist\FDU-Connect-GUI.exe` 和 `fdu-connect.exe` 核心，两者需放在同一目录。构建前先退出该目录中的程序；也可用 `-OutputDirectory` 输出到其他目录。运行 `./build.ps1 -Test` 可同时执行现有测试。
 
-运行 `./build.ps1 -Package` 可生成两个 Windows x64 压缩包，不会收录个人配置或登录缓存：
+打包还需安装 [NSIS 3](https://nsis.sourceforge.io/Download)，确保能够找到 `makensis.exe`，也可通过 `NSIS_MAKENSIS` 指定其绝对路径。运行 `./build.ps1 -Package` 会生成 Windows x64 安装程序和更新压缩包，不会收录个人配置或登录缓存：
 
-- `FDU-Connect-Windows-x64-offline.zip`：首次分发用的完整包，包含 GUI、核心、示例配置、许可证及微软官方 WebView2 x64 完整离线安装器；请保留完整解压内容。
+- `FDU-Connect-Windows-x64-setup.exe`：首次分发用的安装程序，包含 GUI、核心、示例配置、许可证及微软官方 WebView2 x64 完整离线安装器。安装向导在安装阶段按需处理依赖，默认安装到 `%LOCALAPPDATA%\Programs\FDU Connect`，并创建开始菜单快捷方式和卸载项。
 - `FDU-Connect-Windows-x64.zip`：应用内更新用的精简包，包含相同的 GUI、核心、示例配置和许可证，需要已有运行库。打包时检查此包不超过升级器的 256 MiB 下载上限。
 
-指定 `-Version vX.Y.Z` 时，文件名中的 `FDU-Connect` 后会加上版本号。打包时会下载并校验安装器的微软签名，将其 SHA256 写入两个包共用的 GUI；首次启动缺少运行库时使用完整包内的安装器自动安装并显示安装状态。首次导入 Clash 时会带入示例中的分流规则，已有规则文件保持原样。
+指定 `-Version vX.Y.Z` 时，文件名中的 `FDU-Connect` 后会加上版本号。打包时会下载 WebView2 安装器，校验其微软签名并记录 SHA256，再嵌入安装程序；应用启动时只检查依赖，缺失时提示重新运行安装包。卸载仅删除程序文件，保留配置、规则、登录状态及共享运行库。首次导入 Clash 时会带入示例中的分流规则，已有规则文件保持原样。
 
-不带 `-Package` 的开发构建不下载离线安装器，需要本机已有 WebView2 Runtime。向首次使用的用户分发时请使用 `*-Windows-x64-offline.zip`。
+不带 `-Package` 的开发构建不需要 NSIS，也不下载离线安装器，需要本机已有 WebView2 Runtime。向首次使用的用户分发时请使用 `*-Windows-x64-setup.exe`。
 
 ## macOS／Linux GUI
 

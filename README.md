@@ -16,7 +16,7 @@
 
 ## 快速开始
 
-1. 从 [Releases](https://github.com/exdoubled/FDU-Bridge/releases) 下载对应系统的压缩包并解压，Windows 首次使用请选择 `*-Windows-x64-offline.zip` 完整离线包；GUI 与核心程序保持在同一目录。
+1. 从 [Releases](https://github.com/exdoubled/FDU-Bridge/releases) 下载对应系统版本。Windows 首次使用请运行 `*-Windows-x64-setup.exe`，按向导完成安装；其他系统下载压缩包并解压。
 2. 打开 Clash 客户端，选好订阅和外网节点，使用全局或规则模式。
 3. 启动 GUI（见下表），在**设置 → 代理接入**确认接入目标；同时运行多个客户端时，选定一个并保存。
 4. 在首页开启**校内访问**，首次确认后在弹出的浏览器中完成 UIS 登录。
@@ -30,7 +30,7 @@
 
 | 系统 | 启动程序 |
 | --- | --- |
-| Windows | `FDU-Connect-GUI.exe` |
+| Windows | 安装后从开始菜单打开 **FDU Connect** |
 | macOS | `FDU Connect.app` |
 | Linux | `fdu-connect-gui` |
 
@@ -73,7 +73,7 @@ Clash 通过 TUN、系统代理或应用代理接收流量；FDU Bridge 负责 U
 <details>
 <summary>运行要求、登录浏览器、配置目录与升级</summary>
 
-- **运行要求**：Windows 的 `*-Windows-x64-offline.zip` 完整包内置 WebView2 离线安装器；首次启动缺少运行库时会显示安装状态并自动安装，无需另行下载，请完整解压后运行。`*-Windows-x64.zip` 为应用内更新使用的精简包，需要已有运行库。macOS 应用未经公证，首次打开需在 Finder 中右键选择“打开”；Linux 需要 GTK 4 和 WebKitGTK 6.0。
+- **运行要求**：Windows 的 `*-Windows-x64-setup.exe` 内置 WebView2 离线安装器，安装向导会按需安装依赖，无需另行下载。`*-Windows-x64.zip` 为应用内更新使用的精简包，需要已有运行库；若运行库被移除，请重新运行安装包修复。macOS 应用未经公证，首次打开需在 Finder 中右键选择“打开”；Linux 需要 GTK 4 和 WebKitGTK 6.0。
 - **Windows 启动失败**：启动准备或界面初始化失败时会显示原生错误提示，日志位于 `%LOCALAPPDATA%\FDU Connect\logs\startup.log`。日志不可写时仍会继续启动；后续失败会直接提示错误信息。
 - **登录浏览器**：UIS 自动登录需要 Edge、Chrome、Chromium 或 Brave，优先使用兼容的默认浏览器，无需粘贴回调地址。
 - **断线与登录过期**：Clash 分流连接会自动重试暂时性断线；会话过期时暂停重试，点击首页的**重新登录**重新认证。手动停用后停止重试，保留规则和设置。
@@ -82,6 +82,7 @@ Clash 通过 TUN、系统代理或应用代理接收流量；FDU Bridge 负责 U
 - **端口被占用**：自动／手动接入会在启用前改用空闲端口；仅本地代理需自行调整监听端口。其他错误见**诊断**页。
 - **配置目录**：Windows 通常在程序目录，不可写时使用 `%APPDATA%\FDU Connect`（已有用户目录继续沿用）；macOS 为 `~/Library/Application Support/FDU Connect`；Linux 为 `$XDG_CONFIG_HOME/fdu-connect`，未设置时为 `~/.config/fdu-connect`。
 - **升级**：保留上述目录即可保留配置和登录状态。关闭窗口后程序可能仍在托盘运行，覆盖程序前请先退出。
+- **Windows 卸载**：从系统“已安装的应用”卸载，配置、规则、登录状态和共享的 WebView2 Runtime 会保留。
 - **接入清理**：停用后在**设置 → 维护**移除当前接入记录对应客户端／订阅中可核验的 FDU 配置，保留订阅和个人设置；无法确认归属时保留文件及恢复记录。
 - **目录迁移**：在新目录的 GUI 中选择**设置 → 维护 → 选择旧目录**，预览后复制受管配置、规则和登录状态。旧目录须含 `gui-settings.json`，原文件保留，目标已有不同数据时不覆盖。
 - **托盘**：部分 Linux 桌面不显示托盘图标，因此 Linux 上关闭窗口默认直接退出，可在设置中改为最小化到托盘。

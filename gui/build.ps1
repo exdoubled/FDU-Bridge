@@ -35,9 +35,8 @@ if ($Package) {
     }
     . (Join-Path $PSScriptRoot 'build\windows\webview2.ps1')
     $webView2Installer = Get-WebView2Installer $output
-    $guiFlags += " -X github.com/mythologyli/zju-connect/gui/internal/bootstrap.WebView2InstallerSHA256=$($webView2Installer.SHA256)"
 } else {
-    Write-Host 'Development build: WebView2 offline installer is omitted. A machine without the Runtime requires a complete -Package build.'
+    Write-Host 'Development build: requires an existing WebView2 Runtime. Use the setup executable from a -Package build to install dependencies.'
 }
 
 function Invoke-Checked([string]$Description, [scriptblock]$Command) {
@@ -93,6 +92,7 @@ try {
 } finally { Pop-Location }
 Write-Output (Join-Path $output 'FDU-Connect-GUI.exe')
 if ($Package) {
+    if ($Test) { & (Join-Path $PSScriptRoot 'build\windows\installer.test.ps1') }
     . (Join-Path $PSScriptRoot 'build\windows\packages.ps1')
     New-WindowsPackages $output (Join-Path $root 'LICENSE') $webView2Installer.Path $Version
 }

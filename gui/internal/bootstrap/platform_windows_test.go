@@ -33,7 +33,7 @@ func TestStartupDiagnosticsContinuesWithoutWritableLog(t *testing.T) {
 				t.Fatalf("logging failure must leave a usable startup without dialog: %+v, %v", s, messages)
 			}
 			// The same bootstrap path can continue with an already installed runtime.
-			if err := (runtimeInstaller{probe: func() (bool, error) { return true, nil }}).ensure("", ""); err != nil {
+			if err := checkRuntime(func() (bool, error) { return true, nil }); err != nil {
 				t.Fatal(err)
 			}
 			s.Fail(errors.New("later startup failure"))
@@ -59,15 +59,15 @@ func TestInstalledRuntimeChecksCurrentUserAfterMachineReadFailure(t *testing.T) 
 }
 
 func TestWindowsInstalledRuntimeSmoke(t *testing.T) {
-	available, err := installedRuntime()
+	available, err := RuntimeAvailable()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !available {
 		t.Skip("host has no WebView2 Runtime; no system installer will be run by this test")
 	}
-	if err := (runtimeInstaller{probe: installedRuntime}).ensure(t.TempDir(), ""); err != nil {
-		t.Fatalf("installed Runtime should start without installer or compiled hash: %v", err)
+	if err := checkRuntime(RuntimeAvailable); err != nil {
+		t.Fatalf("installed Runtime should start without running an installer: %v", err)
 	}
-	t.Log("Real Windows registration and Runtime files detected; bundled installer skipped")
+	t.Log("Real Windows registration and Runtime files detected without installation or logging")
 }
