@@ -18,4 +18,4 @@
 - [ ] Improve recovery during startup, network changes, wake from sleep, and unexpected exits: wait for Clash to be ready before connecting automatically, recheck connections, and handle Clash restarts and unfinished recovery records; verify that ordinary Internet access still works after disabling FDU.
 - [ ] Add skippable first-use guidance on Home that can be reopened, covering client confirmation, UIS login, and access verification while using the built-in campus rules.
 - [ ] Improve tray status and quick actions with shortcuts to log in again and open diagnostics; notify only once when user action is required.
-- [ ] Support previewing and exporting redacted diagnostic reports with version, integration mode, rule status, and test results, hiding account identifiers, tokens, cookies, and personal intranet details.
+- [X] Support previewing, copying, and exporting redacted diagnostic reports with version, integration mode, rule status, and test results, hiding account identifiers, tokens, cookies, and personal intranet details.

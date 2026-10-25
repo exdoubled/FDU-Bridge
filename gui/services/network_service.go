@@ -33,6 +33,7 @@ type NetworkService struct {
 	controllerAPI clash.API
 	diagnosisMu   sync.Mutex
 	diagnosis     *CampusDiagnosis
+	report        diagnosisReportSnapshot
 }
 
 type networkControllerKey struct {
