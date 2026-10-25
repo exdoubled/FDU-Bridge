@@ -179,7 +179,7 @@ function ProbeStatus({ report, error, loading }: { report?: ProbeReport; error?:
   return <span className="probe-status"><span className={`pill ${tone}`}>{label}</span>{http && http.millis > 0 && <span className="muted mono">{Math.round(http.millis)} ms</span>}</span>;
 }
 
-function ProbeDetails({ report, error }: { report?: ProbeReport; error?: string }) {
+export function ProbeDetails({ report, error }: { report?: ProbeReport; error?: string }) {
   return (
     <div className="probe-detail-body">
       {error && <div className="field-error selectable">{error}{report ? "（下方为上次结果）" : ""}</div>}

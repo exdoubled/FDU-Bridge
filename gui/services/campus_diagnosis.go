@@ -18,6 +18,7 @@ type CampusDiagnosis struct {
 }
 
 type CampusRuleDiagnosis struct {
+	Known   bool   `json:"known"`
 	Matched bool   `json:"matched"`
 	Kind    string `json:"kind"`
 	Value   string `json:"value"`

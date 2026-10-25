@@ -3,6 +3,7 @@ import { ArrowDown, Download, Eraser, Pause, Play, Search } from "lucide-react";
 import { Events } from "@wailsio/runtime";
 import { CoreService } from "../lib/api";
 import { useStore } from "../store";
+import { CampusDiagnostics } from "../components/CampusDiagnostics";
 
 const limit = 5000;
 
@@ -87,7 +88,8 @@ export function Logs() {
           <button className="btn" onClick={exportLogs}><Download size={15} />导出</button>
         </div>
       </header>
-      <div className="page-body flush">
+      <div className="page-body flush diagnostics-body">
+        <CampusDiagnostics />
         <div className="log-view" ref={view} onScroll={onScroll}>
           {visible.length === 0 ? (
             <span className="muted">{lines.length ? "没有匹配的日志" : "暂无日志"}</span>
