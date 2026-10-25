@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/mythologyli/zju-connect/gui/internal/appconf"
+	"github.com/mythologyli/zju-connect/gui/internal/bootstrap"
 	"github.com/mythologyli/zju-connect/gui/internal/clash"
+	"github.com/mythologyli/zju-connect/gui/internal/fsx"
 	"github.com/mythologyli/zju-connect/gui/internal/rules"
 	"github.com/mythologyli/zju-connect/gui/internal/settings"
 	"github.com/mythologyli/zju-connect/gui/internal/updates"
@@ -159,5 +161,55 @@ func TestExportsAllowDownloadsBesidePortableFiles(t *testing.T) {
 		if data, _ := os.ReadFile(path); string(data) != "private" {
 			t.Fatalf("overwrote portable file: %s", path)
 		}
+	}
+}
+
+func TestAllExportsProtectUninstaller(t *testing.T) {
+	b := &Backend{Dir: t.TempDir(), exeDir: t.TempDir(), logs: []string{"log"}}
+	network := NewNetworkService(b)
+	network.saveDiagnosis(CampusDiagnosis{})
+	for _, dir := range []string{b.Dir, b.exeDir} {
+		path := filepath.Join(dir, "Uninstall.exe")
+		if err := os.WriteFile(path, []byte("installer"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		for name, export := range map[string]func() error{
+			"rules": func() error { _, err := NewRulesService(b).exportFile(path, rules.Empty()); return err },
+			"logs":  func() error { _, err := NewCoreService(b).exportLogs(path); return err },
+			"report": func() error {
+				_, err := network.exportDiagnosisReport(func() (string, error) { return path, nil })
+				return err
+			},
+		} {
+			if err := export(); err == nil {
+				t.Errorf("%s export accepted uninstaller destination %s", name, path)
+			}
+			if data, err := os.ReadFile(path); err != nil || string(data) != "installer" {
+				t.Fatalf("%s export changed uninstaller: %q, %v", name, data, err)
+			}
+		}
+	}
+}
+
+func TestExportPathsProtectsBootstrapStartupLog(t *testing.T) {
+	path, err := bootstrap.LogPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path == "" {
+		t.Skip("this platform has no bootstrap startup log")
+	}
+	b := &Backend{Dir: t.TempDir(), exeDir: t.TempDir()}
+	files, directories := b.exportPaths()
+	found := false
+	for _, file := range files {
+		found = found || file == path
+	}
+	if !found {
+		t.Fatal("shared report, log and rule export protection omits bootstrap log")
+	}
+	// Exercise the shared guard without opening or writing the user's log.
+	if _, err := fsx.ExportPath(path, files, directories); err == nil {
+		t.Fatal("shared export guard accepted bootstrap log")
 	}
 }

@@ -1,0 +1,94 @@
+$ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'packages.ps1')
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+$script:setupCalls = [Collections.Generic.List[object]]::new()
+function New-WindowsInstaller([string]$OutputDirectory, [string]$LicensePath, [string]$InstallerPath, [string]$Version) {
+    $script:setupCalls.Add([pscustomobject]@{ OutputDirectory = $OutputDirectory; LicensePath = $LicensePath; InstallerPath = $InstallerPath; Version = $Version })
+    $prefix = if ($Version -eq 'dev') { 'FDU-Connect' } else { "FDU-Connect-$Version" }
+    $setup = Join-Path $OutputDirectory "$prefix-Windows-x64-setup.exe"
+    [IO.File]::WriteAllText($setup, 'installer fixture')
+    return $setup
+}
+
+function Assert-Entries([string]$Path, [string[]]$Expected) {
+    $zip = [IO.Compression.ZipFile]::OpenRead($Path)
+    try {
+        $actual = @($zip.Entries | ForEach-Object { $_.FullName } | Sort-Object)
+        if (($actual -join ',') -cne (($Expected | Sort-Object) -join ',')) {
+            throw "Unexpected package contents in ${Path}: $($actual -join ', ')"
+        }
+        foreach ($entry in $zip.Entries) {
+            $reader = [IO.StreamReader]::new($entry.Open())
+            try {
+                if ($reader.ReadToEnd() -cne $entry.Name) { throw "Wrong contents for $($entry.Name)." }
+            } finally { $reader.Dispose() }
+        }
+    } finally { $zip.Dispose() }
+}
+
+$directory = Join-Path ([IO.Path]::GetTempPath()) ('fdu-packages-test-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $directory | Out-Null
+try {
+    $standard = @('FDU-Connect-GUI.exe', 'fdu-connect.exe', 'config.toml.example', 'LICENSE')
+    $installer = 'MicrosoftEdgeWebView2RuntimeInstallerX64.exe'
+    foreach ($name in ($standard + $installer + 'gui-settings.json' + 'login-cache.json')) {
+        [IO.File]::WriteAllText((Join-Path $directory $name), $name)
+    }
+    foreach ($version in @('dev', 'v1.2.3-beta.1')) {
+        $packages = @(New-WindowsPackages $directory (Join-Path $directory 'LICENSE') (Join-Path $directory $installer) $version)
+        if ($packages.Count -ne 2) { throw 'Expected a lightweight update package and a Windows setup executable.' }
+        $prefix = if ($version -eq 'dev') { 'FDU-Connect' } else { "FDU-Connect-$version" }
+        if ((Split-Path -Leaf $packages[0]) -cne "$prefix-Windows-x64.zip") { throw 'Update package name changed.' }
+        if ((Split-Path -Leaf $packages[1]) -cne "$prefix-Windows-x64-setup.exe") { throw 'Wrong setup executable name.' }
+        Assert-Entries $packages[0] $standard
+        if ([IO.File]::ReadAllText($packages[1]) -cne 'installer fixture') { throw 'Installer result was not returned.' }
+        if (Test-Path -LiteralPath (Join-Path $directory "$prefix-Windows-x64-offline.zip")) { throw 'Obsolete offline ZIP was generated.' }
+        $call = $script:setupCalls[$script:setupCalls.Count - 1]
+        if ($call.OutputDirectory -cne $directory -or $call.LicensePath -cne (Join-Path $directory 'LICENSE') -or
+            $call.InstallerPath -cne (Join-Path $directory $installer) -or $call.Version -cne $version) {
+            throw 'Setup compiler did not receive the requested payload, dependency, or version.'
+        }
+    }
+    if ($script:setupCalls.Count -ne 2) { throw 'Expected one setup build per version.' }
+    # Avoid compressing a huge fixture; only the resulting file length matters here.
+    function Compress-Archive {
+        param($LiteralPath, $DestinationPath, [switch]$Force)
+        $stream = [IO.File]::Create($DestinationPath)
+        try { $stream.SetLength(256MB + 1) } finally { $stream.Dispose() }
+    }
+    $rejected = $false
+    try { $null = New-WindowsPackages $directory (Join-Path $directory 'LICENSE') (Join-Path $directory $installer) 'dev' } catch {
+        if ($_.Exception.Message -notlike '*256 MiB*') { throw }
+        $rejected = $true
+    }
+    if (-not $rejected) { throw 'An update package beyond the downloader limit was accepted.' }
+    if ($script:setupCalls.Count -ne 2) { throw 'Setup was built after update package size validation failed.' }
+
+    function Get-MakeNSISPath { return 'Invoke-CompilerFixture' }
+    $script:compilerVersion = 'v3.08'
+    $script:compilerBuilds = 0
+    function Invoke-CompilerFixture {
+        $global:LASTEXITCODE = 0
+        if ($args.Count -eq 1 -and $args[0] -eq '/VERSION') { return $script:compilerVersion }
+        $script:compilerBuilds++
+    }
+    foreach ($version in @('v3.08', 'v3.14', 'v3.13.1')) {
+        $script:compilerVersion = $version
+        $rejected = $false
+        try { Invoke-MakeNSIS @{} } catch {
+            if ($_.Exception.Message -notlike '*NSIS 3.13*') { throw }
+            $rejected = $true
+        }
+        if (-not $rejected -or $script:compilerBuilds -ne 0) { throw 'A different NSIS compiler version was allowed to build setup.' }
+    }
+    foreach ($version in @('v3.13', 'v3.13.0')) {
+        $script:compilerVersion = $version
+        Invoke-MakeNSIS @{}
+    }
+    if ($script:compilerBuilds -ne 2) { throw 'The pinned NSIS compiler version was rejected.' }
+    Write-Output 'Windows setup and update-package checks passed.'
+} finally {
+    Get-ChildItem -LiteralPath $directory -File | Remove-Item -Force
+    Remove-Item -LiteralPath $directory
+}

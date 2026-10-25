@@ -12,7 +12,14 @@ Install the Go version required by [gui/go.mod](../gui/go.mod), Node.js, and pnp
 
 The build script produces `dist\FDU-Connect-GUI.exe` and its `fdu-connect.exe` core; keep them in the same directory. Exit programs running from the output directory before building, or use `-OutputDirectory` to choose another directory. Use `./build.ps1 -Test` to also run the existing tests.
 
-Use `./build.ps1 -Package` to create a portable Windows x64 ZIP containing only the GUI, core, example configuration, and license. Personal configurations and login caches are excluded. The first Clash import carries over the example routing rules; existing rule files are preserved.
+Packaging uses [NSIS 3.13](https://nsis.sourceforge.io/Download), matching CI (`choco install nsis --version=3.13.0 --yes --no-progress`). Ensure `makensis.exe` can be found, or set `NSIS_MAKENSIS` to its absolute path; other compiler versions are rejected. Use `./build.ps1 -Package` to create a Windows x64 setup executable and update ZIP. Personal configurations and login caches are excluded:
+
+- `FDU-Connect-Windows-x64-setup.exe`: setup for first installations, containing the GUI, core, example configuration, license, and Microsoft's full WebView2 x64 offline installer. The wizard handles the dependency during installation, defaults to `%LOCALAPPDATA%\Programs\FDU Connect`, and creates Start menu shortcuts and an uninstall entry.
+- `FDU-Connect-Windows-x64.zip`: the lightweight in-app update package, containing the same GUI, core, example configuration, and license. It requires an existing Runtime. Packaging checks that this ZIP stays within the updater's 256 MiB download limit.
+
+With `-Version vX.Y.Z`, the version is inserted after `FDU-Connect` in both filenames. Packaging downloads the WebView2 installer, verifies its Microsoft signature, records its SHA256, then embeds it in setup. Application startup only checks the dependency and prompts users to rerun setup if it is missing. Uninstall removes program files while preserving configuration, rules, login state, and the shared Runtime. The first Clash import carries over the example routing rules; existing rule files are preserved.
+
+A development build without `-Package` does not require NSIS or download the offline installer, and requires an existing WebView2 Runtime. Distribute `*-Windows-x64-setup.exe` to first-time users.
 
 ## macOS / Linux GUI
 

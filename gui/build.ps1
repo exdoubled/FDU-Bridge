@@ -28,6 +28,17 @@ $running = Get-CimInstance Win32_Process -Filter "Name='FDU-Connect-GUI.exe' OR 
     Where-Object { $_.ExecutablePath -and $programs -contains $_.ExecutablePath }
 if ($running) { throw '输出目录中的程序仍在运行，请先退出，或用 -OutputDirectory 指定其他目录。' }
 
+if ($Package) {
+    if ($Test) {
+        & (Join-Path $PSScriptRoot 'build\windows\webview2.test.ps1')
+        & (Join-Path $PSScriptRoot 'build\windows\packages.test.ps1')
+    }
+    . (Join-Path $PSScriptRoot 'build\windows\webview2.ps1')
+    $webView2Installer = Get-WebView2Installer $output
+} else {
+    Write-Host 'Development build: requires an existing WebView2 Runtime. Use the setup executable from a -Package build to install dependencies.'
+}
+
 function Invoke-Checked([string]$Description, [scriptblock]$Command) {
     & $Command
     if ($LASTEXITCODE -ne 0) { throw "$Description failed." }
@@ -81,15 +92,7 @@ try {
 } finally { Pop-Location }
 Write-Output (Join-Path $output 'FDU-Connect-GUI.exe')
 if ($Package) {
-    $packageName = if ($Version -eq 'dev') { 'FDU-Connect-Windows-x64.zip' } else { "FDU-Connect-$Version-Windows-x64.zip" }
-    $archive = Join-Path $output $packageName
-    # Package public files explicitly; never archive the user's output directory.
-    $packageFiles = @(
-        (Join-Path $output 'FDU-Connect-GUI.exe'),
-        (Join-Path $output 'fdu-connect.exe'),
-        (Join-Path $output 'config.toml.example'),
-        (Join-Path $root 'LICENSE')
-    )
-    Compress-Archive -LiteralPath $packageFiles -DestinationPath $archive -Force
-    Write-Output $archive
+    if ($Test) { & (Join-Path $PSScriptRoot 'build\windows\installer.test.ps1') }
+    . (Join-Path $PSScriptRoot 'build\windows\packages.ps1')
+    New-WindowsPackages $output (Join-Path $root 'LICENSE') $webView2Installer.Path $Version
 }

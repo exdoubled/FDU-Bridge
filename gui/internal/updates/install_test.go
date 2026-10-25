@@ -72,6 +72,10 @@ func writeInstallFile(t *testing.T, path, value string) {
 
 func TestApplyReplacesPairAndPreservesPersonalFiles(t *testing.T) {
 	p := installFixture(t)
+	uninstaller := filepath.Join(filepath.Dir(p.Executable), "Uninstall.exe")
+	if runtime.GOOS == "windows" {
+		writeInstallFile(t, uninstaller, "existing-uninstaller")
+	}
 	personal := filepath.Join(filepath.Dir(p.Executable), "config.toml")
 	if runtime.GOOS == "darwin" {
 		// macOS user data lives outside the app bundle that is replaced as a whole.
@@ -89,6 +93,44 @@ func TestApplyReplacesPairAndPreservesPersonalFiles(t *testing.T) {
 	}
 	if value, err := os.ReadFile(personal); err != nil || string(value) != "personal configuration" {
 		t.Fatalf("personal configuration changed: %q, %v", value, err)
+	}
+	if runtime.GOOS == "windows" {
+		if value, err := os.ReadFile(uninstaller); err != nil || string(value) != "existing-uninstaller" {
+			t.Fatalf("update changed omitted uninstaller: %q, %v", value, err)
+		}
+	}
+}
+
+func TestApplyRejectsSetupPrograms(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("macOS updates replace an app bundle")
+	}
+	for _, name := range []string{"MicrosoftEdgeWebView2RuntimeInstallerX64.exe", "Uninstall.exe", "FDU-Connect-v1.0.0-Windows-x64-setup.exe"} {
+		t.Run(name, func(t *testing.T) {
+			p := installFixture(t)
+			target := filepath.Join(filepath.Dir(p.Executable), name)
+			source := filepath.Join(p.Root, "payload", name)
+			writeInstallFile(t, target, "existing-program")
+			writeInstallFile(t, source, "replacement-program")
+			digest, err := Digest(source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			p.Files = append(p.Files, File{Source: source, Target: target, SHA256: digest})
+			if err := Apply(p); err == nil {
+				t.Fatal("update accepted a setup-only program")
+			}
+			if data, err := os.ReadFile(target); err != nil || string(data) != "existing-program" {
+				t.Fatalf("rejected update changed setup program: %q, %v", data, err)
+			}
+		})
+	}
+}
+func TestPublicFileExcludesSetupPrograms(t *testing.T) {
+	for _, name := range []string{"MicrosoftEdgeWebView2RuntimeInstallerX64.exe", "Uninstall.exe", "FDU-Connect-v1.0.0-Windows-x64-setup.exe", "unrelated.exe"} {
+		if publicFile(name) {
+			t.Errorf("publicFile(%q) accepted a setup-only program", name)
+		}
 	}
 }
 

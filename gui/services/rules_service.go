@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 
+	"github.com/mythologyli/zju-connect/gui/internal/bootstrap"
 	"github.com/mythologyli/zju-connect/gui/internal/rules"
 )
 
@@ -129,6 +130,7 @@ func (b *Backend) exportPaths() ([]string, []string) {
 		}
 		for _, name := range []string{
 			"FDU-Connect-GUI.exe", "FDU-Connect-GUI", "fdu-connect.exe", "fdu-connect", "LICENSE", "config.toml.example",
+			"Uninstall.exe",
 			"config.toml", "client.toml", "gui-settings.json", "client_data.json", "routing-rules.json", "routing-rules.json.status.json",
 			"campus-session.json", "campus-feed.json", "fdu-campus-runtime.yaml",
 		} {
@@ -190,6 +192,9 @@ func (b *Backend) exportPaths() ([]string, []string) {
 	}
 	updater := b.updater
 	b.mu.Unlock()
+	if path, err := bootstrap.LogPath(); err == nil && path != "" {
+		paths = append(paths, path)
+	}
 	if updater != nil {
 		updater.mu.Lock()
 		if updater.pending != nil {

@@ -98,6 +98,28 @@ func TestCheckExactPlatformAssets(t *testing.T) {
 	}
 }
 
+func TestCheckWindowsSelectsLightweightPackageAlongsideSetup(t *testing.T) {
+	const name = "FDU-Connect-v1.0.0-Windows-x64.zip"
+	for _, setupFirst := range []bool{true, false} {
+		fixture := releaseFixture("v1.0.0", name)
+		assets := fixture["assets"].([]map[string]any)
+		setup := map[string]any{
+			"name":                 "FDU-Connect-v1.0.0-Windows-x64-setup.exe",
+			"browser_download_url": testRepoURL + "download/v1.0.0/FDU-Connect-v1.0.0-Windows-x64-setup.exe",
+			"size":                 300 << 20, "digest": "sha256:" + strings.Repeat("b", 64),
+		}
+		if setupFirst {
+			fixture["assets"] = append([]map[string]any{setup}, assets...)
+		} else {
+			fixture["assets"] = append(assets, setup)
+		}
+		got, err := Check(context.Background(), releaseClient(t, map[string]string{testFeedURL: releaseJSON(t, fixture)}), "v0.9.0", "windows", "amd64")
+		if err != nil || got == nil || got.AssetName != name || got.Size != 7 || got.SHA256 != strings.Repeat("a", 64) {
+			t.Fatalf("setupFirst=%v: update = %+v, %v", setupFirst, got, err)
+		}
+	}
+}
+
 func TestCheckChecksumFallback(t *testing.T) {
 	const name = "FDU-Connect-v1.0.0-Windows-x64.zip"
 	const sums = "unrelated entry\n" + "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  *" + name + "\n"
