@@ -14,8 +14,10 @@ New-Item -ItemType Directory -Path $directory | Out-Null
 
 function Run-Setup([string]$Path, [string]$InstallDirectory) {
     $process = Start-Process -FilePath $Path -ArgumentList @('/S', "/D=$InstallDirectory") -WindowStyle Hidden -PassThru
-    if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'Fixture installer did not finish.' }
-    return $process.ExitCode
+    try {
+        if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'Fixture installer did not finish.' }
+        return $process.ExitCode
+    } finally { $process.Dispose() }
 }
 
 function Remove-FixtureAutoStart {
@@ -25,13 +27,22 @@ function Remove-FixtureAutoStart {
     }
 }
 
-function Remove-FixtureInstallation([string]$InstallDirectory, [string]$ExpectedAutoStart) {
+function Remove-FixtureInstallation([string]$InstallDirectory, [string]$ExpectedAutoStart, [string]$CaseName) {
     $uninstaller = Join-Path $InstallDirectory 'Uninstall.exe'
-    $process = Start-Process -FilePath $uninstaller -ArgumentList '/S' -WindowStyle Hidden -PassThru
-    if (-not $process.WaitForExit(10000)) { $process.Kill(); throw 'Fixture uninstaller did not finish.' }
+    $startInfo = [Diagnostics.ProcessStartInfo]::new($uninstaller, '/S')
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    # NSIS uses fixed temporary uninstaller names; isolate concurrently running suites.
+    $startInfo.EnvironmentVariables['TEMP'] = $directory
+    $startInfo.EnvironmentVariables['TMP'] = $directory
+    $process = [Diagnostics.Process]::Start($startInfo)
+    try {
+        if (-not $process.WaitForExit(10000)) { $process.Kill(); throw "[$CaseName] Fixture uninstaller did not finish." }
+        $exitCode = $process.ExitCode
+    } finally { $process.Dispose() }
     $deadline = [DateTime]::UtcNow.AddSeconds(10)
     while ((Test-Path -LiteralPath $uninstallKey) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
-    if (Test-Path -LiteralPath $uninstallKey) { throw 'Uninstaller registration survived uninstall.' }
+    if (Test-Path -LiteralPath $uninstallKey) { throw "[$CaseName] Uninstaller registration survived uninstall (launcher exit $exitCode)." }
     foreach ($name in @('FDU-Connect-GUI.exe', 'fdu-connect.exe', 'config.toml.example', 'LICENSE')) {
         if (Test-Path -LiteralPath (Join-Path $InstallDirectory $name)) { throw "Uninstall retained program file $name." }
     }
@@ -120,6 +131,9 @@ func main() {
         if (-not (Test-Path -LiteralPath $uninstallKey) -or -not (Test-Path -LiteralPath (Join-Path $shortcutDirectory "$product.lnk"))) {
             throw 'Installed application has no registration or shortcut.'
         }
+        if ($null -ne (Get-ItemProperty -LiteralPath $uninstallKey).PSObject.Properties['DisplayVersion']) {
+            throw 'Setup registered a version that becomes stale after in-app updates.'
+        }
         if ((Test-Path -LiteralPath (Join-Path $directory 'gui-launched')) -or
             (Test-Path -LiteralPath (Join-Path $installDirectory 'MicrosoftEdgeWebView2RuntimeInstallerX64.exe'))) {
             throw 'Silent installation launched the GUI or retained the dependency installer.'
@@ -132,13 +146,36 @@ func main() {
             try {
                 Start-Sleep -Milliseconds 200
                 if ((Run-Setup $setup $installDirectory) -eq 0) { throw 'Repair overwrote a running application.' }
-            } finally { if (-not $blocker.HasExited) { $blocker.Kill(); $blocker.WaitForExit() } }
+            } finally {
+                if (-not $blocker.HasExited) { $blocker.Kill(); $blocker.WaitForExit() }
+                $blocker.Dispose()
+            }
+            New-ItemProperty -LiteralPath $uninstallKey -Name 'DisplayVersion' -Value 'v0.0.1-old-setup' -PropertyType String -Force | Out-Null
+            if ((Run-Setup $setup $installDirectory) -ne 0) { throw 'Closed application could not be repaired.' }
+            if ($null -ne (Get-ItemProperty -LiteralPath $uninstallKey).PSObject.Properties['DisplayVersion']) {
+                throw 'Repair retained the stale version from an older setup.'
+            }
+            if ([IO.File]::ReadAllText((Join-Path $installDirectory 'gui-settings.json')) -cne 'preserve user settings') {
+                throw 'Repair changed user settings.'
+            }
         }
         $autoStart = if ($mode -eq 'already') { '"' + (Join-Path $installDirectory 'FDU-Connect-GUI.exe') + '" --minimized' } else { '"C:\another-fixture\FDU-Connect-GUI.exe" --minimized' }
         $runRegistry = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($runKey)
         try { $runRegistry.SetValue($product, $autoStart, [Microsoft.Win32.RegistryValueKind]::String) } finally { $runRegistry.Dispose() }
         $expectedAutoStart = if ($mode -eq 'already') { '' } else { $autoStart }
-        Remove-FixtureInstallation $installDirectory $expectedAutoStart
+        $uninstallerReadLock = $null
+        if ($mode -eq 'already') {
+            # The original uninstaller may still have a reader while its temp copy runs.
+            $uninstallerReadLock = [IO.File]::Open((Join-Path $installDirectory 'Uninstall.exe'),
+                [IO.FileMode]::Open, [IO.FileAccess]::Read, ([IO.FileShare]::Read -bor [IO.FileShare]::Delete))
+        }
+        try {
+            if ($uninstallerReadLock -and (Run-Setup $setup $installDirectory) -eq 0) {
+                throw 'Repair overwrote a locked uninstaller.'
+            }
+            Remove-FixtureInstallation $installDirectory $expectedAutoStart $mode
+        }
+        finally { if ($uninstallerReadLock) { $uninstallerReadLock.Dispose() } }
         Remove-FixtureAutoStart
     }
     Write-Output 'Windows installer integration checks passed.'

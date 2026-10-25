@@ -39,8 +39,10 @@ VIAddVersionKey "LegalCopyright" "FDU Connect contributors"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
+!define MUI_UNCONFIRMPAGE_TEXT_TOP "$(UninstallRetainsDataConfirm)"
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
+!define MUI_FINISHPAGE_TEXT "$(UninstallRetainedData)"
 !insertmacro MUI_UNPAGE_FINISH
 !insertmacro MUI_LANGUAGE "SimpChinese"
 !insertmacro MUI_LANGUAGE "English"
@@ -53,6 +55,10 @@ LangString PreparingRuntime ${LANG_SIMPCHINESE} "正在离线安装 Microsoft We
 LangString PreparingRuntime ${LANG_ENGLISH} "Installing Microsoft WebView2 Runtime offline. This may take a few minutes..."
 LangString RuntimeFailed ${LANG_SIMPCHINESE} "无法完成 Microsoft WebView2 Runtime 安装。请稍后重新运行此安装包。"
 LangString RuntimeFailed ${LANG_ENGLISH} "Microsoft WebView2 Runtime could not be installed. Run this setup again later."
+LangString UninstallRetainsDataConfirm ${LANG_SIMPCHINESE} "卸载只删除程序文件，配置和登录数据会保留。使用公共电脑后，请按完成页提示手动清理。"
+LangString UninstallRetainsDataConfirm ${LANG_ENGLISH} "Uninstall removes program files but keeps configuration and login data. On a shared computer, follow the cleanup instructions on the final page."
+LangString UninstallRetainedData ${LANG_SIMPCHINESE} "配置和登录数据未删除，请检查：$\r$\n$INSTDIR$\r$\n$APPDATA\FDU Connect$\r$\n$\r$\n公共电脑使用后，请手动清理这些位置中的个人数据。"
+LangString UninstallRetainedData ${LANG_ENGLISH} "Configuration and login data were kept. Check:$\r$\n$INSTDIR$\r$\n$APPDATA\FDU Connect$\r$\n$\r$\nOn shared computers, manually remove your personal data from these folders."
 
 Function .onInit
     SetShellVarContext current
@@ -77,8 +83,11 @@ Function ${Prefix}CheckAppClosed
     Call ${Prefix}CheckWritableProgram
     StrCpy $1 "$INSTDIR\fdu-connect.exe"
     Call ${Prefix}CheckWritableProgram
+!if "${Prefix}" == ""
+    ; Uninstall runs from a temporary copy while its original may still be open.
     StrCpy $1 "$INSTDIR\Uninstall.exe"
     Call ${Prefix}CheckWritableProgram
+!endif
     Pop $1
     Pop $0
 FunctionEnd
@@ -148,7 +157,8 @@ runtime_ready:
     CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\FDU-Connect-GUI.exe"
     CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
     WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayName" "${PRODUCT_NAME}"
-    WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayVersion" "${APP_VERSION}"
+    ; In-app updates replace program files, so the application reports its version.
+    DeleteRegValue HKCU "${UNINSTALL_KEY}" "DisplayVersion"
     WriteRegStr HKCU "${UNINSTALL_KEY}" "Publisher" "FDU Connect"
     WriteRegStr HKCU "${UNINSTALL_KEY}" "InstallLocation" "$INSTDIR"
     WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayIcon" "$INSTDIR\FDU-Connect-GUI.exe"

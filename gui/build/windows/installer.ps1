@@ -11,12 +11,16 @@ function Get-MakeNSISPath {
             if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
         }
     }
-    throw 'NSIS 3 is required for -Package. Install NSIS or set NSIS_MAKENSIS to makensis.exe.'
+    throw 'NSIS 3.13 is required for -Package. Install NSIS 3.13 or set NSIS_MAKENSIS to its makensis.exe.'
 }
 
 function Invoke-MakeNSIS([hashtable]$Definitions) {
     $compiler = Get-MakeNSISPath
-    $arguments = @('/V2', '/INPUTCHARSET', 'UTF8')
+    $compilerVersion = (& $compiler /VERSION | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $compilerVersion -cnotmatch '^v3\.13(?:\.0)?$') {
+        throw "NSIS 3.13 is required to match CI; found '$compilerVersion'."
+    }
+    $arguments = @('/NOCONFIG', '/V2', '/INPUTCHARSET', 'UTF8')
     foreach ($key in $Definitions.Keys) {
         $value = [string]$Definitions[$key]
         if ($key -notmatch '^[A-Z_][A-Z0-9_]*$' -or $value -match '["\r\n]') { throw 'Invalid NSIS build definition.' }

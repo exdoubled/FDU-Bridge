@@ -4,11 +4,52 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"golang.org/x/sys/windows/registry"
 )
+
+func TestRuntimeDiscoveryChecksChannelsInLoaderOrder(t *testing.T) {
+	channels := []string{
+		"{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+		"{2CD8A007-E189-409D-A2C8-9AF4EF3C72AA}",
+		"{0D50BFEC-CD6A-4F9A-964C-C7416E3ACB10}",
+		"{65C35B14-6C1D-4122-AC46-7148CC9D6497}",
+	}
+	type query struct {
+		root registry.Key
+		path string
+	}
+	var actual, expected []query
+	for _, channel := range channels {
+		for _, root := range []registry.Key{registry.LOCAL_MACHINE, registry.CURRENT_USER} {
+			expected = append(expected, query{root, `Software\Microsoft\EdgeUpdate\ClientState\` + channel})
+		}
+	}
+	available, err := findInstalledRuntime(func(root registry.Key, path string) (string, error) {
+		actual = append(actual, query{root, path})
+		return "", registry.ErrNotExist
+	})
+	if available || err != nil || !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("discovery queries = %#v, want %#v; available=%v err=%v", actual, expected, available, err)
+	}
+	for _, channel := range channels {
+		t.Run(channel, func(t *testing.T) {
+			folder := loaderRuntimeFixture(t, "140.0.1.2")
+			available, err := findInstalledRuntime(func(root registry.Key, path string) (string, error) {
+				if root == registry.CURRENT_USER && strings.HasSuffix(path, channel) {
+					return folder, nil
+				}
+				return "", registry.ErrNotExist
+			})
+			if !available || err != nil {
+				t.Fatalf("registered loader channel rejected: %v, %v", available, err)
+			}
+		})
+	}
+}
 
 func TestStartupDiagnosticsContinuesWithoutWritableLog(t *testing.T) {
 	blocked := filepath.Join(t.TempDir(), "blocked")
@@ -33,7 +74,7 @@ func TestStartupDiagnosticsContinuesWithoutWritableLog(t *testing.T) {
 				t.Fatalf("logging failure must leave a usable startup without dialog: %+v, %v", s, messages)
 			}
 			// The same bootstrap path can continue with an already installed runtime.
-			if err := checkRuntime(func() (bool, error) { return true, nil }); err != nil {
+			if err := s.checkRuntime(func() (bool, error) { return true, nil }); err != nil {
 				t.Fatal(err)
 			}
 			s.Fail(errors.New("later startup failure"))
@@ -46,14 +87,14 @@ func TestStartupDiagnosticsContinuesWithoutWritableLog(t *testing.T) {
 
 func TestInstalledRuntimeChecksCurrentUserAfterMachineReadFailure(t *testing.T) {
 	var roots []registry.Key
-	available, err := findInstalledRuntime(func(root registry.Key) (string, error) {
+	available, err := findInstalledRuntime(func(root registry.Key, _ string) (string, error) {
 		roots = append(roots, root)
 		if root == registry.LOCAL_MACHINE {
 			return "", registry.ErrUnexpectedType
 		}
 		return "", registry.ErrNotExist
 	})
-	if available || err == nil || len(roots) != 2 || roots[1] != registry.CURRENT_USER {
+	if available || err == nil || len(roots) < 2 || roots[1] != registry.CURRENT_USER {
 		t.Fatalf("must inspect per-user runtime even when machine registration is unreadable: available=%v err=%v roots=%v", available, err, roots)
 	}
 }
@@ -66,7 +107,7 @@ func TestWindowsInstalledRuntimeSmoke(t *testing.T) {
 	if !available {
 		t.Skip("host has no WebView2 Runtime; no system installer will be run by this test")
 	}
-	if err := checkRuntime(RuntimeAvailable); err != nil {
+	if err := newStartup(nil).checkRuntime(RuntimeAvailable); err != nil {
 		t.Fatalf("installed Runtime should start without running an installer: %v", err)
 	}
 	t.Log("Real Windows registration and Runtime files detected without installation or logging")

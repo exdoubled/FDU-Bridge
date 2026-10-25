@@ -12,7 +12,7 @@ Install the Go version required by [gui/go.mod](../gui/go.mod), Node.js, and pnp
 
 The build script produces `dist\FDU-Connect-GUI.exe` and its `fdu-connect.exe` core; keep them in the same directory. Exit programs running from the output directory before building, or use `-OutputDirectory` to choose another directory. Use `./build.ps1 -Test` to also run the existing tests.
 
-Packaging also requires [NSIS 3](https://nsis.sourceforge.io/Download). Ensure `makensis.exe` can be found, or set `NSIS_MAKENSIS` to its absolute path. Use `./build.ps1 -Package` to create a Windows x64 setup executable and update ZIP. Personal configurations and login caches are excluded:
+Packaging uses [NSIS 3.13](https://nsis.sourceforge.io/Download), matching CI (`choco install nsis --version=3.13.0 --yes --no-progress`). Ensure `makensis.exe` can be found, or set `NSIS_MAKENSIS` to its absolute path; other compiler versions are rejected. Use `./build.ps1 -Package` to create a Windows x64 setup executable and update ZIP. Personal configurations and login caches are excluded:
 
 - `FDU-Connect-Windows-x64-setup.exe`: setup for first installations, containing the GUI, core, example configuration, license, and Microsoft's full WebView2 x64 offline installer. The wizard handles the dependency during installation, defaults to `%LOCALAPPDATA%\Programs\FDU Connect`, and creates Start menu shortcuts and an uninstall entry.
 - `FDU-Connect-Windows-x64.zip`: the lightweight in-app update package, containing the same GUI, core, example configuration, and license. It requires an existing Runtime. Packaging checks that this ZIP stays within the updater's 256 MiB download limit.

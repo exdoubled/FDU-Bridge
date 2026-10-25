@@ -64,6 +64,29 @@ try {
     }
     if (-not $rejected) { throw 'An update package beyond the downloader limit was accepted.' }
     if ($script:setupCalls.Count -ne 2) { throw 'Setup was built after update package size validation failed.' }
+
+    function Get-MakeNSISPath { return 'Invoke-CompilerFixture' }
+    $script:compilerVersion = 'v3.08'
+    $script:compilerBuilds = 0
+    function Invoke-CompilerFixture {
+        $global:LASTEXITCODE = 0
+        if ($args.Count -eq 1 -and $args[0] -eq '/VERSION') { return $script:compilerVersion }
+        $script:compilerBuilds++
+    }
+    foreach ($version in @('v3.08', 'v3.14', 'v3.13.1')) {
+        $script:compilerVersion = $version
+        $rejected = $false
+        try { Invoke-MakeNSIS @{} } catch {
+            if ($_.Exception.Message -notlike '*NSIS 3.13*') { throw }
+            $rejected = $true
+        }
+        if (-not $rejected -or $script:compilerBuilds -ne 0) { throw 'A different NSIS compiler version was allowed to build setup.' }
+    }
+    foreach ($version in @('v3.13', 'v3.13.0')) {
+        $script:compilerVersion = $version
+        Invoke-MakeNSIS @{}
+    }
+    if ($script:compilerBuilds -ne 2) { throw 'The pinned NSIS compiler version was rejected.' }
     Write-Output 'Windows setup and update-package checks passed.'
 } finally {
     Get-ChildItem -LiteralPath $directory -File | Remove-Item -Force

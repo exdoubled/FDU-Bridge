@@ -37,7 +37,7 @@ jobs:
         run: npm install --global pnpm@11.21.0
 
       - name: Install NSIS
-        run: choco install nsis --yes --no-progress
+        run: choco install nsis --version=3.13.0 --yes --no-progress
 
       - name: Test core
         run: go test ./...
