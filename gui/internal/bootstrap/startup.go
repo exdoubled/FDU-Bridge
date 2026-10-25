@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"os"
@@ -18,8 +19,13 @@ type Startup struct {
 	fatalOnce sync.Once
 }
 
+func newStartup(showError func(string)) *Startup {
+	return &Startup{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), showError: showError}
+}
+
 func openStartup(directory string, showError func(string)) (*Startup, error) {
-	s := &Startup{path: filepath.Join(directory, "startup.log"), showError: showError}
+	s := newStartup(showError)
+	s.path = filepath.Join(directory, "startup.log")
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		return s, fmt.Errorf("无法创建启动日志目录: %w", err)
 	}
@@ -48,7 +54,11 @@ func (s *Startup) Fail(err error) {
 	}
 	s.fatalOnce.Do(func() {
 		if s.showError != nil {
-			s.showError(fmt.Sprintf("FDU Connect 启动失败：\n%v\n\n请反馈启动日志：\n%s", err, s.path))
+			diagnostics := "启动日志不可用，请反馈此错误信息。"
+			if s.file != nil {
+				diagnostics = fmt.Sprintf("请反馈启动日志：\n%s", s.path)
+			}
+			s.showError(fmt.Sprintf("FDU Connect 启动失败：\n%v\n\n%s", err, diagnostics))
 		}
 	})
 }

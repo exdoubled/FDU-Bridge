@@ -29,14 +29,7 @@ func LogPath() (string, error) {
 }
 
 func Prepare() (*Startup, error) {
-	logPath, err := LogPath()
-	if err != nil {
-		return &Startup{path: "无法定位 LocalAppData 启动日志", showError: showError}, fmt.Errorf("无法定位启动日志目录: %w", err)
-	}
-	s, err := openStartup(filepath.Dir(logPath), showError)
-	if err != nil {
-		return s, err
-	}
+	s := startupDiagnostics(LogPath, showError)
 	s.Logger.Info("Starting FDU Connect")
 	exe, err := os.Executable()
 	if err != nil {
@@ -46,9 +39,9 @@ func Prepare() (*Startup, error) {
 		return (runtimeInstaller{
 			probe: installedRuntime,
 			run:   runInstaller,
-			notify: func() {
+			progress: func() (func(), error) {
 				s.Logger.Info("Installing bundled WebView2 Runtime")
-				messageBox("首次启动需要安装 Microsoft WebView2 Runtime。\n\n点击“确定”后将自动离线安装，通常需要一至数分钟，请勿重复启动。安装完成后 FDU Connect 会自动打开。", 0x40)
+				return showInstallProgress()
 			},
 			timeout: 5 * time.Minute,
 		}).ensure(filepath.Dir(exe), WebView2InstallerSHA256)
@@ -56,28 +49,48 @@ func Prepare() (*Startup, error) {
 	return s, err
 }
 
+func startupDiagnostics(logPath func() (string, error), showError func(string)) *Startup {
+	path, err := logPath()
+	if err != nil {
+		s := newStartup(showError)
+		s.HandleError(fmt.Errorf("无法定位启动日志目录: %w", err))
+		return s
+	}
+	s, err := openStartup(filepath.Dir(path), showError)
+	if err != nil {
+		s.HandleError(err)
+	}
+	return s
+}
+
 func installedRuntime() (bool, error) {
-	for _, root := range []registry.Key{registry.LOCAL_MACHINE, registry.CURRENT_USER} {
+	return findInstalledRuntime(func(root registry.Key) (string, error) {
 		key, err := registry.OpenKey(root, runtimeKey, registry.QUERY_VALUE|registry.WOW64_32KEY)
-		if errors.Is(err, registry.ErrNotExist) {
-			continue
-		}
 		if err != nil {
-			return false, err
+			return "", err
 		}
 		folder, _, err := key.GetStringValue("EBWebView")
 		_ = key.Close()
+		return folder, err
+	})
+}
+
+func findInstalledRuntime(readFolder func(registry.Key) (string, error)) (bool, error) {
+	var readErr error
+	for _, root := range []registry.Key{registry.LOCAL_MACHINE, registry.CURRENT_USER} {
+		folder, err := readFolder(root)
 		if errors.Is(err, registry.ErrNotExist) {
 			continue
 		}
 		if err != nil {
-			return false, err
+			readErr = errors.Join(readErr, err)
+			continue
 		}
 		if runtimePresent(folder, runtime.GOARCH) {
 			return true, nil
 		}
 	}
-	return false, nil
+	return false, readErr
 }
 
 func runInstaller(ctx context.Context, path string) error {

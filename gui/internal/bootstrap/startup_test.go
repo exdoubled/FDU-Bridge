@@ -40,7 +40,7 @@ func TestStartupLogsWailsErrorsAndOnlyShowsFatalOnce(t *testing.T) {
 	}
 }
 
-func TestStartupLogOpenFailureStillShowsNativeErrorAndPath(t *testing.T) {
+func TestStartupLogOpenFailureKeepsUsableLoggerAndNativeErrors(t *testing.T) {
 	directory := filepath.Join(t.TempDir(), "blocked")
 	if err := os.WriteFile(directory, []byte("a file blocks the directory"), 0600); err != nil {
 		t.Fatal(err)
@@ -50,8 +50,29 @@ func TestStartupLogOpenFailureStillShowsNativeErrorAndPath(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected log open failure")
 	}
-	s.Fail(err)
-	if !strings.Contains(message, "startup.log") || !strings.Contains(message, "日志") {
+	if s.Logger == nil {
+		t.Fatal("log failure left startup without a usable logger")
+	}
+	s.Logger.Info("startup continues without a log file")
+	s.HandleError(err)
+	if message != "" {
+		t.Fatalf("nonfatal logging failure opened a dialog: %q", message)
+	}
+	s.Fail(errors.New("later fatal failure"))
+	if !strings.Contains(message, "later fatal failure") || !strings.Contains(message, "日志不可用") || strings.Contains(message, "请反馈启动日志") {
+		t.Fatalf("dialog = %q", message)
+	}
+}
+
+func TestStartupWithoutLogPathCanReportFatalError(t *testing.T) {
+	var message string
+	s := newStartup(func(text string) { message = text })
+	if s.Logger == nil {
+		t.Fatal("fallback logger unavailable")
+	}
+	s.Logger.Info("startup continues without a log path")
+	s.Fail(errors.New("fatal with no log path"))
+	if !strings.Contains(message, "fatal with no log path") || !strings.Contains(message, "日志不可用") || strings.Contains(message, "startup.log") {
 		t.Fatalf("dialog = %q", message)
 	}
 }

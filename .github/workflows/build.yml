@@ -59,6 +59,7 @@ jobs:
             release/*.zip
             release/SHA256SUMS.txt
           if-no-files-found: error
+          retention-days: 7
 
   unix:
     name: ${{ matrix.name }} GUI
@@ -148,6 +149,8 @@ jobs:
             -f tag_name="$RELEASE_TAG" --jq .body > release-notes.md
 
           cat >> release-notes.md <<'EOF'
+
+          Windows 首次下载请选择 `*-Windows-x64-offline.zip`，其中包含 WebView2 离线安装器，无需另行下载依赖。`*-Windows-x64.zip` 是应用内更新使用的精简包，需要系统已有 WebView2 Runtime。
 
           感谢 [AkiraSalvare/fdu-connect](https://github.com/AkiraSalvare/fdu-connect)、[Mythologyli/zju-connect](https://github.com/Mythologyli/zju-connect)、[lyc8503/EasierConnect](https://github.com/lyc8503/EasierConnect) 及所有贡献者。
           EOF

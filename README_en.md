@@ -19,7 +19,7 @@ The **Diagnostics (诊断)** page accepts an HTTP/HTTPS URL or a bare domain and
 
 After a diagnosis, click **Preview redacted report (预览脱敏报告)** below the result, review it, then copy or export the text. Export preserves the open preview exactly. Reports include the version, platform, integration mode, rule state, check status and timing, and safe suggestions; they exclude account identifiers, tokens, cookies, DNS addresses, personal paths, raw configuration, and full logs. Only built-in public campus hosts are retained; custom campus hosts and IPs are hidden, and URL paths, queries, and fragments are omitted. Unreadable rules are reported as unknown. **Export logs (导出日志)** at the top remains a separate action.
 
-1. Download the package for your system from [Releases](https://github.com/exdoubled/FDU-Bridge/releases) and extract it, keeping the GUI and core programs in the same directory.
+1. Download the package for your system from [Releases](https://github.com/exdoubled/FDU-Bridge/releases) and extract it, keeping the GUI and core programs in the same directory. For a first Windows installation, choose the complete `*-Windows-x64-offline.zip` package.
 2. Open your Clash client, pick a subscription and outside node, and use global or rule mode.
 3. Launch the GUI (see the table) and confirm the target in **Settings → Proxy Integration (代理接入)**. If several clients are running, select one and save.
 4. Enable **campus access (校内访问)** on Home, confirm the first-use prompt, and complete UIS login in the browser window.
@@ -72,8 +72,8 @@ In global mode, the return listener is pinned to `INTERNET` to avoid looping bac
 <details>
 <summary>Requirements, login browser, data directories, and upgrades</summary>
 
-- **Requirements**: full Windows release packages include the WebView2 offline installer. If the Runtime is missing, the first launch prompts and installs it automatically without another download; extract the entire package before running. The macOS app is not notarized; open it the first time by right-clicking it in Finder and choosing Open. Linux needs GTK 4 and WebKitGTK 6.0.
-- **Windows startup failures**: startup preparation and interface initialization failures display a native error message. The log is at `%LOCALAPPDATA%\FDU Connect\logs\startup.log`.
+- **Requirements**: the complete Windows `*-Windows-x64-offline.zip` package includes the WebView2 offline installer. If the Runtime is missing, the first launch shows installation status and installs it automatically without another download; extract the entire package before running. The lightweight `*-Windows-x64.zip` package is used for in-app updates and requires an existing Runtime. The macOS app is not notarized; open it the first time by right-clicking it in Finder and choosing Open. Linux needs GTK 4 and WebKitGTK 6.0.
+- **Windows startup failures**: startup preparation and interface initialization failures display a native error message. The log is at `%LOCALAPPDATA%\FDU Connect\logs\startup.log`. An unwritable log does not prevent startup; any later fatal error is still shown directly.
 - **Login browser**: automatic UIS login needs Edge, Chrome, Chromium, or Brave. A compatible default browser is preferred, and no callback URL needs pasting.
 - **Recovery and expired login**: selective Clash connections retry transient failures automatically. An expired session pauses retries; click **Relogin (重新登录)** on Home to authenticate again. Disabling campus access stops retries and keeps rules and settings.
 - **Automatic connection on startup**: after integration consent and auto-connect are enabled, FDU waits for the Clash client and local controller to start before enabling campus access. Disable access from Home or the tray, or quit, to cancel the wait. Invalid settings, ambiguous targets, and rejected controller requests stop the attempt and display an error. Local proxy mode does not wait for Clash.

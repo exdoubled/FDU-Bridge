@@ -19,10 +19,12 @@ const WebView2InstallerName = "MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
 var WebView2InstallerSHA256 string
 
 type runtimeInstaller struct {
-	probe   func() (bool, error)
-	run     func(context.Context, string) error
-	notify  func()
-	timeout time.Duration
+	probe           func() (bool, error)
+	run             func(context.Context, string) error
+	progress        func() (func(), error)
+	timeout         time.Duration
+	recheckTimeout  time.Duration
+	recheckInterval time.Duration
 }
 
 func (r runtimeInstaller) ensure(directory, digest string) error {
@@ -54,22 +56,52 @@ func (r runtimeInstaller) ensure(directory, digest string) error {
 	if !strings.EqualFold(hex.EncodeToString(hash.Sum(nil)), digest) {
 		return errors.New("WebView2 安装器 SHA256 校验失败，请重新下载完整 Windows 安装包")
 	}
-	r.notify()
+	closeProgress, err := r.progress()
+	if err != nil {
+		return fmt.Errorf("无法显示 WebView2 安装进度: %w", err)
+	}
+	defer closeProgress()
 	ctx, cancel := context.WithTimeout(context.Background(), r.timeout)
 	defer cancel()
-	err = r.run(ctx, installer)
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+	installErr := r.run(ctx, installer)
+	timedOut := errors.Is(ctx.Err(), context.DeadlineExceeded)
+	available, probeErr := r.waitForRuntime()
+	if available {
+		return nil
+	}
+	if timedOut {
 		return errors.New("安装 WebView2 Runtime 超时，请稍后重新启动程序")
 	}
-	if err != nil {
-		return fmt.Errorf("安装 WebView2 Runtime 失败: %w", err)
+	if installErr != nil {
+		return fmt.Errorf("安装 WebView2 Runtime 失败: %w", installErr)
 	}
-	available, err = r.probe()
-	if err != nil {
-		return fmt.Errorf("安装后检测 WebView2 Runtime: %w", err)
+	if probeErr != nil {
+		return fmt.Errorf("安装后检测 WebView2 Runtime: %w", probeErr)
 	}
-	if !available {
-		return errors.New("安装后 WebView2 Runtime 仍不可用，请重新启动 Windows 后重试")
+	return errors.New("安装后 WebView2 Runtime 仍不可用，请重新启动 Windows 后重试")
+}
+
+func (r runtimeInstaller) waitForRuntime() (bool, error) {
+	timeout, interval := r.recheckTimeout, r.recheckInterval
+	if timeout <= 0 {
+		timeout = 10 * time.Second
 	}
-	return nil
+	if interval <= 0 {
+		interval = 250 * time.Millisecond
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		available, err := r.probe()
+		if available {
+			return true, nil
+		}
+		select {
+		case <-ctx.Done():
+			return false, err
+		case <-ticker.C:
+		}
+	}
 }

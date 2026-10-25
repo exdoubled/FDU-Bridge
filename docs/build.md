@@ -12,9 +12,14 @@
 
 构建脚本会同时生成 `dist\FDU-Connect-GUI.exe` 和 `fdu-connect.exe` 核心，两者需放在同一目录。构建前先退出该目录中的程序；也可用 `-OutputDirectory` 输出到其他目录。运行 `./build.ps1 -Test` 可同时执行现有测试。
 
-运行 `./build.ps1 -Package` 可生成 Windows x64 压缩包，包含 GUI、核心、示例配置、许可证及微软官方 WebView2 x64 完整离线安装器，不会收录个人配置或登录缓存。打包时会下载并校验安装器的微软签名，将其 SHA256 写入 GUI；首次启动缺少运行库时使用包内安装器自动安装。安装器会明显增大包体积，请保留完整解压内容。首次导入 Clash 时会带入示例中的分流规则，已有规则文件保持原样。
+运行 `./build.ps1 -Package` 可生成两个 Windows x64 压缩包，不会收录个人配置或登录缓存：
 
-不带 `-Package` 的开发构建不下载离线安装器，需要本机已有 WebView2 Runtime。向其他用户分发时请使用完整的 `-Package` 输出。
+- `FDU-Connect-Windows-x64-offline.zip`：首次分发用的完整包，包含 GUI、核心、示例配置、许可证及微软官方 WebView2 x64 完整离线安装器；请保留完整解压内容。
+- `FDU-Connect-Windows-x64.zip`：应用内更新用的精简包，包含相同的 GUI、核心、示例配置和许可证，需要已有运行库。打包时检查此包不超过升级器的 256 MiB 下载上限。
+
+指定 `-Version vX.Y.Z` 时，文件名中的 `FDU-Connect` 后会加上版本号。打包时会下载并校验安装器的微软签名，将其 SHA256 写入两个包共用的 GUI；首次启动缺少运行库时使用完整包内的安装器自动安装并显示安装状态。首次导入 Clash 时会带入示例中的分流规则，已有规则文件保持原样。
+
+不带 `-Package` 的开发构建不下载离线安装器，需要本机已有 WebView2 Runtime。向首次使用的用户分发时请使用 `*-Windows-x64-offline.zip`。
 
 ## macOS／Linux GUI
 

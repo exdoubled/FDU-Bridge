@@ -16,7 +16,7 @@
 
 ## 快速开始
 
-1. 从 [Releases](https://github.com/exdoubled/FDU-Bridge/releases) 下载对应系统的压缩包并解压，GUI 与核心程序保持在同一目录。
+1. 从 [Releases](https://github.com/exdoubled/FDU-Bridge/releases) 下载对应系统的压缩包并解压，Windows 首次使用请选择 `*-Windows-x64-offline.zip` 完整离线包；GUI 与核心程序保持在同一目录。
 2. 打开 Clash 客户端，选好订阅和外网节点，使用全局或规则模式。
 3. 启动 GUI（见下表），在**设置 → 代理接入**确认接入目标；同时运行多个客户端时，选定一个并保存。
 4. 在首页开启**校内访问**，首次确认后在弹出的浏览器中完成 UIS 登录。
@@ -73,8 +73,8 @@ Clash 通过 TUN、系统代理或应用代理接收流量；FDU Bridge 负责 U
 <details>
 <summary>运行要求、登录浏览器、配置目录与升级</summary>
 
-- **运行要求**：Windows 完整发布包内置 WebView2 离线安装器；首次启动缺少运行库时会提示并自动安装，无需另行下载，请完整解压后运行。macOS 应用未经公证，首次打开需在 Finder 中右键选择“打开”；Linux 需要 GTK 4 和 WebKitGTK 6.0。
-- **Windows 启动失败**：启动准备或界面初始化失败时会显示原生错误提示，日志位于 `%LOCALAPPDATA%\FDU Connect\logs\startup.log`。
+- **运行要求**：Windows 的 `*-Windows-x64-offline.zip` 完整包内置 WebView2 离线安装器；首次启动缺少运行库时会显示安装状态并自动安装，无需另行下载，请完整解压后运行。`*-Windows-x64.zip` 为应用内更新使用的精简包，需要已有运行库。macOS 应用未经公证，首次打开需在 Finder 中右键选择“打开”；Linux 需要 GTK 4 和 WebKitGTK 6.0。
+- **Windows 启动失败**：启动准备或界面初始化失败时会显示原生错误提示，日志位于 `%LOCALAPPDATA%\FDU Connect\logs\startup.log`。日志不可写时仍会继续启动；后续失败会直接提示错误信息。
 - **登录浏览器**：UIS 自动登录需要 Edge、Chrome、Chromium 或 Brave，优先使用兼容的默认浏览器，无需粘贴回调地址。
 - **断线与登录过期**：Clash 分流连接会自动重试暂时性断线；会话过期时暂停重试，点击首页的**重新登录**重新认证。手动停用后停止重试，保留规则和设置。
 - **启动自动连接**：已确认接入并开启自动连接后，FDU 会等待 Clash 客户端及本机控制接口启动，再启用校内访问；等待时可在首页或托盘停用，也可退出。配置无效、目标不唯一或控制接口拒绝请求时会停止并显示错误；仅本地代理无需等待 Clash。
