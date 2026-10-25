@@ -12,6 +12,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// discoverClients is the only process scan behind client selection; tests replace
+// it so Clash clients running on the developer's machine cannot change results.
+var discoverClients = clash.DiscoverClients
+
 func (b *Backend) proxyOnly() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -52,7 +56,7 @@ func followingClient(previous clash.ClientTarget, clients []clash.ClientTarget) 
 }
 
 func (b *Backend) automaticTarget(preferred, oldVerge string) (clash.ClientTarget, error) {
-	clients, err := clash.DiscoverClients()
+	clients, err := discoverClients()
 	if err != nil {
 		return clash.ClientTarget{}, err
 	}
@@ -73,7 +77,7 @@ func (b *Backend) automaticTarget(preferred, oldVerge string) (clash.ClientTarge
 		return matching[0], nil
 	}
 	if preferred != "" {
-		target, err := clash.ResolveClientTarget(preferred)
+		target, err := clash.ResolveDiscoveredTarget(preferred, clients)
 		if (err == nil && target.Kind == "runtime") || errors.Is(err, clash.ErrClientNotRunning) {
 			for _, client := range clients {
 				if client.Kind == "runtime" {
@@ -93,7 +97,7 @@ func (b *Backend) automaticTarget(preferred, oldVerge string) (clash.ClientTarge
 	if selected, err := appconf.ResolveClashDir(oldVerge); err == nil {
 		return clash.ClientTarget{Kind: "verge", Root: selected, Name: "Clash Verge Rev"}, nil
 	}
-	return clash.ResolveClientTarget("")
+	return clash.ResolveDiscoveredTarget("", clients)
 }
 
 // Saving a binding never installs anything into the selected client.

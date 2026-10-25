@@ -234,11 +234,35 @@ func startDiscoveryHelper(t *testing.T, name string, args ...string) {
 	t.Cleanup(func() { _ = input.Close(); _ = child.Process.Kill(); _ = child.Wait() })
 }
 
+// ownDiscovery keeps real process discovery, so helpers are still found through
+// their command lines, but drops clients whose runtime file is outside dirs.
+// Clash clients on the developer's machine therefore cannot change results.
+func ownDiscovery(t *testing.T, dirs ...string) {
+	t.Helper()
+	previous := discoverClients
+	discoverClients = func() ([]clash.ClientTarget, error) {
+		clients, err := previous()
+		var owned []clash.ClientTarget
+		for _, client := range clients {
+			for _, dir := range dirs {
+				rel, relErr := filepath.Rel(dir, client.RuntimeFile)
+				if relErr == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+					owned = append(owned, client)
+					break
+				}
+			}
+		}
+		return owned, err
+	}
+	t.Cleanup(func() { discoverClients = previous })
+}
+
 func TestSavedRuntimeMismatchRequiresReselection(t *testing.T) {
 	other := filepath.Join(t.TempDir(), "other.yaml")
 	if err := os.WriteFile(other, []byte("proxies: []\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	ownDiscovery(t, filepath.Dir(other))
 	startDiscoveryHelper(t, "mihomo", "-f", other, "-ext-ctl", "127.0.0.1:19099")
 	for _, cliOnly := range []bool{false, true} {
 		for _, startup := range []bool{false, true} {
@@ -287,7 +311,12 @@ func TestSavedRuntimeStillWaitsWhenOnlyVergeGUIIsPresent(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	ownDiscovery(t, root)
 	startDiscoveryHelper(t, "clash-verge", "-d", root)
+	// Without the helper, this test would pass vacuously.
+	if clients, err := discoverClients(); err != nil || len(clients) != 1 || clients[0].Kind != "verge" {
+		t.Fatalf("Verge GUI helper was not discovered: %+v / %v", clients, err)
+	}
 	b := startupBackend(t)
 	if _, err := b.automaticTarget(b.config.Integration.RuntimeFile, ""); !errors.Is(err, clash.ErrClientNotRunning) {
 		t.Fatalf("Verge GUI without the selected core must remain retryable: %v", err)
@@ -366,6 +395,7 @@ func TestStartupWaitAutoCLIController(t *testing.T) {
 	b := startupBackend(t)
 	b.config.Integration.Mode = "auto"
 	file := b.config.Integration.RuntimeFile
+	ownDiscovery(t, filepath.Dir(file))
 	if err := os.WriteFile(file, []byte("proxies: []\n"), 0600); err != nil {
 		t.Fatal(err)
 	}

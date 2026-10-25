@@ -43,7 +43,7 @@ func (b *Backend) campusRoot() (string, error) {
 	var err error
 	if b.runtime.Running() && b.autoTarget != nil {
 		var clients []clash.ClientTarget
-		clients, err = clash.DiscoverClients()
+		clients, err = discoverClients()
 		if err == nil {
 			target, err = followingClient(*b.autoTarget, clients)
 		}

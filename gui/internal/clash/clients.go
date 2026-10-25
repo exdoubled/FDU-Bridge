@@ -55,11 +55,17 @@ func DiscoverClients() ([]ClientTarget, error) {
 // ResolveClientTarget honors a remembered manual selection before automatic discovery.
 func ResolveClientTarget(preferred string) (ClientTarget, error) {
 	targets, err := DiscoverClients()
+	if err != nil && strings.TrimSpace(preferred) == "" {
+		return ClientTarget{}, err
+	}
+	return ResolveDiscoveredTarget(preferred, targets)
+}
+
+// ResolveDiscoveredTarget resolves against an existing discovery snapshot, so a
+// caller can make every decision from a single process scan.
+func ResolveDiscoveredTarget(preferred string, targets []ClientTarget) (ClientTarget, error) {
 	if preferred = strings.TrimSpace(preferred); preferred != "" {
 		return resolvePreferredClientTarget(preferred, targets)
-	}
-	if err != nil {
-		return ClientTarget{}, err
 	}
 	return selectClientTarget(targets)
 }
