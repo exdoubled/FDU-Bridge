@@ -13,6 +13,7 @@ func TestMaintenanceRefusesLifecycleAndDraftChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	ownCores(b)
 	s := NewMaintenanceService(b)
 	for _, state := range []string{"starting", "stopping", "updating", "draft", "busy update", "external"} {
 		t.Run(state, func(t *testing.T) {
