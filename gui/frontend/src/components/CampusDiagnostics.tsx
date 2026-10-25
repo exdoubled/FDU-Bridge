@@ -3,6 +3,7 @@ import { Stethoscope } from "lucide-react";
 import { NetworkService, errorText, type CampusDiagnosis } from "../lib/api";
 import { ProbeDetails } from "./NetworkTools";
 import { CardTitle, Spinner } from "./ui";
+import { DiagnosisReport } from "./DiagnosisReport";
 
 const integrationNames: Record<string, string> = { auto: "自动接入 Clash", manual: "手动接入 Clash", proxy: "仅本地代理" };
 const ruleNames: Record<string, string> = { domain: "精确域名", suffix: "域名及子域名", cidr: "IPv4 网段" };
@@ -66,7 +67,10 @@ export function CampusDiagnostics() {
       </form>
       <p id="campus-diagnosis-help" className="network-caption">保留网址路径，移除查询参数和片段；不携带登录凭证，不跟随跳转。不会更改规则或系统设置。</p>
       {error && <div className="field-error" role="alert">{error}{diagnosis && "（下方保留上次结果）"}</div>}
-      {diagnosis && <CampusDiagnosticResult diagnosis={diagnosis} />}
+      {diagnosis && <>
+        <CampusDiagnosticResult diagnosis={diagnosis} />
+        <DiagnosisReport key={diagnosis.checkedAt} disabled={busy} />
+      </>}
     </div>
   );
 }

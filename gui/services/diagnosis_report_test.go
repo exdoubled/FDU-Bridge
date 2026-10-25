@@ -17,7 +17,7 @@ func TestDiagnosisReportProjectsOnlySafeFields(t *testing.T) {
 	private := "account123 token=top-secret Cookie=session 10.18.7.3 C:\\Users\\Alice\\private"
 	d := CampusDiagnosis{Target: "https://alice:password@library.fudan.edu.cn/private?token=secret#fragment", Host: "library.fudan.edu.cn", Integration: "manual", State: private,
 		Connected: true, Coverage: private, ExpectedPath: private, Problem: private, Suggestions: []string{private},
-		Rule: CampusRuleDiagnosis{Matched: true, Kind: "suffix", Value: "fudan.edu.cn", Enabled: true, Applied: true, Message: private},
+		Rule: CampusRuleDiagnosis{Known: true, Matched: true, Kind: "suffix", Value: "fudan.edu.cn", Enabled: true, Applied: true, Message: private},
 		Probe: &ProbeReport{Via: private, Result: netcheck.Result{Host: private, Name: private, TargetID: private, Answers: []string{"10.18.7.3"}, HTTPStatus: 401,
 			Checks: []netcheck.Check{{Kind: "dns", Status: "ok", Millis: 12, Detail: private}, {Kind: "tls", Status: "error", Millis: 34, Detail: private}, {Kind: private, Status: private, Detail: private}}}}}
 	s := NewNetworkService(&Backend{logs: []string{private}, saved: map[string]any{"username": private}})
@@ -49,7 +49,7 @@ func TestDiagnosisReportHidesCustomHostsAndURLSecrets(t *testing.T) {
 	} {
 		t.Run(tc.host, func(t *testing.T) {
 			s := NewNetworkService(&Backend{})
-			s.saveDiagnosis(CampusDiagnosis{Host: tc.host, Rule: CampusRuleDiagnosis{Matched: true, Kind: "cidr", Value: "10.9.8.0/24"}})
+			s.saveDiagnosis(CampusDiagnosis{Host: tc.host, Rule: CampusRuleDiagnosis{Known: true, Matched: true, Kind: "cidr", Value: "10.9.8.0/24"}})
 			report, err := s.PreviewDiagnosisReport()
 			if err != nil || !strings.Contains(report, "目标主机: "+tc.want) {
 				t.Fatalf("safe host: %q %v", report, err)
@@ -97,10 +97,43 @@ func TestDiagnosisReportExportUsesPreviewEvenWhenDiagnosisChanges(t *testing.T) 
 
 func TestDiagnosisReportUnknownIntegrationDoesNotClaimClashPath(t *testing.T) {
 	s := NewNetworkService(&Backend{})
-	s.saveDiagnosis(CampusDiagnosis{Integration: "unrecognized mode", Rule: CampusRuleDiagnosis{Matched: true, Enabled: true}})
+	s.saveDiagnosis(CampusDiagnosis{Integration: "unrecognized mode", Rule: CampusRuleDiagnosis{Known: true, Matched: true, Enabled: true}})
 	report, err := s.PreviewDiagnosisReport()
 	if err != nil || strings.Contains(report, "预期路径: Clash") || !strings.Contains(report, "预期路径: 未确认") {
 		t.Fatalf("unknown integration claimed a route: %q %v", report, err)
+	}
+}
+
+func TestDiagnosisReportDistinguishesUnknownRulesFromConfirmedMiss(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		rule            CampusRuleDiagnosis
+		want, forbidden string
+	}{
+		{"unknown", CampusRuleDiagnosis{}, "匹配: 无法确认", "匹配: 未命中"},
+		{"unknown with stale match fields", CampusRuleDiagnosis{Matched: true, Enabled: true, Applied: true, Kind: "domain", Value: "library.fudan.edu.cn"}, "匹配: 无法确认", "匹配: 已命中"},
+		{"confirmed miss", CampusRuleDiagnosis{Known: true}, "匹配: 未命中", "匹配: 无法确认"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewNetworkService(&Backend{})
+			s.saveDiagnosis(CampusDiagnosis{Integration: "auto", Rule: tc.rule})
+			report, err := s.PreviewDiagnosisReport()
+			if err != nil || !strings.Contains(report, tc.want) || strings.Contains(report, tc.forbidden) {
+				t.Fatalf("incorrect rule knowledge: %q %v", report, err)
+			}
+			if !tc.rule.Known {
+				for _, forbidden := range []string{"添加或启用目标规则", "预期路径: Clash", "已启用: true", "已应用: true", "规则值:"} {
+					if strings.Contains(report, forbidden) {
+						t.Errorf("unknown rules made an unsupported claim: %q", forbidden)
+					}
+				}
+				if !strings.Contains(report, "检查校内资源能否正常读取") {
+					t.Error("missing safe rule verification suggestion")
+				}
+			} else if !strings.Contains(report, "添加或启用目标规则") {
+				t.Error("confirmed miss lost its actionable suggestion")
+			}
+		})
 	}
 }
 

@@ -108,7 +108,9 @@ func formatDiagnosisReport(d CampusDiagnosis) string {
 	line("需要重新认证: %t", d.AuthRequired)
 	line("代理覆盖: 入口检测不能确认所有应用均被代理覆盖")
 	line("\n规则状态")
-	if d.Rule.Matched {
+	if !d.Rule.Known {
+		line("匹配: 无法确认")
+	} else if d.Rule.Matched {
 		line("匹配: 已命中")
 		line("类型: %s", reportLabel(d.Rule.Kind, map[string]string{"domain": "精确域名", "suffix": "域名后缀", "cidr": "IP / 网段"}))
 		value := "[已隐藏]"
@@ -119,11 +121,16 @@ func formatDiagnosisReport(d CampusDiagnosis) string {
 	} else {
 		line("匹配: 未命中")
 	}
-	line("已启用: %t", d.Rule.Enabled)
-	line("已应用: %t", d.Rule.Applied)
+	if d.Rule.Known {
+		line("已启用: %t", d.Rule.Enabled)
+		line("已应用: %t", d.Rule.Applied)
+	} else {
+		line("已启用: 无法确认")
+		line("已应用: 无法确认")
+	}
 	if d.Integration == "proxy" {
 		line("预期路径: 应用 → FDU 本地代理 → 校园资源；分流由外部应用管理")
-	} else if (d.Integration == "auto" || d.Integration == "manual") && d.Rule.Matched && d.Rule.Enabled {
+	} else if (d.Integration == "auto" || d.Integration == "manual") && d.Rule.Known && d.Rule.Matched && d.Rule.Enabled {
 		line("预期路径: Clash 校园规则 → FDU → 校园资源；此为配置预期")
 	} else {
 		line("预期路径: 未确认由 FDU 转发")
@@ -158,7 +165,9 @@ func formatDiagnosisReport(d CampusDiagnosis) string {
 	if d.Integration == "proxy" {
 		line("- 检查目标应用是否已使用 FDU 本地代理。")
 	} else if d.Integration == "auto" || d.Integration == "manual" {
-		if !d.Rule.Matched || !d.Rule.Enabled {
+		if !d.Rule.Known {
+			line("- 检查校内资源能否正常读取，确认规则状态后再诊断。")
+		} else if !d.Rule.Matched || !d.Rule.Enabled {
 			line("- 在校内资源中添加或启用目标规则，保存后再检测。")
 		} else if !d.Rule.Applied {
 			line("- 保存校内资源并检查 Clash 规则同步状态。")

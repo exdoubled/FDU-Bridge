@@ -85,7 +85,7 @@ export function Logs() {
             {paused ? <Play size={15} /> : <Pause size={15} />}
           </button>
           <button className="btn icon-btn" onClick={clear} aria-label="清空" title="清空"><Eraser size={15} /></button>
-          <button className="btn" onClick={exportLogs}><Download size={15} />导出</button>
+          <button className="btn" onClick={exportLogs}><Download size={15} />导出日志</button>
         </div>
       </header>
       <div className="page-body flush diagnostics-body">
