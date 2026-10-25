@@ -125,10 +125,18 @@ func probeTarget(ctx context.Context, target Target, opts Options, transport *ht
 		lookup = net.DefaultResolver.LookupHost
 		source = "系统 DNS"
 	}
-	dnsCtx, dnsCancel := context.WithTimeout(ctx, 3*time.Second)
 	start := time.Now()
-	answers, dnsErr := lookup(dnsCtx, target.Host)
-	dnsCancel()
+	var answers []string
+	var dnsErr error
+	targetIP := net.ParseIP(target.Host)
+	if targetIP != nil {
+		answers = []string{targetIP.String()}
+		source = "目标为 IP 地址，无需解析"
+	} else {
+		dnsCtx, dnsCancel := context.WithTimeout(ctx, 3*time.Second)
+		answers, dnsErr = lookup(dnsCtx, target.Host)
+		dnsCancel()
+	}
 	for _, answer := range answers {
 		if ip := net.ParseIP(answer); ip != nil && len(result.Answers) < 16 {
 			value := ip.String()
@@ -142,7 +150,7 @@ func probeTarget(ctx context.Context, target Target, opts Options, transport *ht
 		}
 	}
 	dns := Check{Kind: "dns", Status: "ok", Millis: time.Since(start).Milliseconds(), Detail: source + "；IP 仅为候选，非实际连接地址"}
-	if opts.ProxyURL != "" {
+	if opts.ProxyURL != "" && targetIP == nil {
 		dns.Detail += "；代理 DNS 可能不同"
 	}
 	if dnsErr != nil || len(result.Answers) == 0 {

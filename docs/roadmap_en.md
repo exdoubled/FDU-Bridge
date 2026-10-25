@@ -14,7 +14,7 @@
 - [X] Verify and improve generic integration with FlClash and Clash Party on real installations.
 - [X] Verify and improve generic integration with Sparkle, Clash Nyanpasu, and ClashX.Meta on real installations.
 - [ ] Publish a compatibility list verified by client version and operating system.
-- [ ] Add one-click diagnostics for a user-entered campus URL, showing matching rules, proxy coverage, login and tunnel status, and DNS/TLS/HTTP results; distinguish expected routes from observed evidence and provide actionable suggestions.
+- [X] Add one-click diagnostics for a user-entered campus URL, showing matching rules, proxy coverage, login and tunnel status, and DNS/TLS/HTTP results; distinguish expected routes from observed evidence and provide actionable suggestions.
 - [ ] Improve recovery during startup, network changes, wake from sleep, and unexpected exits: wait for Clash to be ready before connecting automatically, recheck connections, and handle Clash restarts and unfinished recovery records; verify that ordinary Internet access still works after disabling FDU.
 - [ ] Add skippable first-use guidance on Home that can be reopened, covering client confirmation, UIS login, and access verification while using the built-in campus rules.
 - [ ] Improve tray status and quick actions with shortcuts to log in again and open diagnostics; notify only once when user action is required.

@@ -31,6 +31,8 @@ type NetworkService struct {
 	controllerMu  sync.Mutex
 	controllerKey networkControllerKey
 	controllerAPI clash.API
+	diagnosisMu   sync.Mutex
+	diagnosis     *CampusDiagnosis
 }
 
 type networkControllerKey struct {

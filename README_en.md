@@ -15,6 +15,8 @@ A desktop campus-network tool for Fudan University. With a Clash/Mihomo client, 
 
 ## Quick start
 
+The **Diagnostics (诊断)** page accepts an HTTP/HTTPS URL or a bare domain and shows saved rule matches, proxy coverage, login/tunnel state, DNS/TCP/TLS/HTTP evidence, and actionable suggestions. The probe keeps the URL path, drops query strings and fragments, sends no login credentials, and does not follow redirects. It uses the selected Clash entry or the FDU HTTP entry in local proxy mode; an unavailable entry never triggers a direct-system fallback. Expected routing is inferred from saved rules and synchronization state. DNS answers are candidates, and an HTTP response alone does not establish the browser's actual campus-tunnel path.
+
 1. Download the package for your system from [Releases](https://github.com/exdoubled/FDU-Bridge/releases) and extract it, keeping the GUI and core programs in the same directory.
 2. Open your Clash client, pick a subscription and outside node, and use global or rule mode.
 3. Launch the GUI (see the table) and confirm the target in **Settings → Proxy Integration (代理接入)**. If several clients are running, select one and save.
