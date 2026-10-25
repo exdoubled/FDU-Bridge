@@ -27,7 +27,7 @@ func (b *Backend) waitForStartupClash(ctx context.Context) error {
 	}
 }
 
-func (b *Backend) startupClashReady(ctx context.Context) error {
+func (b *Backend) startupAllowed(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -39,6 +39,13 @@ func (b *Backend) startupClashReady(ctx context.Context) error {
 	}
 	if b.runtime.ExternalRunning() {
 		return errors.New("检测到其他 FDU 正在运行，已停止自动连接")
+	}
+	return nil
+}
+
+func (b *Backend) startupClashReady(ctx context.Context) error {
+	if err := b.startupAllowed(ctx); err != nil {
+		return err
 	}
 	if b.proxyOnly() {
 		return nil

@@ -191,6 +191,10 @@ func (b *Backend) startCampus(ctx context.Context, done chan struct{}, approved,
 	var err error
 	if waitClash {
 		err = b.waitForStartupClash(ctx)
+		if err == nil {
+			// Preferences can change while the readiness probe is in flight.
+			err = b.startupAllowed(ctx)
+		}
 	}
 	if err == nil {
 		err = b.prepareCampus(ctx, approved)

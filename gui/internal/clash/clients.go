@@ -83,6 +83,9 @@ func resolvePreferredClientTarget(preferred string, targets []ClientTarget) (Cli
 	}
 	controller, err := clientRuntimeController(path, nil)
 	if err != nil {
+		if errors.Is(err, ErrClientNotRunning) {
+			return ClientTarget{}, err
+		}
 		return ClientTarget{}, errors.New("所选路径不是兼容的 Verge 目录或含本机控制接口的 Mihomo 运行配置，请重新选择")
 	}
 	return ClientTarget{Kind: "runtime", Name: clientLabel("", path), Root: filepath.Dir(path), RuntimeFile: path, Controller: controller}, nil
@@ -414,6 +417,12 @@ func clientRuntimeController(path string, args []string) (*ControlAPI, error) {
 			controller.Network, controller.Address = "tcp", config.TCP
 			return controller, nil
 		}
+	}
+	// Some clients pass their local controller only through core CLI flags.
+	// Retry discovery only for a valid runtime with no configured endpoint;
+	// malformed or explicitly unsafe endpoints remain terminal errors.
+	if len(args) == 0 && config.TCP == "" && config.Unix == "" && config.Pipe == "" {
+		return nil, ErrClientNotRunning
 	}
 	return nil, invalid
 }

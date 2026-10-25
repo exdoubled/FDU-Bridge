@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -244,5 +246,113 @@ func TestStartupWaitStopsForAnotherFDU(t *testing.T) {
 	b.conn.API = forbiddenAPI{t}
 	if err := b.waitForStartupClash(context.Background()); err == nil {
 		t.Fatal("startup ignored another FDU process")
+	}
+}
+
+func TestStartupWaitAutoCLIController(t *testing.T) {
+	if os.Getenv("FDU_TEST_CLI_STARTUP") == "1" {
+		_, _ = os.Stdin.Read(make([]byte, 1))
+		return
+	}
+	b := startupBackend(t)
+	b.config.Integration.Mode = "auto"
+	file := b.config.Integration.RuntimeFile
+	if err := os.WriteFile(file, []byte("proxies: []\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.automaticTarget(file, ""); !errors.Is(err, clash.ErrClientNotRunning) {
+		t.Fatalf("offline CLI-only runtime must wait for its process binding: %v", err)
+	}
+	api := &startupAPI{seen: make(chan struct{}, 1)}
+	api.ready.Store(true)
+	b.conn.API = api
+	if err := b.beginConnect(false, false, true); err != nil {
+		t.Fatal(err)
+	}
+	b.mu.Lock()
+	done := b.startDone
+	b.mu.Unlock()
+	select {
+	case <-done:
+		t.Fatal("startup did not wait for the selected client")
+	case <-time.After(100 * time.Millisecond):
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := "mihomo"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	helper := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(helper, contents, 0700); err != nil {
+		t.Fatal(err)
+	}
+	child := exec.Command(helper, "-test.run=^TestStartupWaitAutoCLIController$", "--", "-f", file, "-ext-ctl", "127.0.0.1:9090")
+	child.Env = append(os.Environ(), "FDU_TEST_CLI_STARTUP=1")
+	input, err := child.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer input.Close()
+	if err := child.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = child.Process.Kill(); _ = child.Wait() }()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("running CLI controller did not unblock startup")
+	}
+	if got := b.Status(); got.State != "error" || got.Problem != "未找到 VPN 配置" {
+		t.Fatalf("did not reach normal preparation after process discovery: %+v", got)
+	}
+}
+
+type startupBlockingAPI struct {
+	base    startupAPI
+	once    sync.Once
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (a *startupBlockingAPI) Do(method, path string, payload, out any) error {
+	a.once.Do(func() { close(a.entered); <-a.release })
+	return a.base.Do(method, path, payload, out)
+}
+
+func TestStartupWaitRevokedDuringProbeDoesNotPrepare(t *testing.T) {
+	b := startupBackend(t)
+	api := &startupBlockingAPI{entered: make(chan struct{}), release: make(chan struct{}), base: startupAPI{seen: make(chan struct{}, 1)}}
+	api.base.ready.Store(true)
+	b.conn.API = api
+	if err := b.beginConnect(false, false, true); err != nil {
+		t.Fatal(err)
+	}
+	b.mu.Lock()
+	done := b.startDone
+	b.mu.Unlock()
+	select {
+	case <-api.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no startup probe")
+	}
+	if _, err := NewAppService(b).SavePreferences("system", false, false, true); err != nil {
+		t.Fatal(err)
+	}
+	close(api.release)
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("startup did not finish after revoked authorization")
+	}
+	// Normal preparation would fail on this fixture's missing VPN settings.
+	if got := b.Status(); got.State != "stopped" || got.Starting || got.Problem != "" {
+		t.Fatalf("startup entered preparation after auto-connect was disabled: %+v", got)
 	}
 }

@@ -19,6 +19,31 @@ func TestAbsentClientIsRetryableButAmbiguousClientsAreNot(t *testing.T) {
 	}
 }
 
+func TestOfflineRuntimeOnlyRetriesMissingControllerBinding(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		content string
+		wait    bool
+	}{
+		{"cli-only", "proxies: []\n", true},
+		{"invalid-yaml", "proxies: [\n", false},
+		{"preferences", "operationMode: standard\n", false},
+		{"remote-tcp", "proxies: []\nexternal-controller: 192.0.2.1:9090\n", false},
+		{"wildcard-tcp", "proxies: []\nexternal-controller: 0.0.0.0:9090\n", false},
+		{"invalid-port", "proxies: []\nexternal-controller: 127.0.0.1:0\n", false},
+		{"relative-socket", "proxies: []\nexternal-controller-unix: relative.sock\n", false},
+		{"remote-pipe", "proxies: []\nexternal-controller-pipe: '\\\\server\\pipe\\clash'\n", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			file := writeDiscoveryFile(t, filepath.Join(t.TempDir(), "runtime.yaml"), tt.content)
+			_, err := resolvePreferredClientTarget(file, nil)
+			if err == nil || errors.Is(err, ErrClientNotRunning) != tt.wait {
+				t.Fatalf("classification = %v; want retryable %v", err, tt.wait)
+			}
+		})
+	}
+}
+
 const discoveryRuntime = "external-controller: 127.0.0.1:19090\nsecret: private-controller-secret\nproxies: [{name: test, type: ss, server: example.invalid, port: 443, password: private-proxy-password}]\nproxy-groups: []\nrules: ['MATCH,DIRECT']\n"
 
 func writeDiscoveryFile(t *testing.T, path, content string) string {
