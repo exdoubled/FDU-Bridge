@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChevronRight, FileText, FolderOpen, Layers, Palette, RefreshCw, Upload, Wrench } from "lucide-react";
 import { AppService, ClashService, CoreService, SettingsService, type SettingsView } from "../lib/api";
-import { advancedOrder, availability, fieldsOf, getValue, prepareForSave, primaryGroups, setValue, type Values } from "../lib/settingsForm";
+import { advancedOrder, availability, fieldsOf, getValue, prepareForSave, primaryGroups, setValue, usesUISLogin, type Values } from "../lib/settingsForm";
 import { useStore } from "../store";
 import { Banner, Empty, Segmented, Spinner, Switch } from "../components/ui";
 import { SettingRow } from "../components/SettingField";
 import { IntegrationSettings } from "../components/IntegrationSettings";
 import { UpdateSettings } from "../components/UpdateControl";
 import { MaintenanceSettings } from "../components/MaintenanceSettings";
+import { UISLogin } from "../components/UISLogin";
 
 function PathSetting({ label, path, onBrowse, disabled }: { label: string; path?: string; onBrowse: () => void; disabled: boolean }) {
   return (
@@ -39,10 +40,14 @@ export function Settings() {
   const [integrationDirty, setIntegrationDirty] = useState(false);
   const [maintenanceVersion, setMaintenanceVersion] = useState(0);
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const locked = status.running || status.starting || status.stopping;
+  const active = status.running || status.starting || status.stopping;
+  const locked = active || saving;
   const standalone = config?.integration.mode === "proxy";
+  const uisLogin = usesUISLogin(values);
+  // UIS fields save on blur; only manually saved fields need a navigation warning.
+  const manualValues = uisLogin && view ? { ...values, username: view.values.username, password: view.values.password, totp_secret: view.values.totp_secret } : values;
   // Only real edits block navigation; an untouched draft stays in the backend until saved.
-  const edited = !!view && JSON.stringify(values) !== baseline;
+  const edited = !!view && JSON.stringify(manualValues) !== baseline;
   const dirty = edited || !!view?.dirty;
 
   useEffect(() => setDirty("settings", edited || integrationDirty), [edited, integrationDirty, setDirty]);
@@ -63,6 +68,19 @@ export function Settings() {
   }, [anchor, view]);
 
   const change = (key: string, value: unknown) => setValues((v) => setValue(v, key, value));
+
+  const saveUISCredential = async (key: string, value: string) => {
+    setSaving(true);
+    try {
+      const normalized = await SettingsService.SaveUISCredential(key, value);
+      // Keep unrelated advanced-setting edits while updating their saved baseline.
+      setValues((v) => String(v[key] ?? "") === value ? setValue(v, key, normalized) : v);
+      setBaseline((v) => JSON.stringify(setValue(JSON.parse(v), key, normalized)));
+      setView((v) => v ? { ...v, source: v.path, saved: true, dirty: false, example: false, values: setValue(v.values, key, normalized) } : v);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const save = async () => {
     if (!view) return;
@@ -152,6 +170,11 @@ export function Settings() {
       </header>
       <div className="page-body">
         <div className="stack">
+          {uisLogin && view && <>
+            {active && <Banner tone="info">关闭校内访问后可修改 UIS 登录信息</Banner>}
+            <UISLogin values={values} saved={view.values} disabled={locked || status.external} onChange={change} onSave={saveUISCredential} />
+          </>}
+
           {standalone ? <section className="card section" id="proxy" style={{ padding: 0 }}>
             <div className="section-head">独立校园代理</div>
             <div style={{ padding: "0 20px 16px" }} className="row">
@@ -194,7 +217,7 @@ export function Settings() {
                 <button className="btn" onClick={importConfig} disabled={locked}><Upload size={15} />导入 VPN 配置</button>
                 {view?.saved && <button className="btn icon-btn" onClick={reload} disabled={locked} aria-label="重新读取" title="重新读取"><RefreshCw size={15} /></button>}
               </div>
-              {locked && <Banner tone="warning">校内访问已开启，关闭后才能修改连接配置</Banner>}
+              {active && <Banner tone="warning">校内访问已开启，关闭后才能修改连接配置</Banner>}
               {view?.dirty && <Banner tone="info">{view.saved ? "已读入配置草稿，保存后生效" : "启用校内访问时会自动保存默认配置，也可在这里调整"}</Banner>}
               {!view ? (
                 <Empty icon={FileText} title="无法读取 VPN 配置">可导入现有的 FDU 配置</Empty>
@@ -202,6 +225,7 @@ export function Settings() {
                 <PathSetting label="VPN 配置文件" path={overview?.fduConfig} onBrowse={pickConfig} disabled={!overview || locked} />
                 {[...primaryGroups.map(({ group }) => group), ...advancedOrder].map((group) => {
                   const groupFields = fieldsOf(fields, group).filter((field) => !["tun_mode", "routing.enabled", "routing.mode"].includes(field.key)
+                    && !(uisLogin && ["username", "password", "totp_secret"].includes(field.key))
                     && !(standalone && ["routing.upstream_proxy", "add_route", "dns_hijack", "fake_ip", "socks_bind", "http_bind", "socks_user", "socks_passwd"].includes(field.key)));
                   if (!groupFields.length) return null;
                   const reason = availability(groupFields[0], values);

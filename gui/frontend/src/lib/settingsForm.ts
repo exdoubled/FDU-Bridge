@@ -9,6 +9,11 @@ export interface Field {
 
 export type Values = { [key: string]: unknown };
 
+export function usesUISLogin(values: Values): boolean {
+  return values.protocol === "atrust" && values.auth_type === "auth/httpsOauth2"
+    && values.login_domain === "id.fudan.edu.cn" && !values.oauth2_code;
+}
+
 /** Groups with their own section; the rest fold into 高级. */
 export const primaryGroups: { group: string; title: string }[] = [
   { group: "登录", title: "账户与服务器" },
