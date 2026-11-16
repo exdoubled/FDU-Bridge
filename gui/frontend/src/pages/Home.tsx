@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { ArrowRight, Globe, LoaderCircle, Route, Shield, ShieldAlert, ShieldCheck } from "lucide-react";
+import { ArrowRight, Globe, LoaderCircle, Lock, Route, Shield, ShieldAlert, ShieldCheck } from "lucide-react";
 import { ClashService, CoreService, RulesService, SettingsService, errorText, type ApplyState, type NodeState } from "../lib/api";
 import { counts, type Draft } from "../lib/rulesDraft";
 import { formatUptime, stateLabel, stateTone } from "../lib/status";
 import { useStore } from "../store";
-import { Banner, CardTitle, Segmented, Spinner, Switch } from "../components/ui";
+import { Banner, CardTitle, CopyButton, Hint, Segmented, Spinner, Switch } from "../components/ui";
 import { CampusChecks, TrafficCards } from "../components/NetworkTools";
 import { missingUISCredentials } from "../lib/settingsForm";
 
@@ -121,16 +121,25 @@ export function Home() {
           {!active && status.external && <Banner tone="warning">其他 FDU 正在运行，请先关闭它再启用校内访问</Banner>}
           <section className="card connection-card">
             <div className="connection-options">
-              <div className="usage-selector" aria-label="使用方式" title={active ? "断开后可切换" : undefined}>
-                <Segmented value={standalone ? "proxy" : "clash"} disabled={locked} onChange={(mode) => saveUsage(mode)}
-                  options={[{ value: "clash", label: "配合 Clash" }, { value: "proxy", label: "独立使用" }]} />
+              <div className="usage-setting">
+                <span className="usage-label">使用方式</span>
+                <div className="usage-selector" aria-label="使用方式" title={active ? "断开后可切换" : undefined}>
+                  <Segmented value={standalone ? "proxy" : "clash"} disabled={locked} onChange={(mode) => saveUsage(mode)}
+                    options={[{ value: "clash", label: "配合 Clash" }, { value: "proxy", label: "独立使用" }]} />
+                </div>
               </div>
               {standalone && <>
-                <div aria-label="分流模式"><Segmented value={routeMode} disabled={locked} onChange={(mode) => saveUsage("proxy", mode)}
-                  options={[{ value: "rule", label: "规则" }, { value: "global", label: "全局" }]} /></div>
-                <label className="row"><span>TUN</span><Switch checked={tun} disabled={locked} onChange={(value) => saveUsage("proxy", routeMode, value)} label="FDU TUN" /></label>
+                <div className="usage-setting">
+                  <span className="usage-label">分流模式<Hint text="规则：启用的校园规则走校园隧道，其余直连。全局：所有接入流量走校园隧道，仍受学校授权范围限制。" /></span>
+                  <div aria-label="分流模式" className="usage-selector compact"><Segmented value={routeMode} disabled={locked} onChange={(mode) => saveUsage("proxy", mode)}
+                    options={[{ value: "rule", label: "规则" }, { value: "global", label: "全局" }]} /></div>
+                </div>
+                <label className="usage-setting usage-toggle">
+                  <span className="usage-label">TUN<Hint text="用系统级虚拟网卡接管 TCP/UDP，需要管理员或 root 权限；使用前先关闭其他 VPN 的 TUN。" /></span>
+                  <Switch checked={tun} disabled={locked} onChange={(value) => saveUsage("proxy", routeMode, value)} label="FDU TUN" />
+                </label>
               </>}
-              {active && <span className="muted">断开后可切换</span>}
+              {active && <span className="muted connection-locked"><Lock size={12} />断开后可切换</span>}
             </div>
           <div className={`hero ${tone}`}>
             <div className={`hero-icon ${tone === "off" ? "" : tone}`}>
@@ -157,22 +166,30 @@ export function Home() {
             <Switch large checked={active} disabled={busy || status.stopping || (!active && (status.external || !loginReady))} onChange={togglePower} label="启用校内访问" />
           </div>
           {standalone && <div className="connection-help">
-            <div>{routeMode === "global" ? "所有接入流量走校园隧道，学校未授权的目标可能无法访问。" : "校园规则走 FDU，其余流量直连。"}</div>
+            <div>{routeMode === "global" ? "所有接入流量走校园隧道，学校未授权的目标可能无法访问；局域网与回环目标仍走本机网络。" : "校园规则走 FDU，其余流量直连。"}</div>
             <div className="muted">{tun ? "TUN 接管系统 TCP/UDP 流量；请先关闭其他 VPN 的 TUN。" : "将应用代理设为下方地址即可使用。"}</div>
             {tun && !status.admin && <div className="note warning-text">开启 TUN 需要以管理员或 root 身份运行。</div>}
           </div>}
           </section>
 
-          {loginMessage && <Banner tone="info">
-            {loginMessage} <button className="link" onClick={() => navigate("settings", "uis-login")}>前往设置 <ArrowRight size={14} /></button>
+          {loginMessage && <Banner tone="warning" action={<button className="link" onClick={() => navigate("settings", "uis-login")}>前往设置 <ArrowRight size={14} /></button>}>
+            {loginMessage}
           </Banner>}
 
           <div className="grid-2">
             {standalone ? <section className="card">
               <CardTitle icon={Globe} extra={<button className="link" onClick={() => navigate("settings", "proxy")}>设置 <ArrowRight size={14} /></button>}>本地代理</CardTitle>
-              <dl className="kv" style={{ marginBottom: 0 }}>
-                <dt>SOCKS5</dt><dd className="mono selectable">{status.socks || "连接后显示"}</dd>
-                <dt>HTTP</dt><dd className="mono selectable">{status.http || "连接后显示"}</dd>
+              <dl className="kv proxy-kv">
+                <dt>SOCKS5</dt>
+                <dd className="mono selectable">
+                  <span className={status.socks ? "" : "faint"}>{status.socks || "连接后显示"}</span>
+                  {status.socks && <CopyButton value={status.socks} label="复制 SOCKS5 地址" />}
+                </dd>
+                <dt>HTTP</dt>
+                <dd className="mono selectable">
+                  <span className={status.http ? "" : "faint"}>{status.http || "连接后显示"}</span>
+                  {status.http && <CopyButton value={status.http} label="复制 HTTP 地址" />}
+                </dd>
               </dl>
             </section> : <section className="card">
               <CardTitle icon={Globe} extra={!!nodes?.choices.length && <button className="link" onClick={() => navigate("nodes")}>切换 <ArrowRight size={14} /></button>}>外网节点</CardTitle>

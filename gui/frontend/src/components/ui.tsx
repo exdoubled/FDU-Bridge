@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { CircleCheck, CircleX, Info, LoaderCircle, TriangleAlert, type LucideIcon } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { Check, CircleCheck, CircleX, Copy, Info, LoaderCircle, TriangleAlert, type LucideIcon } from "lucide-react";
 
 export function Switch({ checked, onChange, disabled, large, label }: {
   checked: boolean;
@@ -65,6 +65,27 @@ export function Empty({ icon: Icon, title, children, action, tone }: { icon: Luc
 
 export function Spinner({ size = 14 }: { size?: number }) {
   return <LoaderCircle size={size} className="spin" />;
+}
+
+/** Copies a short value such as a proxy address; reports success inline. */
+export function CopyButton({ value, label = "复制" }: { value: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) return;
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <button type="button" className={`btn ghost icon-btn sm copy-btn${copied ? " copied" : ""}`}
+      title={copied ? "已复制" : label} aria-label={label} onClick={copy}>
+      {copied ? <Check size={14} /> : <Copy size={14} />}
+    </button>
+  );
 }
 
 export function CardTitle({ icon: Icon, children, extra }: { icon: LucideIcon; children: ReactNode; extra?: ReactNode }) {

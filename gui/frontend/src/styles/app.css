@@ -130,9 +130,11 @@ input, textarea, select, button { font: inherit; color: inherit; }
 
 /* Home */
 .connection-card { padding: 0; overflow: hidden; }
-.connection-options { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 16px 24px; border-bottom: 1px solid var(--border); }
-.usage-selector { width: 250px; max-width: 100%; margin-right: auto; }
-.connection-help { padding: 0 24px 18px; font-size: 13px; line-height: 1.8; }
+.connection-options { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 14px; padding: 14px 24px; border-bottom: 1px solid var(--border); }
+.usage-selector { width: 220px; max-width: 100%; }
+.usage-setting + .usage-setting { padding-left: 14px; border-left: 1px solid var(--border); }
+.connection-help { display: flex; flex-direction: column; gap: 2px; padding: 12px 24px 14px; border-top: 1px solid var(--border); background: var(--card); font-size: 13px; line-height: 1.7; }
+.connection-help .note { margin-top: 4px; }
 .hero { position: relative; overflow: hidden; display: flex; align-items: center; gap: 18px; padding: 22px 24px; transition: border-color 0.2s; }
 .hero::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: transparent; transition: background 0.2s; }
 .hero.on { background: linear-gradient(100deg, color-mix(in srgb, var(--success) 8%, var(--card)), var(--card) 60%); border-color: color-mix(in srgb, var(--success) 24%, var(--border)); }
@@ -329,3 +331,42 @@ input, textarea, select, button { font: inherit; color: inherit; }
 @keyframes fade { from { opacity: 0; } }
 @keyframes pop { from { opacity: 0; transform: translateY(6px) scale(0.98); } }
 @keyframes slide { from { opacity: 0; transform: translateX(12px); } }
+
+/* Connection card: usage, routing and TUN settings */
+.usage-setting { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.usage-label { display: inline-flex; align-items: center; color: var(--text-2); font-size: 13px; white-space: nowrap; }
+.usage-toggle { cursor: pointer; }
+.connection-locked { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 13px; background: var(--field); font-size: 12px; }
+.proxy-kv { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 6px 16px; margin: 0; }
+.proxy-kv dt { font-size: 13px; }
+.proxy-kv dd { display: flex; align-items: center; justify-content: flex-end; gap: 4px; min-height: 28px; }
+.copy-btn.copied { color: var(--success); }
+
+/* UIS automatic login */
+.uis-card { padding: 0; }
+.uis-status { margin-left: auto; height: 24px; font-size: 12px; }
+.uis-intro { margin: 0; padding: 0 20px 12px; color: var(--text-2); font-size: 13px; line-height: 1.7; }
+.uis-intro + .uis-row { border-top: 1px solid var(--border); }
+.uis-label { display: inline-flex; align-items: center; padding-top: 7px; }
+.uis-control { flex-direction: column; align-items: flex-end; gap: 4px; }
+.uis-input { position: relative; width: 340px; max-width: 100%; }
+.uis-input.has-toggle .input { padding-right: 38px; }
+.uis-toggle { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; border: 0; border-radius: 6px; background: none; color: var(--text-3); cursor: pointer; display: grid; place-items: center; }
+.uis-toggle:hover { background: var(--card-hover); color: var(--text); }
+.uis-save-state { display: inline-flex; align-items: center; gap: 4px; min-height: 18px; font-size: 12px; white-space: nowrap; }
+.uis-save-state.saved { color: var(--success); }
+.uis-save-state.pending { color: var(--warning); }
+.uis-save-state.idle { color: var(--text-3); }
+.uis-missing { color: var(--warning); }
+.uis-foot { padding: 12px 20px 16px; border-top: 1px solid var(--border); }
+.uis-note { display: flex; gap: 8px; align-items: flex-start; color: var(--text-2); font-size: 12px; line-height: 1.7; }
+.uis-note svg { flex: none; margin-top: 2px; color: var(--text-3); }
+.uis-note code { font-family: var(--mono); font-size: 11px; padding: 1px 5px; border-radius: 4px; background: var(--field); }
+.uis-error { display: flex; align-items: center; gap: 6px; }
+.uis-error svg { flex: none; }
+@media (max-width: 720px) {
+  .usage-selector { width: 100%; }
+  .usage-setting { flex: 1 1 200px; }
+}
+.usage-selector.compact { width: 140px; }
+.banner.warning .link { color: var(--warning); font-weight: 600; }

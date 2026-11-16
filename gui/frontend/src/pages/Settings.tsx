@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ChevronRight, FileText, FolderOpen, Layers, Palette, RefreshCw, Upload, Wrench } from "lucide-react";
+import { ChevronRight, FileText, FolderOpen, Globe, Layers, Palette, RefreshCw, Upload, Wrench } from "lucide-react";
 import { AppService, ClashService, CoreService, SettingsService, type SettingsView } from "../lib/api";
 import { advancedOrder, availability, fieldsOf, getValue, prepareForSave, primaryGroups, setValue, usesUISLogin, type Values } from "../lib/settingsForm";
 import { useStore } from "../store";
@@ -175,11 +175,11 @@ export function Settings() {
             <UISLogin values={values} saved={view.values} disabled={active || status.external} onChange={change} onSave={saveUISCredential} />
           </>}
 
-          {standalone ? <section className="card section" id="proxy" style={{ padding: 0 }}>
-            <div className="section-head">独立校园代理</div>
+          {standalone ? <section className="card section" style={{ padding: 0 }} id="proxy">
+            <div className="section-head"><Globe size={16} />独立校园代理</div>
             <div style={{ padding: "0 20px 16px" }} className="row">
-              <span className="muted">{config?.standaloneMode === "global" ? "全局模式" : "规则模式"} · {config?.standaloneTun ? "TUN 已选择" : "本地 SOCKS5／HTTP"}</span>
-              <button className="link" onClick={() => navigate("home")}>在首页切换</button>
+              <span className="muted">{config?.standaloneMode === "global" ? "全局模式" : "规则模式"} · {config?.standaloneTun ? "TUN 接管系统流量" : "本地 SOCKS5／HTTP"}</span>
+              <button className="link" onClick={() => navigate("home")}>在首页切换模式与 TUN</button>
             </div>
             {fields.filter((field) => ["socks_bind", "http_bind", "socks_user", "socks_passwd"].includes(field.key)).map((field) =>
               <SettingRow key={field.key} field={field} values={values} locked={locked} onChange={change} />)}
