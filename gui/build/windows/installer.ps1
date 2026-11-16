@@ -1,3 +1,5 @@
+. (Join-Path $PSScriptRoot 'launcher.ps1')
+
 function Get-MakeNSISPath {
     if ($env:NSIS_MAKENSIS) {
         if (-not (Test-Path -LiteralPath $env:NSIS_MAKENSIS -PathType Leaf)) { throw 'NSIS_MAKENSIS does not point to makensis.exe.' }
@@ -43,11 +45,17 @@ function New-WindowsInstaller([string]$OutputDirectory, [string]$LicensePath, [s
     }
     $prefix = if ($Version -ceq 'dev') { 'FDU-Connect' } else { "FDU-Connect-$Version" }
     $setup = Join-Path $OutputDirectory "$prefix-Windows-x64-setup.exe"
-    Invoke-MakeNSIS @{
-        PAYLOAD_DIR = (Resolve-Path -LiteralPath $OutputDirectory).Path
-        LICENSE_FILE = (Resolve-Path -LiteralPath $LicensePath).Path
-        WEBVIEW2_INSTALLER = (Resolve-Path -LiteralPath $InstallerPath).Path
-        OUTPUT_FILE = $setup; APP_VERSION = $Version; PRODUCT_VERSION = $numericVersion
+    $inner = Join-Path $OutputDirectory ('.fdu-nsis-' + [guid]::NewGuid().ToString('N') + '.exe')
+    try {
+        Invoke-MakeNSIS @{
+            PAYLOAD_DIR = (Resolve-Path -LiteralPath $OutputDirectory).Path
+            LICENSE_FILE = (Resolve-Path -LiteralPath $LicensePath).Path
+            WEBVIEW2_INSTALLER = (Resolve-Path -LiteralPath $InstallerPath).Path
+            OUTPUT_FILE = $inner; APP_VERSION = $Version; PRODUCT_VERSION = $numericVersion
+        }
+        New-SetupLauncher $inner $setup $Version $numericVersion
+    } finally {
+        if (Test-Path -LiteralPath $inner) { Remove-Item -LiteralPath $inner -Force }
     }
     if (-not (Test-Path -LiteralPath $setup -PathType Leaf) -or (Get-Item -LiteralPath $setup).Length -eq 0) { throw 'NSIS did not create the Windows installer.' }
     return $setup

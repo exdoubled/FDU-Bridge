@@ -33,7 +33,8 @@ VIAddVersionKey "FileVersion" "${APP_VERSION}"
 VIAddVersionKey "LegalCopyright" "FDU Connect contributors"
 
 !define MUI_ABORTWARNING
-!define MUI_FINISHPAGE_RUN "$INSTDIR\FDU-Connect-GUI.exe"
+!define MUI_FINISHPAGE_RUN
+!define MUI_FINISHPAGE_RUN_FUNCTION LaunchApp
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "${LICENSE_FILE}"
 !insertmacro MUI_PAGE_DIRECTORY
@@ -68,6 +69,30 @@ Function .onInit
         Quit
     ${EndIf}
     SetRegView 64
+FunctionEnd
+
+!macro RestoreSetupEnv Name
+    ReadEnvStr $0 "FDU_SETUP_ORIGINAL_${Name}"
+    ${If} $0 == ""
+        System::Call 'kernel32::SetEnvironmentVariable(t "${Name}", p 0)'
+    ${Else}
+        System::Call 'kernel32::SetEnvironmentVariable(t "${Name}", t r0)'
+    ${EndIf}
+    System::Call 'kernel32::SetEnvironmentVariable(t "FDU_SETUP_ORIGINAL_${Name}", p 0)'
+!macroend
+
+; The setup launcher deletes its work directory once setup exits, so the GUI
+; must not inherit it as TEMP/TMP.
+Function LaunchApp
+    Push $0
+    ReadEnvStr $0 "FDU_SETUP_ORIGINAL_ENV"
+    ${If} $0 == "1"
+        !insertmacro RestoreSetupEnv "TEMP"
+        !insertmacro RestoreSetupEnv "TMP"
+        System::Call 'kernel32::SetEnvironmentVariable(t "FDU_SETUP_ORIGINAL_ENV", p 0)'
+    ${EndIf}
+    Exec '"$INSTDIR\FDU-Connect-GUI.exe"'
+    Pop $0
 FunctionEnd
 
 Function un.onInit
