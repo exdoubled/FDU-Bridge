@@ -13,8 +13,9 @@ function render(values: Record<string, unknown>, saved: Record<string, unknown>,
 }
 
 describe("missingUISCredentials", () => {
-  it("requires every credential for UIS login", () => {
+  it("requires every credential once any is filled", () => {
     expect(missingUISCredentials({ ...uis, ...credentials })).toBe(false);
+    expect(missingUISCredentials(uis)).toBe(false);
     for (const key of Object.keys(credentials)) {
       expect(missingUISCredentials({ ...uis, ...credentials, [key]: "  " })).toBe(true);
     }

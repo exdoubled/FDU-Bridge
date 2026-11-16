@@ -42,7 +42,7 @@ export function Home() {
     SettingsService.Current().then((view) => {
       if (cancelled) return;
       if (!view) { setLoginMessage("请先在设置中导入 VPN 配置"); return; }
-      setLoginMessage(missingUISCredentials(view.values) ? "请先在设置中填写 UIS 账号、密码和 TOTP 密钥" : "");
+      setLoginMessage(missingUISCredentials(view.values) ? "UIS 自动登录需要同时填写账号、密码和 TOTP 密钥" : "");
     }).catch(() => { if (!cancelled) setLoginMessage("无法读取登录配置，请前往设置检查"); });
     return () => { cancelled = true; };
   }, [versions.settings]);

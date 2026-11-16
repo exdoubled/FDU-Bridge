@@ -14,9 +14,11 @@ export function usesUISLogin(values: Values): boolean {
     && values.login_domain === "id.fudan.edu.cn" && !values.oauth2_code;
 }
 
-/** True when UIS login applies but a credential it needs is still blank. */
+/** True when UIS credentials are partly filled. All blank falls back to browser login. */
 export function missingUISCredentials(values: Values): boolean {
-  return usesUISLogin(values) && ["username", "password", "totp_secret"].some((key) => !String(values[key] ?? "").trim());
+  if (!usesUISLogin(values)) return false;
+  const filled = ["username", "password", "totp_secret"].map((key) => !!String(values[key] ?? "").trim());
+  return filled.includes(true) && filled.includes(false);
 }
 
 /** Groups with their own section; the rest fold into 高级. */

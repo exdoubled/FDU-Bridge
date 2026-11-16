@@ -197,6 +197,27 @@ func TestFudanUISRejectsUntrustedLoginAndDoesNotOpenBrowser(t *testing.T) {
 	}
 }
 
+func TestFudanUISWithoutCredentialsUsesBrowserLogin(t *testing.T) {
+	s := NewSession("vpn.example.com", nil)
+	s.uisTransport = uisTestTransport(func(*http.Request) (*http.Response, error) {
+		t.Fatal("sent a UIS request without credentials")
+		return nil, nil
+	})
+	opened := false
+	browserFailed := errors.New("browser closed")
+	s.challengeHandler = authchallenge.HandlerFuncs{ExternalLogin: func(c authchallenge.ExternalLoginChallenge) (authchallenge.ExternalLoginResponse, error) {
+		opened = c.Kind == authchallenge.ExternalLoginOAuth2
+		return authchallenge.ExternalLoginResponse{}, browserFailed
+	}}
+	m, err := NewLoginMethod(LoginMethodOptions{AuthType: "auth/httpsOauth2", Domain: "id.fudan.edu.cn"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.login(s, AuthInfo{LoginURL: fudanUISOrigin + "/?client_id=x"}); !errors.Is(err, browserFailed) || !opened {
+		t.Fatalf("opened = %v, error = %v", opened, err)
+	}
+}
+
 func TestFudanUISCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := NewSessionContext(ctx, "vpn.example.com", nil)

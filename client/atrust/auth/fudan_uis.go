@@ -57,7 +57,8 @@ func isFudanUISURL(u *url.URL) bool {
 var uisLocation = regexp.MustCompile(`locationValue\s*=\s*"([^"]+)"`)
 
 // loginFudanUIS follows the UIS userAndPwd -> userAndOtp -> OAuth callback flow.
-// It never opens a browser or retries rejected credentials/second factors.
+// It never opens a browser or retries rejected credentials/second factors;
+// HTTPSOauth2Login only calls it when at least one credential is configured.
 func (s *Session) loginFudanUIS(loginURL, username, password string) (string, error) {
 	login, err := url.Parse(loginURL)
 	if err != nil || !isFudanUISURL(login) || login.Query().Get("client_id") == "" {

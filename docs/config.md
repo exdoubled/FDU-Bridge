@@ -104,7 +104,7 @@
 
 ## aTrust 相关参数
 
-+ `auth-type`: aTrust 登录验证类型，支持 `auth/psw`（密码验证）、`auth/cas`（CAS 验证）、`auth/smsCheckCode`（短信验证）和 `auth/httpsOauth2`（OAuth2 验证）。复旦 UIS 使用 `auth/httpsOauth2`、`login-domain=id.fudan.edu.cn`，自动提交账号密码和 TOTP；其他 OAuth2 登录域保留浏览器流程
++ `auth-type`: aTrust 登录验证类型，支持 `auth/psw`（密码验证）、`auth/cas`（CAS 验证）、`auth/smsCheckCode`（短信验证）和 `auth/httpsOauth2`（OAuth2 验证）。复旦 UIS 使用 `auth/httpsOauth2`、`login-domain=id.fudan.edu.cn`，填写账号、密码和 TOTP 密钥时自动提交，三项都未填写时使用浏览器流程；其他 OAuth2 登录域保留浏览器流程
 
 + `login-domain`: 登录域，内置默认值为 `Radius`，复旦 UIS 配置使用 `id.fudan.edu.cn`
 

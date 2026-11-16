@@ -38,7 +38,7 @@ export function UISLogin({ values, saved, disabled, onChange, onSave }: {
   return (
     <section className="card section" id="uis-login" style={{ padding: 0 }} aria-label="UIS 自动登录">
       <div className="section-head">UIS 自动登录</div>
-      <div className="muted" style={{ padding: "0 20px 12px" }}>填写账号、密码和 TOTP 密钥，自动完成验证，无需打开登录网页。</div>
+      <div className="muted" style={{ padding: "0 20px 12px" }}>填写账号、密码和 TOTP 密钥，自动完成验证，无需打开登录网页；三项都留空则使用网页登录。</div>
       {fields.map(({ key, label, type, autoComplete }) => (
         <label className="setting" key={key}>
           <span className="setting-label">{label}</span>
@@ -51,6 +51,7 @@ export function UISLogin({ values, saved, disabled, onChange, onSave }: {
       ))}
       <div className="muted" style={{ padding: "12px 20px 16px" }}>
         <div>TOTP 密钥是绑定验证器时的 Base32 密钥，不是每 30 秒变化的六位验证码。</div>
+        <div>密码和 TOTP 密钥以明文保存在本机 client.toml，导出或备份的配置中也包含它们，请勿分享这些文件。</div>
         <div role="status">{pending ? "正在自动保存…" : ready ? "已自动保存，后续登录自动生成动态验证码。" : "填写后离开输入框即自动保存到本机配置。"}</div>
         {error && <div className="field-error" role="alert">{error}</div>}
       </div>
