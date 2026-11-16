@@ -29,13 +29,30 @@ describe("missingUISCredentials", () => {
 });
 
 describe("UISLogin", () => {
-  it("reports saved once every field matches the stored value", () => {
-    expect(render(credentials, credentials)).toContain("已自动保存");
+  it("reports ready once every field matches the stored value", () => {
+    const html = render(credentials, credentials);
+    expect(html).toContain("已就绪");
+    expect(html.match(/已保存/g) ?? []).toHaveLength(3);
   });
 
-  it("does not report saved while a field is blank or unsaved", () => {
-    expect(render({ ...credentials, totp_secret: "" }, { ...credentials, totp_secret: "" })).not.toContain("已自动保存");
-    expect(render({ ...credentials, password: "changed" }, credentials)).not.toContain("已自动保存");
+  it("flags partly filled credentials and browser fallback", () => {
+    expect(render(uis, uis)).toContain("使用网页登录");
+    expect(render({ ...credentials, totp_secret: "" }, { ...credentials, totp_secret: "" })).toContain("未填写完整");
+    const unsaved = render({ ...credentials, password: "changed" }, credentials);
+    expect(unsaved).not.toContain("已就绪");
+    expect(unsaved).toContain("离开输入框后保存");
+  });
+
+  it("names each field and exposes password toggles", () => {
+    const html = render(credentials, credentials);
+    for (const [key, label] of [["username", "UIS 账号"], ["password", "UIS 密码"], ["totp_secret", "TOTP 密钥"]]) {
+      expect(html).toContain(`id="uis-${key}"`);
+      expect(html).toContain(`for="uis-${key}"`);
+      expect(html).toContain(label);
+    }
+    expect(html).toContain("显示UIS 密码");
+    expect(html).toContain("显示TOTP 密钥");
+    expect(html).not.toContain("显示UIS 账号");
   });
 
   it("keeps inputs editable unless the caller disables them", () => {
