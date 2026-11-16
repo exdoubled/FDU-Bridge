@@ -12,13 +12,13 @@
 
 + `port`: VPN 服务端端口，默认为 `443`
 
-+ `username`: 网络账户，例如学号。复旦 UIS 浏览器登录时可留空
++ `username`: 网络账户，例如学号。复旦 UIS 自动登录需要填写；GUI 设置中的 UIS 自动登录输入框失焦后自动保存
 
-+ `password`: 网络账户密码。复旦 UIS 浏览器登录时可留空；其他密码认证可使用环境变量 `ZJU_CONNECT_PASSWORD` 给定
++ `password`: 网络账户密码。复旦 UIS 自动登录需要填写；命令行可使用环境变量 `ZJU_CONNECT_PASSWORD` 给定
 
 + `graph-code-file`: 图形验证码文件路径。默认为空。在 aTrust 模式下，留空时使用浏览器完成验证码，设置路径则登录时会将图形验证码保存至该文件，由用户手动输入 JSON
 
-+ `totp-secret`: TOTP 密钥，可用于自动完成 TOTP 验证。如服务端无需 TOTP 验证或希望手动输入验证码，可不填（敏感信息建议使用环境变量 `ZJU_CONNECT_TOTP_SECRET` 给定）
++ `totp-secret`: 绑定验证器时的 Base32 TOTP 密钥，不是六位动态验证码。复旦 UIS 使用此密钥自动完成二次验证，在 GUI 设置的 UIS 自动登录中填写后自动保存到本机配置；支持小写、空格和末尾填充符。命令行可使用环境变量 `ZJU_CONNECT_TOTP_SECRET`。其他网关仍可留空并手动输入验证码
 
 + `disable-remote-dns`: 禁用远端 DNS 改用本地 DNS，一般不需要加此参数
 
@@ -104,7 +104,7 @@
 
 ## aTrust 相关参数
 
-+ `auth-type`: aTrust 登录验证类型，支持 `auth/psw`（密码验证）、`auth/cas`（CAS 验证）、`auth/smsCheckCode`（短信验证）和 `auth/httpsOauth2`（浏览器 OAuth2 验证）。复旦 UIS 使用 `auth/httpsOauth2`
++ `auth-type`: aTrust 登录验证类型，支持 `auth/psw`（密码验证）、`auth/cas`（CAS 验证）、`auth/smsCheckCode`（短信验证）和 `auth/httpsOauth2`（OAuth2 验证）。复旦 UIS 使用 `auth/httpsOauth2`、`login-domain=id.fudan.edu.cn`，自动提交账号密码和 TOTP；其他 OAuth2 登录域保留浏览器流程
 
 + `login-domain`: 登录域，内置默认值为 `Radius`，复旦 UIS 配置使用 `id.fudan.edu.cn`
 
