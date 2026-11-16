@@ -155,7 +155,11 @@ func serveSelectiveRecovery(ctx context.Context, c configs.Config, dial client.D
 		return err
 	}
 	defer proxies.Close()
-	log.Printf("Router ready: SOCKS=%s HTTP=%s; outbound=%s mode=%s", proxies.SocksAddr(), proxies.HTTPAddr(), c.Routing.UpstreamProxy, c.Routing.Mode)
+	routingMode := c.Routing.Mode
+	if routingMode == "" {
+		routingMode = "rule"
+	}
+	log.Printf("Router ready: SOCKS=%s HTTP=%s; outbound=%s mode=%s", proxies.SocksAddr(), proxies.HTTPAddr(), c.Routing.UpstreamProxy, routingMode)
 	runSelectiveSessions(ctx, connect, authchallenge.GUIRelogin(), authchallenge.GUIState, time.Second)
 	return nil
 }

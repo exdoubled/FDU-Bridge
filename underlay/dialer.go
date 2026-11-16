@@ -27,6 +27,7 @@ type Dialer struct {
 	requireBound   bool
 	capture        *pcapCapture
 	localDNSServer string
+	addresses      addressCache
 }
 
 // Options configures a Dialer.
@@ -127,7 +128,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 		}
 	}
 
-	conn, err := dialOnInterface(ctx, network, address, interfaceName, d.localDNSServer)
+	conn, err := d.dialHost(ctx, network, address, interfaceName)
 	if err == nil {
 		return d.wrapCapture(conn), nil
 	}
@@ -137,12 +138,53 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 		return nil, err
 	}
 
-	conn, retryErr := dialOnInterface(ctx, network, address, refreshedInterface, d.localDNSServer)
+	conn, retryErr := d.dialHost(ctx, network, address, refreshedInterface)
 	if retryErr != nil {
 		return nil, fmt.Errorf("dial underlay via %q failed after %q failed: %w", refreshedInterface, interfaceName, retryErr)
 	}
 	return d.wrapCapture(conn), nil
 }
+
+// dialHost dials normally, then retries a hostname through the address cache
+// and DNS over HTTPS when the system or adapter resolver cannot reach it.
+func (d *Dialer) dialHost(ctx context.Context, network, address, interfaceName string) (net.Conn, error) {
+	host, _, _ := net.SplitHostPort(address)
+	if net.ParseIP(host) != nil {
+		return dialOnInterface(ctx, network, address, interfaceName, d.localDNSServer)
+	}
+	if ip := d.addresses.preferCached(host, time.Now()); ip != nil {
+		// The resolver failed moments ago; do not wait for it on every dial.
+		_, port, _ := net.SplitHostPort(address)
+		conn, err := dialOnInterface(ctx, network, net.JoinHostPort(ip.String(), port), interfaceName, d.localDNSServer)
+		if err == nil {
+			return conn, nil
+		}
+	}
+	// A blocked resolver can stall until the caller's deadline; keep part of
+	// the budget for the fallback.
+	primaryCtx, cancel := context.WithTimeout(ctx, primaryDialBudget(ctx))
+	conn, err := dialOnInterface(primaryCtx, network, address, interfaceName, d.localDNSServer)
+	cancel()
+	if err == nil {
+		d.addresses.rememberRemote(host, conn)
+		return conn, nil
+	}
+	if ctx.Err() != nil {
+		return nil, err
+	}
+	d.addresses.resolverFailed(time.Now())
+	return dialFallback(ctx, &d.addresses, network, address, interfaceName, err)
+}
+
+func primaryDialBudget(ctx context.Context) time.Duration {
+	budget := 4 * time.Second
+	if deadline, ok := ctx.Deadline(); ok {
+		budget = min(budget, time.Until(deadline)/2)
+	}
+	return budget
+}
+
+var dialFallback = fallbackDial
 
 func (d *Dialer) ensureInterface(address string) string {
 	d.mu.Lock()
