@@ -109,6 +109,12 @@ func Decode(data []byte) (Config, error) {
 	if c.ClashDir == "" {
 		c.ClashDir = DefaultClashDir()
 	}
+	// Before standalone routing modes existed, "proxy" sent every flow through the VPN and
+	// left the splitting to an external client. Keep that behavior and ask for consent again.
+	if c.Integration.Mode == "proxy" && c.StandaloneMode == "" {
+		c.StandaloneMode = "global"
+		c.CampusConsent = false
+	}
 	return c, err
 }
 

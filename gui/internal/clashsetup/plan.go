@@ -399,7 +399,7 @@ func prepare(r Request, campusEnabled bool) (Plan, error) {
 		normalizeSettingNumbers(cfg)
 	}
 	if cfg["protocol"] != "atrust" {
-		return p, errors.New("两种分流模式均需要 aTrust 配置")
+		return p, errors.New("GUI 的 Clash 接入和独立分流仅支持 aTrust，当前配置不是 aTrust；请在“设置 → 高级设置”中切换到 aTrust，EasyConnect 可继续使用命令行核心")
 	}
 	defaultsChanged := r.Campus && r.Values != nil
 	if text(cfg["socks_bind"]) == "" {

@@ -8,14 +8,16 @@ import (
 	"sync"
 
 	"github.com/miekg/dns"
+	"github.com/mythologyli/zju-connect/log"
 )
 
 // Addresses are never recycled within a session: a cached answer cannot send a
 // connection to another domain. Exhaustion fails closed instead of evicting.
 type names struct {
-	mu     sync.Mutex
-	byName map[string]netip.Addr
-	byIP   map[netip.Addr]string
+	mu        sync.Mutex
+	byName    map[string]netip.Addr
+	byIP      map[netip.Addr]string
+	exhausted bool
 }
 
 func newNames() *names { return &names{byName: map[string]netip.Addr{}, byIP: map[netip.Addr]string{}} }
@@ -64,7 +66,12 @@ func (n *names) answer(raw []byte) ([]byte, error) {
 			ip = netip.AddrFrom4([4]byte{198, 19, byte(index >> 8), byte(index)})
 			n.byName[name], n.byIP[ip] = ip, name
 		}
+		report := !ok && !ip.IsValid() && !n.exhausted
+		n.exhausted = n.exhausted || report
 		n.mu.Unlock()
+		if report {
+			log.Printf("TUN DNS: fake address pool exhausted; new hostnames fail until FDU is restarted")
+		}
 		if !ip.IsValid() {
 			reply.Rcode = dns.RcodeServerFailure
 		} else {
