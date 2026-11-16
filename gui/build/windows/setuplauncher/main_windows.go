@@ -43,13 +43,7 @@ func runSetup(archive, tail string, bases []string) (int, error) {
 	cmd := exec.Command(executable)
 	// NSIS requires the final /D=path argument to stay unquoted, even with spaces.
 	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: syscall.EscapeArg(executable) + " " + tail}
-	for _, value := range os.Environ() {
-		name, _, _ := strings.Cut(value, "=")
-		if !strings.EqualFold(name, "TEMP") && !strings.EqualFold(name, "TMP") {
-			cmd.Env = append(cmd.Env, value)
-		}
-	}
-	cmd.Env = append(cmd.Env, "TEMP="+dir, "TMP="+dir)
+	cmd.Env = setupEnvironment(os.Environ(), dir)
 	if err := cmd.Run(); err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) {
@@ -58,6 +52,23 @@ func runSetup(archive, tail string, bases []string) (int, error) {
 		return 1, err
 	}
 	return 0, nil
+}
+
+// setupEnvironment points TEMP/TMP at dir and keeps the original values so NSIS
+// can restore them before starting the GUI, which outlives the work directory.
+func setupEnvironment(environ []string, dir string) []string {
+	var env []string
+	for _, value := range environ {
+		name, original, _ := strings.Cut(value, "=")
+		switch {
+		case strings.EqualFold(name, "TEMP"), strings.EqualFold(name, "TMP"):
+			env = append(env, "FDU_SETUP_ORIGINAL_"+strings.ToUpper(name)+"="+original)
+		case strings.HasPrefix(strings.ToUpper(name), "FDU_SETUP_ORIGINAL_"):
+		default:
+			env = append(env, value)
+		}
+	}
+	return append(env, "FDU_SETUP_ORIGINAL_ENV=1", "TEMP="+dir, "TMP="+dir)
 }
 
 func prepareSetup(archive string, bases []string) (string, string, error) {

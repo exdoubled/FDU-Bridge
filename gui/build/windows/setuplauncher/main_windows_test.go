@@ -199,6 +199,14 @@ func TestRunSetupIsolatesEnvironmentForwardsArgumentsAndCleansUp(t *testing.T) {
 	}
 }
 
+func TestSetupEnvironmentKeepsOriginalTempForTheGUI(t *testing.T) {
+	got := setupEnvironment([]string{`Temp=C:\Users\me\Temp`, "PATH=C:\\Windows", `FDU_SETUP_ORIGINAL_TMP=C:\stale`}, `D:\work`)
+	want := []string{`FDU_SETUP_ORIGINAL_TEMP=C:\Users\me\Temp`, `PATH=C:\Windows`, "FDU_SETUP_ORIGINAL_ENV=1", `TEMP=D:\work`, `TMP=D:\work`}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("environment = %q, want %q", got, want)
+	}
+}
+
 func TestSetupChild(t *testing.T) {
 	path := os.Getenv("FDU_SETUP_TEST_CHILD")
 	if path == "" {
