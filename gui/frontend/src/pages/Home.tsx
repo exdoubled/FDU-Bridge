@@ -4,7 +4,7 @@ import { ClashService, CoreService, RulesService, errorText, type ApplyState, ty
 import { counts, type Draft } from "../lib/rulesDraft";
 import { formatUptime, stateLabel, stateTone } from "../lib/status";
 import { useStore } from "../store";
-import { Banner, CardTitle, Spinner, Switch } from "../components/ui";
+import { Banner, CardTitle, Segmented, Spinner, Switch } from "../components/ui";
 import { CampusChecks, TrafficCards } from "../components/NetworkTools";
 
 function useNow(active: boolean) {
@@ -20,7 +20,7 @@ function useNow(active: boolean) {
 const heroIcons = { off: Shield, on: ShieldCheck, busy: LoaderCircle, bad: ShieldAlert };
 
 export function Home() {
-  const { status, navigate, confirm, fail, versions } = useStore();
+  const { status, navigate, confirm, fail, versions, config, setConfig } = useStore();
   const [nodes, setNodes] = useState<NodeState | null>(null);
   const [nodesError, setNodesError] = useState("");
   const [rules, setRules] = useState<{ enabled: number; disabled: number; status: ApplyState; hash: string } | null>(null);
@@ -29,10 +29,22 @@ export function Home() {
   const tone = stateTone(status);
   const HeroIcon = heroIcons[tone];
   const active = status.running || status.starting;
+  const standalone = config?.integration.mode === "proxy";
+  const routeMode = config?.standaloneMode || "rule";
+  const tun = !!config?.standaloneTun;
+  const locked = busy || active || status.stopping || status.external || !config;
+
+  const saveUsage = async (mode: string, routingMode = routeMode, enableTUN = tun) => {
+    setBusy(true);
+    try { setConfig(await ClashService.SaveUsage(mode, routingMode, enableTUN)); }
+    catch (e) { fail(e); }
+    finally { setBusy(false); }
+  };
 
   const loadNodes = useCallback(() => {
+    if (standalone) { setNodes(null); setNodesError(""); return; }
     ClashService.Nodes().then((n) => { setNodes(n); setNodesError(""); }).catch((e) => { setNodes(null); setNodesError(errorText(e)); });
-  }, []);
+  }, [standalone]);
   useEffect(loadNodes, [loadNodes, versions.node, versions.mode, versions.clash, status.connected]);
 
   const loadRules = useCallback(() => {
@@ -94,7 +106,20 @@ export function Home() {
       <div className="page-body">
         <div className="stack">
           {!active && status.external && <Banner tone="warning">其他 FDU 正在运行，请先关闭它再启用校内访问</Banner>}
-          <section className={`card hero ${tone}`}>
+          <section className="card connection-card">
+            <div className="connection-options">
+              <div className="usage-selector" aria-label="使用方式" title={active ? "断开后可切换" : undefined}>
+                <Segmented value={standalone ? "proxy" : "clash"} disabled={locked} onChange={(mode) => saveUsage(mode)}
+                  options={[{ value: "clash", label: "配合 Clash" }, { value: "proxy", label: "独立使用" }]} />
+              </div>
+              {standalone && <>
+                <div aria-label="分流模式"><Segmented value={routeMode} disabled={locked} onChange={(mode) => saveUsage("proxy", mode)}
+                  options={[{ value: "rule", label: "规则" }, { value: "global", label: "全局" }]} /></div>
+                <label className="row"><span>TUN</span><Switch checked={tun} disabled={locked} onChange={(value) => saveUsage("proxy", routeMode, value)} label="FDU TUN" /></label>
+              </>}
+              {active && <span className="muted">断开后可切换</span>}
+            </div>
+          <div className={`hero ${tone}`}>
             <div className={`hero-icon ${tone === "off" ? "" : tone}`}>
               <HeroIcon size={28} className={tone === "busy" ? "spin" : undefined} />
             </div>
@@ -117,14 +142,26 @@ export function Home() {
               </button>
             )}
             <Switch large checked={active} disabled={busy || status.stopping || (!active && status.external)} onChange={togglePower} label="启用校内访问" />
+          </div>
+          {standalone && <div className="connection-help">
+            <div>{routeMode === "global" ? "所有接入流量走校园隧道，学校未授权的目标可能无法访问。" : "校园规则走 FDU，其余流量直连。"}</div>
+            <div className="muted">{tun ? "TUN 接管系统 TCP/UDP 流量；请先关闭其他 VPN 的 TUN。" : "将应用代理设为下方地址即可使用。"}</div>
+            {tun && !status.admin && <div className="note warning-text">开启 TUN 需要以管理员或 root 身份运行。</div>}
+          </div>}
           </section>
 
           <div className="grid-2">
-            <section className="card">
+            {standalone ? <section className="card">
+              <CardTitle icon={Globe} extra={<button className="link" onClick={() => navigate("settings", "proxy")}>设置 <ArrowRight size={14} /></button>}>本地代理</CardTitle>
+              <dl className="kv" style={{ marginBottom: 0 }}>
+                <dt>SOCKS5</dt><dd className="mono selectable">{status.socks || "连接后显示"}</dd>
+                <dt>HTTP</dt><dd className="mono selectable">{status.http || "连接后显示"}</dd>
+              </dl>
+            </section> : <section className="card">
               <CardTitle icon={Globe} extra={!!nodes?.choices.length && <button className="link" onClick={() => navigate("nodes")}>切换 <ArrowRight size={14} /></button>}>外网节点</CardTitle>
               <div className="big-value ellipsis" title={nodes?.current}>{nodes?.current || "—"}</div>
               {(nodesError || nodes?.problem) && <div className="note ellipsis" title={nodesError || nodes?.problem}>{nodesError || nodes?.problem}</div>}
-            </section>
+            </section>}
             <section className="card">
               <CardTitle icon={Route} extra={<button className="link" onClick={() => navigate("rules")}>管理 <ArrowRight size={14} /></button>}>校内资源</CardTitle>
               {rules ? (
@@ -134,7 +171,7 @@ export function Home() {
                     <span className="muted"> {rules.disabled > 0 ? `/ ${rules.enabled + rules.disabled} ` : ""}项启用</span>
                   </span>
                   <span className={`pill ${rules.status.applied ? "success" : ""}`} title={rules.status.message}>
-                    {rules.status.applied ? "已生效" : active ? "待生效" : "启用后生效"}
+                    {standalone && routeMode === "global" ? "全局模式" : rules.status.applied ? "已生效" : active ? "待生效" : "启用后生效"}
                   </span>
                 </div>
               ) : <div className="muted">尚未读取校内资源</div>}

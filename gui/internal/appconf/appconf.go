@@ -21,9 +21,12 @@ type Config struct {
 	// FduConfig is the core config Clash integration targets; it may live outside the GUI directory.
 	FduConfig string `json:"fduConfig"`
 	// ConfigPath is the GUI-owned config the settings page saves and connections use.
-	ConfigPath    string      `json:"configPath"`
-	CampusConsent bool        `json:"campusConsent"`
-	Integration   Integration `json:"integration"`
+	ConfigPath       string      `json:"configPath"`
+	CampusConsent    bool        `json:"campusConsent"`
+	Integration      Integration `json:"integration"`
+	ClashIntegration Integration `json:"clashIntegration"`
+	StandaloneMode   string      `json:"standaloneMode"`
+	StandaloneTUN    bool        `json:"standaloneTun"`
 }
 
 // Integration remembers a local client binding; empty Mode keeps the existing automatic setup.

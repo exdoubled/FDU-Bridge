@@ -151,7 +151,7 @@ export function IntegrationSettings({ onDirtyChange }: { onDirtyChange: (dirty: 
           <div className="setting-control">
             <div style={{ width: 360, maxWidth: "100%" }}>
               <Segmented value={draft.mode} disabled={disabled} onChange={(mode) => change({ mode })}
-                options={[{ value: "auto", label: "自动接入" }, { value: "manual", label: "手动接入" }, { value: "proxy", label: "仅本地代理" }]} />
+                options={[{ value: "auto", label: "自动接入" }, { value: "manual", label: "手动接入" }]} />
             </div>
           </div>
         </div>

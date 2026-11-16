@@ -4,7 +4,7 @@
 
 [中文](README.md) | English
 
-A desktop campus-network tool for Fudan University. With a Clash/Mihomo client, selected campus resources use Fudan's aTrust tunnel while other traffic follows Clash's settings; it can also run on its own as a local SOCKS5/HTTP proxy. Built on [ZJU Connect](https://github.com/Mythologyli/zju-connect); see the acknowledgements at the end.
+A desktop campus-network tool for Fudan University. With a Clash/Mihomo client, selected campus resources use Fudan's aTrust tunnel while other traffic follows Clash's settings; standalone mode supports SOCKS5/HTTP, optional TUN, and global/rule routing. Built on [ZJU Connect](https://github.com/Mythologyli/zju-connect); see the acknowledgements at the end.
 
 ## Features
 
@@ -15,7 +15,7 @@ A desktop campus-network tool for Fudan University. With a Clash/Mihomo client, 
 
 ## Quick start
 
-The **Diagnostics (诊断)** page accepts an HTTP/HTTPS URL or a bare domain and shows saved rule matches, proxy coverage, login/tunnel state, DNS/TCP/TLS/HTTP evidence, and actionable suggestions. The probe keeps the URL path, drops query strings and fragments, sends no login credentials, and does not follow redirects. It uses the selected Clash entry or the FDU HTTP entry in local proxy mode; an unavailable entry never triggers a direct-system fallback. Expected routing is inferred from saved rules and synchronization state. DNS answers are candidates, and an HTTP response alone does not establish the browser's actual campus-tunnel path.
+The **Diagnostics (诊断)** page accepts an HTTP/HTTPS URL or a bare domain and shows saved rule matches, proxy coverage, login/tunnel state, DNS/TCP/TLS/HTTP evidence, and actionable suggestions. The probe keeps the URL path, drops query strings and fragments, sends no login credentials, and does not follow redirects. It uses the selected Clash entry or the FDU HTTP entry in standalone mode; an unavailable entry never triggers a direct-system fallback. Expected routing is inferred from saved rules and synchronization state. DNS answers are candidates, and an HTTP response alone does not establish the browser's actual campus-tunnel path.
 
 After a diagnosis, click **Preview redacted report (预览脱敏报告)** below the result, review it, then copy or export the text. Export preserves the open preview exactly. Reports include the version, platform, integration mode, rule state, check status and timing, and safe suggestions; they exclude account identifiers, tokens, cookies, DNS addresses, personal paths, raw configuration, and full logs. Only built-in public campus hosts are retained; custom campus hosts and IPs are hidden, and URL paths, queries, and fragments are omitted. Unreadable rules are reported as unknown. **Export logs (导出日志)** at the top remains a separate action.
 
@@ -39,15 +39,15 @@ This README describes the current source; for downloaded packages, see the relea
 
 ## Integration methods
 
-Choose in **Settings → Proxy Integration (代理接入)**, save, then enable on Home. Disable the current connection before switching.
+Choose **With Clash / Standalone** on Home while disconnected. The choice is saved automatically, and switching back restores the previous Clash binding. In Clash mode, select the client under **Settings → Proxy Integration (代理接入)**.
 
 - **Automatic (自动接入)** (default): discover running clients and their local controllers. Integration pauses when the target cannot be identified uniquely.
 - **Manual (手动接入)**: select the complete runtime YAML the client actually uses (a node-only subscription does not qualify) and optionally its controller and secret. The binding is reused, and mode changes and updates to that file are followed while connected.
-- **Local proxy only (仅本地代理)**: no Clash needed. Point applications that need campus access at the SOCKS5/HTTP address shown in the window; they or an external client handle routing. This does not capture every application, and the Campus Resources and Internet Nodes pages do not apply.
+- **Standalone (独立使用)**: no Clash needed. Rule mode shares the campus rules and sends other traffic directly. Global mode sends all captured traffic through the campus tunnel, subject to campus permissions. Point applications at the SOCKS5/HTTP addresses on Home, or enable TUN to capture system TCP/UDP with administrator/root privileges. See [standalone mode](docs/standalone.md) for current DNS and platform limitations.
 
-Clash Verge Rev connects through its subscription extensions. Other clients need the Mihomo control API, rule providers, and dedicated listeners; discovery covers FlClash, Clash Party, Sparkle, Clash Nyanpasu, and ClashX.Meta. Otherwise use local proxy only. To install an extension yourself, copy the override script or YAML fragment (not a complete subscription) from **Settings → Export Extension (Optional) (导出扩展（可选）)**, and export again after changing FDU's listening ports.
+Clash Verge Rev connects through its subscription extensions. Other clients need the Mihomo control API, rule providers, and dedicated listeners; discovery covers FlClash, Clash Party, Sparkle, Clash Nyanpasu, and ClashX.Meta. Otherwise use standalone mode. To install an extension yourself, copy the override script or YAML fragment (not a complete subscription) from **Settings → Export Extension (Optional) (导出扩展（可选）)**, and export again after changing FDU's listening ports.
 
-**Settings → Advanced Settings (高级设置)** adjusts the server, authentication, DNS, network interface, local proxies, and port forwarding, or imports a TOML configuration; see the [configuration reference](docs/config_en.md). Clash integration currently requires aTrust; EasyConnect can use local proxy only. Options that conflict with Clash routing are disabled in the interface or rejected before enabling. Custom gateways and complex authentication combinations need your own verification.
+**Settings → Advanced Settings (高级设置)** adjusts the server, authentication, DNS, network interface, local proxies, and port forwarding, or imports a TOML configuration; see the [configuration reference](docs/config_en.md). Both GUI modes require aTrust; EasyConnect remains available through the command-line core. Options that conflict with Clash routing are disabled in the interface or rejected before enabling. Custom gateways and complex authentication combinations need your own verification.
 
 ## How it works
 
@@ -58,12 +58,12 @@ Clash receives traffic through TUN, the system proxy, or per-application proxies
 | Global | Clash → FDU Bridge → aTrust tunnel → campus resource | Clash → FDU Bridge → dedicated Clash return listener → exit selected in `INTERNET` |
 | Rule | Clash campus rules → FDU Bridge → aTrust tunnel → campus resource | Existing Clash rules and node selections, including proxy, direct, or reject |
 
-In global mode, the return listener is pinned to `INTERNET` to avoid looping back through `GLOBAL`. FDU uses a userspace network stack without an extra virtual adapter; login and VPN underlay connections are bound to a physical interface so Clash TUN does not capture them again. In local proxy mode, applications connect to FDU directly, without the return listener or the GUI campus rules.
+In global mode, the return listener is pinned to `INTERNET` to avoid looping back through `GLOBAL`. FDU uses a userspace network stack without an extra virtual adapter; login and VPN underlay connections are bound to a physical interface so Clash TUN does not capture them again. Standalone proxy and TUN traffic share one router and the same campus rules, without the Clash return listener.
 
 ## Notes
 
 - **Coverage**: Clash TUN covers all applications. Without it, only applications using Clash's proxy are covered, and campus addresses bypassed by the system proxy still connect directly; adjust those bypass rules yourself. Check **Coverage (覆盖范围)** on Home if access fails.
-- **TUN**: with Clash TUN, enable only Clash's TUN and keep FDU's `tun_mode` and `add_route` off (the GUI does not expose them). For FDU's own TUN, see the [configuration reference](docs/config_en.md#fdu-tun-mode).
+- **TUN**: with Clash TUN, enable only Clash's TUN and keep FDU's `tun_mode` and `add_route` off. Standalone mode exposes its own TUN switch on Home; disable other VPN TUN adapters first.
 - **Loops**: when configuring routing manually, bind VPN underlay connections to a physical interface; see the upstream [discussion](https://github.com/Mythologyli/zju-connect/issues/57).
 - **Permissions**: rules only choose traffic routes and do not extend campus resource permissions. Domain routing needs the application or Clash to provide the domain name; add IP rules for connections that use only IP addresses.
 
@@ -76,9 +76,9 @@ In global mode, the return listener is pinned to `INTERNET` to avoid looping bac
 - **Windows startup failures**: startup preparation and interface initialization failures display a native error message. The log is at `%LOCALAPPDATA%\FDU Connect\logs\startup.log`. An unwritable log does not prevent startup; any later fatal error is still shown directly.
 - **Login browser**: automatic UIS login needs Edge, Chrome, Chromium, or Brave. A compatible default browser is preferred, and no callback URL needs pasting.
 - **Recovery and expired login**: selective Clash connections retry transient failures automatically. An expired session pauses retries; click **Relogin (重新登录)** on Home to authenticate again. Disabling campus access stops retries and keeps rules and settings.
-- **Automatic connection on startup**: after integration consent and auto-connect are enabled, FDU waits for the Clash client and local controller to start before enabling campus access. Disable access from Home or the tray, or quit, to cancel the wait. Invalid settings, ambiguous targets, and rejected controller requests stop the attempt and display an error. Local proxy mode does not wait for Clash.
-- **Discovery fails**: use manual integration, or local proxy only if the client lacks the required capabilities.
-- **Port in use**: automatic/manual integration switches to free ports before enabling; in local proxy mode, adjust the listening ports yourself. See **Diagnostics (诊断)** for other errors.
+- **Automatic connection on startup**: after integration consent and auto-connect are enabled, FDU waits for the Clash client and local controller to start before enabling campus access. Disable access from Home or the tray, or quit, to cancel the wait. Invalid settings, ambiguous targets, and rejected controller requests stop the attempt and display an error. Standalone mode does not wait for Clash.
+- **Discovery fails**: use manual integration, or standalone mode if the client lacks the required capabilities.
+- **Port in use**: automatic/manual integration switches to free ports before enabling; in standalone mode, adjust the listening ports yourself. See **Diagnostics (诊断)** for other errors.
 - **Data directories**: Windows normally uses the program directory, falling back to `%APPDATA%\FDU Connect` when it is not writable (an existing per-user directory keeps being used). macOS uses `~/Library/Application Support/FDU Connect`. Linux uses `$XDG_CONFIG_HOME/fdu-connect`, or `~/.config/fdu-connect` when unset.
 - **Upgrades**: keep those directories to keep your configuration and login state. Closing the window may leave the program in the tray; quit it before replacing the files.
 - **Windows uninstall**: uninstall from the system's Installed apps list. Configuration, rules, login state, and the shared WebView2 Runtime are preserved. Personal data normally remains in the former installation folder (by default `%LOCALAPPDATA%\Programs\FDU Connect`); an existing or fallback per-user configuration may be in `%APPDATA%\FDU Connect`. The uninstall wizard lists the retained locations. After using a shared computer, manually remove your personal data from these locations.

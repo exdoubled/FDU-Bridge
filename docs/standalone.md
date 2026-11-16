@@ -1,0 +1,38 @@
+# 独立校园代理
+
+首页连接卡可选择“配合 Clash／独立使用”。默认配合 Clash；断开后可切换，选择会自动保存，切回 Clash 保留原客户端配置。两种方式使用同一份 aTrust 登录状态和校园规则。
+
+独立模式提供两个独立选项：
+
+| 组合 | 接入范围 | 流量处理 |
+| --- | --- | --- |
+| 非 TUN + 规则 | 使用首页 SOCKS5／HTTP 地址的应用 | 启用的校园规则走 FDU，其余直连 |
+| 非 TUN + 全局 | 使用首页 SOCKS5／HTTP 地址的应用 | 全部走校园隧道 |
+| TUN + 规则 | 系统路由交给 FDU 的 TCP／UDP | 启用的校园规则走 FDU，其余直连 |
+| TUN + 全局 | 系统路由交给 FDU 的 TCP／UDP | 全部走校园隧道 |
+
+全局模式仍受学校资源授权限制，不能把校园 VPN 当作任意互联网出口。校园隧道失效或拒绝目标时，校园流量不会回退到直连；规则模式的其他流量可以继续直连。登录和 VPN 控制连接始终使用物理网卡。
+
+TUN 需要管理员或 root 权限，使用前关闭其他 VPN 的 TUN。独立分流使用内置 TUN 驱动加载器，Windows 无需额外复制 wintun.dll。关闭校内访问时，核心关闭 TUN 并移除其路由；GUI 不修改系统代理。非 TUN 模式需在应用中配置代理，SOCKS5 建议使用远端域名解析，例如 `socks5h`。
+
+TUN 拦截普通 TCP／UDP DNS，用临时 IPv4 地址保留原始域名，再交给同一个路由器。AAAA 和 HTTPS/SVCB 返回空答案，以便应用使用 A 记录；其他 DNS 查询类型目前不支持。加密 DNS、已有 DNS 缓存以及直接使用 IP 的连接无法恢复域名，应添加相应 IP 规则。TUN 转发 TCP／UDP，不提供 ICMP 转发。地址映射仅在本次连接内有效。
+
+TUN 的非校园域名通过物理网卡解析，默认 DNS 为 `223.5.5.5:53`，可在高级设置的 `local_dns_server` 中指定。校园域名继续使用隧道内解析。
+
+命令行等价配置（其余登录和监听项仍需填写）：
+
+```toml
+protocol = "atrust"
+auto_detect_interface = true
+tun_mode = false # true 开启独立 TUN
+socks_bind = "127.0.0.1:1080"
+http_bind = "127.0.0.1:1081"
+
+[routing]
+enabled = true
+upstream_proxy = "direct"
+mode = "rule" # global 全部走校园隧道
+rules_file = "routing-rules.json"
+```
+
+自动测试覆盖四种配置组合、普通流量直连、校园失败不回退、登录例外、DNS 域名映射及模式切换后的规则和客户端配置保留。实际校园登录、系统 TUN 接管和退出后的网络恢复仍需在目标操作系统上实测。

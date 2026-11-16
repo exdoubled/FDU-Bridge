@@ -140,7 +140,7 @@
 
 GUI 会自动生成专用监听和规则文件，并自动检测底层网卡；在“校内资源”中管理域名和 IP 即可。以下配置供手动使用命令行核心时参考。
 
-+ `enabled`: 是否启用选择性分流，默认关闭。需使用 aTrust，并配置 `bind_interface` 或 `auto_detect_interface`，保持 `tun_mode`、`add_route`、`dns_hijack`、`fake_ip` 关闭
++ `enabled`: 是否启用选择性分流，默认关闭。需使用 aTrust，并配置 `bind_interface` 或 `auto_detect_interface`，Clash 接入时保持 `tun_mode`、`add_route`、`dns_hijack`、`fake_ip` 关闭；独立模式 `upstream_proxy = "direct"` 时可开启 `tun_mode`
 
 + `domains`: 精确匹配的域名，不包含协议、端口或路径
 
@@ -148,13 +148,15 @@ GUI 会自动生成专用监听和规则文件，并自动检测底层网卡；�
 
 + `ip_cidrs`: IPv4 网段，只填写需要走 FDU 的资源。内联规则中的单个 IP 请写为 `/32`；GUI 规则文件也接受单个 IPv4 地址
 
-+ `upstream_proxy`: 启用分流时必填，填写自己的 Clash 专用 SOCKS5 监听地址。必须使用本机回环 IP 和实际端口，该监听需固定转发到外网组；默认留空
++ `upstream_proxy`: 启用分流时必填，填写自己的 Clash 专用 SOCKS5 监听地址。必须使用本机回环 IP 和实际端口，该监听需固定转发到外网组；默认留空；独立模式设为 `"direct"`，非校园流量通过物理网卡直连。
+
++ `mode`: `"rule"`（默认）按规则分流；`"global"` 将接入流量全部送入校园隧道，仅支持独立模式。
 
 + `rules_file`: 可选的 JSON 规则文件路径，设置后替代以上三类内联规则，并在保存后自动加载。可通过桌面 GUI 管理每条规则的启用状态，新规则对新连接生效
 
 ## FDU TUN 模式
 
 1. **与 Clash TUN 配合分流时，只开启 Clash 的系统 TUN，FDU 的 `tun_mode` 和 `add_route` 保持关闭。** 本分支使用进程内网络栈访问校内资源，无需额外创建 FDU 虚拟网卡。
-2. 以下说明适用于单独启用 FDU TUN 的通用模式，不能与本分支的选择性分流同时启用。
+2. GUI 独立模式支持 `routing.enabled = true`、`routing.upstream_proxy = "direct"` 与 `tun_mode = true`，详见[独立模式](standalone.md)。以下旧 TUN 说明适用于 `routing.enabled = false` 的命令行通用模式。
 3. 单独启用 FDU TUN 需要管理员权限；Windows 系统还需要从 [Wintun 官网](https://www.wintun.net)下载 `wintun.dll` 并放在可执行文件同目录。
 4. aTrust 单独使用 TUN 时，建议配合 `dns-hijack` 和 `fake-ip`，以便正确处理域名资源。

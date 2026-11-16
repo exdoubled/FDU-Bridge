@@ -422,6 +422,10 @@ func prepare(r Request, campusEnabled bool) (Plan, error) {
 		return p, errors.New("FDU 和 Clash 的代理端口不能相同")
 	}
 	route := mapping(cfg, "routing")
+	if text(route["mode"]) == "global" {
+		defaultsChanged = true
+	}
+	route["mode"] = "rule"
 	u, parseError := url.Parse(text(route["upstream_proxy"]))
 	upstreamReady := parseError == nil && u != nil && u.Scheme == "socks5" && u.Hostname() == "127.0.0.1" &&
 		u.User == nil && u.Path == "" && u.RawQuery == "" && u.Fragment == ""

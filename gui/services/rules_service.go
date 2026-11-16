@@ -224,9 +224,6 @@ func (s *RulesService) Status(hash string) rules.ApplyState {
 }
 
 func (s *RulesService) applyStatus(store *rules.Store, hash string) rules.ApplyState {
-	if s.b.proxyOnly() {
-		return rules.ApplyState{Message: "仅本地代理模式下由外部客户端分流，此列表在自动／手动接入时生效"}
-	}
 	s.b.mu.Lock()
 	enabled := s.b.enabled
 	s.b.mu.Unlock()
@@ -235,6 +232,15 @@ func (s *RulesService) applyStatus(store *rules.Store, hash string) rules.ApplyS
 	}
 	state := store.ApplyStatus(hash)
 	if !state.Applied {
+		return state
+	}
+	if s.b.proxyOnly() {
+		s.b.mu.Lock()
+		global := text(s.b.saved, "routing.mode") == "global"
+		s.b.mu.Unlock()
+		if global {
+			return rules.ApplyState{Message: "全局模式使用校园隧道，切回规则模式后按此列表分流"}
+		}
 		return state
 	}
 	a := s.b.campusAttachment()

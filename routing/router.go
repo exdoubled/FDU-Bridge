@@ -104,7 +104,7 @@ func Validate(c configs.Config) error {
 	if (c.SocksUser == "") != (c.SocksPasswd == "") {
 		return errors.New("routing requires both socks_user and socks_passwd, or neither")
 	}
-	if c.TUNMode || c.AddRoute || c.DNSHijack || c.FakeIP || c.ProxyAll || c.TCPTunnelMode || c.DialDirectProxy != "" || c.DisableServerConfig || c.ShadowsocksURL != "" || c.DNSServerBind != "" || len(c.PortForwardingList) != 0 || len(c.CustomProxyDomain) != 0 {
+	if (c.TUNMode && c.Routing.UpstreamProxy != "direct") || c.AddRoute || c.DNSHijack || c.FakeIP || c.ProxyAll || c.TCPTunnelMode || c.DialDirectProxy != "" || c.DisableServerConfig || c.ShadowsocksURL != "" || c.DNSServerBind != "" || len(c.PortForwardingList) != 0 || len(c.CustomProxyDomain) != 0 {
 		return errors.New("routing is incompatible with TUN, routes, DNS hijack, fake IP, proxy_all, TCP-only mode, dial_direct_proxy, disabled server ACL, shadowsocks, DNS listener, forwarding or custom_proxy_domain")
 	}
 	if c.SocksBind == "" && c.HTTPBind == "" {
@@ -113,11 +113,20 @@ func Validate(c configs.Config) error {
 	if _, err := newPolicy(c.Routing); err != nil {
 		return err
 	}
-	u, err := newUpstream(c.Routing.UpstreamProxy)
-	if err != nil {
-		return err
+	if c.Routing.Mode != "" && c.Routing.Mode != "rule" && c.Routing.Mode != "global" {
+		return errors.New("routing mode must be rule or global")
 	}
-	_, upstreamPort, _ := net.SplitHostPort(u.address)
+	if c.Routing.Mode == "global" && c.Routing.UpstreamProxy != "direct" {
+		return errors.New("global routing is only supported in standalone mode")
+	}
+	upstreamPort := ""
+	if c.Routing.UpstreamProxy != "direct" {
+		u, err := newUpstream(c.Routing.UpstreamProxy)
+		if err != nil {
+			return err
+		}
+		_, upstreamPort, _ = net.SplitHostPort(u.address)
+	}
 	for _, bind := range []string{c.SocksBind, c.HTTPBind} {
 		if bind == "" {
 			continue
@@ -135,6 +144,8 @@ func Validate(c configs.Config) error {
 }
 
 type Router struct {
+	direct         bool
+	global         bool
 	policy         atomic.Pointer[policy]
 	upstreamDial   DialFunc
 	mu             sync.Mutex
@@ -161,12 +172,16 @@ func New(c configs.RoutingConfig) (*Router, error) {
 	if err != nil {
 		return nil, err
 	}
-	u, err := newUpstream(c.UpstreamProxy)
-	if err != nil {
-		return nil, err
+	var outbound DialFunc
+	if c.UpstreamProxy != "direct" {
+		u, err := newUpstream(c.UpstreamProxy)
+		if err != nil {
+			return nil, err
+		}
+		outbound = u.Dial
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	router := &Router{upstreamDial: u.Dial, ctx: ctx, cancel: cancel, conns: make(map[*routedConn]struct{}), controlTargets: make(map[string]bool), blockedPorts: make(map[string]bool)}
+	router := &Router{direct: c.UpstreamProxy == "direct", global: c.Mode == "global", upstreamDial: outbound, ctx: ctx, cancel: cancel, conns: make(map[*routedConn]struct{}), controlTargets: make(map[string]bool), blockedPorts: make(map[string]bool)}
 	router.trafficStarted = time.Now().UnixMilli()
 	router.aiConnections = make(map[*routedConn]TrafficConnection)
 	router.policy.Store(&p)
@@ -197,9 +212,13 @@ func (r *Router) SetVPN(dial DialFunc) {
 }
 
 // SetControl reserves exact VPN/login endpoints for the bound physical underlay.
-// Call once before serving; application traffic has no general DIRECT fallback.
+// Call once before serving. Explicit standalone mode also uses this physical
+// underlay for non-campus traffic; campus failures never fall back to it.
 func (r *Router) SetControl(dial DialFunc, targets []string, listenerAddresses []string) {
 	r.control = dial
+	if r.direct {
+		r.upstreamDial = dial
+	}
 	for _, target := range targets {
 		r.controlTargets[normalizeDomain(target)] = true
 	}
@@ -238,13 +257,16 @@ func (r *Router) Dial(ctx context.Context, network, addr string) (net.Conn, erro
 	if network == "tcp" && r.controlTargets[normalizeDomain(addr)] && r.control != nil {
 		dial = r.control
 		control = true
-	} else if r.policy.Load().match(host) {
+	} else if r.global || r.policy.Load().match(host) {
 		campus = true
 		if dial == nil {
 			return nil, ErrVPNUnavailable
 		}
 	} else {
 		dial = r.upstreamDial
+	}
+	if dial == nil {
+		return nil, errors.New("routing: physical underlay is not configured")
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	stop := context.AfterFunc(r.ctx, cancel)

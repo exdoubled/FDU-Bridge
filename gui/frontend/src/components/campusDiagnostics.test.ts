@@ -9,7 +9,7 @@ vi.mock("@wailsio/runtime", () => ({ Events: {} }));
 
 const diagnosis: CampusDiagnosis = {
   checkedAt: 1000, target: "https://library.fudan.edu.cn/catalog", host: "library.fudan.edu.cn",
-  integration: "manual", state: "disconnected", connected: false, authRequired: true, coverage: "未开 TUN",
+  integration: "manual", routingMode: "rule", state: "disconnected", connected: false, authRequired: true, coverage: "未开 TUN",
   rule: { known: true, matched: true, kind: "domain", value: "library.fudan.edu.cn", enabled: false, applied: false, message: "尚未同步" },
   expectedPath: "命中的校园规则已禁用", probe: null, problem: "当前入口不可用", suggestions: ["请重新登录。"],
 };

@@ -102,7 +102,7 @@ func formatDiagnosisReport(d CampusDiagnosis) string {
 	line("版本: %s", version)
 	line("平台: %s/%s", runtime.GOOS, runtime.GOARCH)
 	line("目标主机: %s", publicDiagnosisHost(d.Host))
-	line("接入方式: %s", reportLabel(d.Integration, map[string]string{"auto": "自动接入", "manual": "手动接入", "proxy": "仅本地代理"}))
+	line("接入方式: %s", reportLabel(d.Integration, map[string]string{"auto": "自动接入", "manual": "手动接入", "proxy": "独立校园代理"}))
 	line("连接状态: %s", reportLabel(d.State, map[string]string{
 		"idle": "未连接", "preparing": "准备中", "connecting": "连接中",
 		"enabling": "启用中", "adapting": "适配 Clash 中", "authentication": "认证中",
@@ -135,7 +135,13 @@ func formatDiagnosisReport(d CampusDiagnosis) string {
 		line("已应用: 无法确认")
 	}
 	if d.Integration == "proxy" {
-		line("预期路径: 应用 → FDU 本地代理 → 校园资源；分流由外部应用管理")
+		if d.RoutingMode == "global" {
+			line("预期路径: 全局模式 → 校园隧道，受学校授权范围限制")
+		} else if d.Rule.Known && d.Rule.Enabled {
+			line("预期路径: FDU 校园规则 → 校园隧道")
+		} else {
+			line("预期路径: 未确认命中校园规则；规则模式的其他流量直连")
+		}
 	} else if (d.Integration == "auto" || d.Integration == "manual") && d.Rule.Known && d.Rule.Matched && d.Rule.Enabled {
 		line("预期路径: Clash 校园规则 → FDU → 校园资源；此为配置预期")
 	} else {
@@ -169,7 +175,7 @@ func formatDiagnosisReport(d CampusDiagnosis) string {
 		line("- 启用校内访问，确认隧道连接后再检测。")
 	}
 	if d.Integration == "proxy" {
-		line("- 检查目标应用是否已使用 FDU 本地代理。")
+		line("- 检查目标应用是否已使用 FDU 本地代理或 TUN。")
 	} else if d.Integration == "auto" || d.Integration == "manual" {
 		if !d.Rule.Known {
 			line("- 检查校内资源能否正常读取，确认规则状态后再诊断。")

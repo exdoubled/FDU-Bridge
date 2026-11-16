@@ -70,6 +70,7 @@ type RoutingConfig struct {
 	DomainSuffixes []string `koanf:"domain_suffixes"`
 	IPCIDRs        []string `koanf:"ip_cidrs"`
 	UpstreamProxy  string   `koanf:"upstream_proxy"`
+	Mode           string   `koanf:"mode"` // rule (default), global; standalone only
 	RulesFile      string   `koanf:"rules_file"`
 }
 
