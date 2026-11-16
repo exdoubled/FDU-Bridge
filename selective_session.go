@@ -103,7 +103,11 @@ func runSelectiveSessions(ctx context.Context, connect selectiveConnectFunc, rel
 			mode, delay = selectiveFresh, retryDelay
 		case <-retry:
 			// A retry may only resume cookies/SID. It must never reopen a browser.
-			mode = selectiveResume
+			// A requested fresh login that failed on the network before
+			// authenticating has nothing to resume, so it is attempted again.
+			if mode != selectiveFresh || connected.Load() || !selectiveTransientError(err) {
+				mode = selectiveResume
+			}
 		}
 		if timer != nil {
 			timer.Stop()

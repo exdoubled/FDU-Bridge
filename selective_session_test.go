@@ -203,6 +203,50 @@ func TestSelectiveRejectedUISCredentialsAreNotRetried(t *testing.T) {
 	awaitSelective(t, done)
 }
 
+func TestSelectiveFreshLoginRetriesAfterNetworkFailureInsteadOfAuthRequired(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	relogin := make(chan struct{}, 1)
+	attempts := make(chan selectiveSessionMode, 4)
+	states := make(chan string, 8)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		calls := 0
+		runSelectiveSessions(ctx, func(ctx context.Context, mode selectiveSessionMode, ready func()) error {
+			calls++
+			attempts <- mode
+			switch calls {
+			case 1:
+				ready()
+				<-ctx.Done()
+				return ctx.Err()
+			case 2:
+				// The requested fresh login cannot reach the server.
+				return fmt.Errorf("authConfig: %w", context.DeadlineExceeded)
+			}
+			ready()
+			<-ctx.Done()
+			return ctx.Err()
+		}, relogin, func(state string) { states <- state }, time.Millisecond)
+	}()
+	awaitSelective(t, attempts)
+	relogin <- struct{}{}
+	if got := awaitSelective(t, attempts); got != selectiveFresh {
+		t.Fatalf("relogin mode = %v", got)
+	}
+	if got := awaitSelective(t, attempts); got != selectiveFresh {
+		t.Fatalf("retry after a network failure = %v; want another fresh login, not a resume that reports an invalid session", got)
+	}
+	for len(states) > 0 {
+		if state := <-states; state == "auth-required" {
+			t.Fatal("a network failure was reported as an expired login")
+		}
+	}
+	cancel()
+	awaitSelective(t, done)
+}
+
 func awaitSelective[T any](t *testing.T, ch <-chan T) T {
 	t.Helper()
 	select {
