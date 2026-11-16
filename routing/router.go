@@ -28,6 +28,16 @@ type policy struct {
 
 func normalizeDomain(s string) string { return strings.ToLower(strings.TrimSuffix(s, ".")) }
 
+// privateTarget reports loopback, link-local and private IP literals. Global mode
+// still sends campus rules, which often use private ranges, through the tunnel.
+func privateTarget(host string) bool {
+	ip, err := netip.ParseAddr(host)
+	if err != nil {
+		return false
+	}
+	return ip.Unmap().IsPrivate() || ip.Unmap().IsLoopback() || ip.Unmap().IsLinkLocalUnicast()
+}
+
 func validDomain(s string) bool {
 	if s == "" || len(s) > 253 || net.ParseIP(s) != nil {
 		return false
@@ -257,7 +267,7 @@ func (r *Router) Dial(ctx context.Context, network, addr string) (net.Conn, erro
 	if network == "tcp" && r.controlTargets[normalizeDomain(addr)] && r.control != nil {
 		dial = r.control
 		control = true
-	} else if r.global || r.policy.Load().match(host) {
+	} else if r.policy.Load().match(host) || r.global && !privateTarget(host) {
 		campus = true
 		if dial == nil {
 			return nil, ErrVPNUnavailable

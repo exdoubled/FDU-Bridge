@@ -69,3 +69,26 @@ func TestStandaloneConfigurationCombinations(t *testing.T) {
 		}
 	}
 }
+
+func TestGlobalModeKeepsUnmatchedPrivateTargetsOffTheTunnel(t *testing.T) {
+	r, err := New(configs.RoutingConfig{UpstreamProxy: "direct", Mode: "global", IPCIDRs: []string{"10.0.0.0/8"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	directErr := errors.New("physical")
+	r.SetControl(func(context.Context, string, string) (net.Conn, error) { return nil, directErr }, nil, []string{"127.0.0.1:1080"})
+	r.SetVPN(func(context.Context, string, string) (net.Conn, error) { return nil, errors.New("vpn") })
+	for _, target := range []string{"192.168.1.1:80", "127.0.0.1:22", "169.254.1.1:80", "[fe80::1]:80"} {
+		if _, err := r.Dial(context.Background(), "tcp", target); !errors.Is(err, directErr) {
+			t.Fatalf("%s: %v", target, err)
+		}
+	}
+	// Campus rules often use private ranges; they must still use the tunnel.
+	if _, err := r.Dial(context.Background(), "tcp", "10.1.2.3:443"); errors.Is(err, directErr) {
+		t.Fatal("campus private rule bypassed the tunnel")
+	}
+	if _, err := r.Dial(context.Background(), "tcp", "203.0.113.9:443"); errors.Is(err, directErr) {
+		t.Fatal("public target bypassed the tunnel in global mode")
+	}
+}

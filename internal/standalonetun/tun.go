@@ -88,7 +88,7 @@ func (h *handler) NewConnection(_ context.Context, conn net.Conn, metadata M.Met
 	defer conn.Close()
 	stop := context.AfterFunc(h.ctx, func() { conn.Close() })
 	defer stop()
-	if metadata.Destination.Port == 53 {
+	if metadata.Destination.Port == 53 && !forwardDNS(metadata.Destination.String()) {
 		return h.dnsTCP(conn)
 	}
 	target, err := h.names.target(metadata.Destination.String())
@@ -162,7 +162,7 @@ func (h *handler) NewPacketConnection(_ context.Context, conn N.PacketConn, _ M.
 		if err != nil {
 			return err
 		}
-		if destination.Port == 53 {
+		if destination.Port == 53 && !forwardDNS(destination.String()) {
 			reply, err := h.names.answer(packet.Bytes())
 			if err == nil {
 				err = write(reply, destination)

@@ -82,3 +82,18 @@ func (n *names) answer(raw []byte) ([]byte, error) {
 	}
 	return reply.Pack()
 }
+
+// forwardDNS keeps LAN and private resolvers (routers, split-DNS servers) on the
+// physical network instead of answering them with fake addresses.
+func forwardDNS(address string) bool {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return false
+	}
+	ip, err := netip.ParseAddr(host)
+	if err != nil {
+		return false
+	}
+	ip = ip.Unmap()
+	return ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast()
+}

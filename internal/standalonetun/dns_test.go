@@ -53,3 +53,16 @@ func TestDNSDoesNotAdvertiseUnmappedIPv6OrServiceHints(t *testing.T) {
 		}
 	}
 }
+
+func TestDNSForwardedForNonCampusResolvers(t *testing.T) {
+	for _, address := range []string{"192.168.1.1:53", "10.0.0.1:53"} {
+		if !forwardDNS(address) {
+			t.Fatalf("%s should be forwarded, not answered with a fake IP", address)
+		}
+	}
+	for _, address := range []string{"8.8.8.8:53", "203.0.113.53:53", "[2001:4860:4860::8888]:53"} {
+		if forwardDNS(address) {
+			t.Fatalf("%s should use the fake-IP answer", address)
+		}
+	}
+}
