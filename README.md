@@ -1,103 +1,235 @@
 # FDU Bridge
 
-> 🚫 **免责声明**：本程序**按原样提供**，作者**不保证其正确性或可靠性**。是否适用请自行判断，**使用造成的问题或后果由使用者自行承担**。
-
 中文 | [English](README_en.md)
 
-复旦大学桌面校园网工具。配合 Clash／Mihomo 客户端使用时，指定的校内资源走复旦 aTrust 隧道，其余流量沿用 Clash 的设置；也可独立使用，支持 SOCKS5／HTTP、TUN 和全局／规则模式。基于 [ZJU Connect](https://github.com/Mythologyli/zju-connect) 开发，致谢见文末。
+复旦大学的桌面校园网工具：在校外打开图书馆、eHall、iCourse 这类只能校内访问的网站，同时不影响你原来的代理和网络。
 
-## 功能
+支持 Windows、macOS 和 Linux，提供图形界面。基于 [ZJU Connect](https://github.com/Mythologyli/zju-connect) 开发。
 
-- 使用 UIS 账号密码和 TOTP 密钥自动登录，无需打开浏览器完成二次验证。
-- 按精确域名、域名后缀、IPv4 或网段，逐条选择走 FDU 的资源；保存后自动加载，新连接按新规则，已有连接保持原路径。
-- 一键接入 Clash Verge Rev（含便携版），也支持其他 Mihomo 桌面客户端；自动跟随全局／规则模式和订阅切换，停用时恢复外网出口。
-- 提供 Windows、macOS、Linux 桌面 GUI，集成登录、连接启停、日志、外网节点、校内资源和高级设置。
-- 在诊断页输入校园网址，查看已保存规则、代理覆盖、登录与隧道状态及 DNS／TCP／TLS／HTTP 检测，并获取处理建议。
+> [!NOTE]
+> 本程序**按原样提供**，作者不保证其正确性或可靠性，使用造成的问题由使用者自行承担。它只是替你连接学校的 aTrust VPN，不会扩大学校授予你的访问权限。
+
+![首页：配合 Clash 使用](docs/images/home-clash.png)
+
+## 它能做什么？
+
+假设你平时用 Clash 上网，想在校外查图书馆数据库。FDU Bridge 会：
+
+1. 用你的 UIS 账号和动态口令自动登录学校 VPN，不用每次打开网页、掏手机输验证码；
+2. 只把你指定的校内网站（比如 `library.fudan.edu.cn`、`fdu.edu.cn`）送进学校 VPN；
+3. 其他流量照旧走 Clash，你原来的节点、规则、全局／规则模式都不变；
+4. 关闭校内访问时，Clash 的外网出口自动恢复。
+
+不用 Clash 也可以：选择「独立使用」，FDU Bridge 自己提供本地代理，或者用 TUN 接管整台电脑的流量。
 
 ## 快速开始
 
-1. 从 [Releases](https://github.com/exdoubled/FDU-Bridge/releases) 下载对应系统版本。Windows 首次使用请运行 `*-Windows-x64-setup.exe`，按向导完成安装；其他系统下载压缩包并解压。
-2. 打开 Clash 客户端，选好订阅和外网节点，使用全局或规则模式。
-3. 启动 GUI（见下表），在**设置 → 代理接入**确认接入目标；同时运行多个客户端时，选定一个并保存。
-4. 在**设置 → UIS 自动登录**填写账号、密码和 TOTP 密钥，离开输入框即自动保存；然后开启**校内访问**并确认首次接入提示。TOTP 密钥是绑定验证器时的 Base32 密钥，后续登录自动生成动态验证码。
-5. 在**校内资源**添加域名或 IP，逐条勾选启用并保存。
+### 第 1 步：下载安装
 
-校内资源页可导入／导出 JSON，包含所有条目及启用状态。导入预览可合并或替换当前草稿，点击**保存**后生效；合并时已有条目保留当前草稿的启用状态。导出包含未保存的修改，不含登录信息。
+从 [Releases](https://github.com/exdoubled/FDU-Bridge/releases) 下载对应系统的版本：
 
-访问异常时，在**诊断**输入 HTTP/HTTPS 网址或域名。检测保留路径，移除查询参数和片段，不携带登录凭证、不跟随跳转；使用当前 Clash 检测入口，或独立模式的 FDU HTTP 入口，入口不可用时不会改走系统直连。“预期路径”来自已保存规则及同步状态，“实测证据”显示本次指定入口的结果；DNS 地址是候选，HTTP 响应不单独证明浏览器实际经过校园隧道。
-
-诊断完成后，点击结果下方的**预览脱敏报告**，检查后可复制或导出文本；导出内容与打开的预览一致。报告包含版本、平台、接入方式、规则状态、检测状态与耗时及处理建议，不包含账号、Token、Cookie、DNS 地址、个人路径、原始配置或完整日志。仅保留内置公开校园主机，自定义校园主机及 IP 同样隐藏，网址路径、查询参数和片段不写入报告；规则读取失败会标为“无法确认”。页面上方的**导出日志**保留独立用途。
-
-| 系统 | 启动程序 |
-| --- | --- |
-| Windows | 安装后从开始菜单打开 **FDU Connect** |
-| macOS | `FDU Connect.app` |
-| Linux | `fdu-connect-gui` |
-
-全局模式下在本应用的**外网节点**页切换出口，规则模式下在 Clash 中切换。模式和 TUN 开关都在 Clash 中操作，FDU 自动跟随。退出时先在首页关闭校内访问，再退出 Clash。
-
-本文以当前源码为准，Release 压缩包以对应版本的说明为准。
-
-## 接入方式
-
-在首页连接卡选择**配合 Clash／独立使用**，断开后可切换并自动保存。配合 Clash 时，在**设置 → 代理接入**选择客户端；切回时保留上次客户端配置。
-
-- **自动接入**（默认）：识别正在运行的客户端及其本地控制接口；无法唯一确认目标时暂停。
-- **手动接入**：选择客户端实际使用的完整运行 YAML（仅含节点的订阅不算），按需填写控制接口和密钥。保存后复用，连接期间跟随模式和该文件的更新。
-- **独立使用**：无需 Clash。首页选择**规则／全局**和 **TUN**：规则模式共用校内资源列表，命中的流量走校园隧道，其余直连；全局模式让所有接入流量走校园隧道，仍受学校授权范围限制。不开 TUN 时，将应用代理设为首页显示的 SOCKS5／HTTP 地址；开启 TUN 需要管理员或 root 权限，接管系统 TCP/UDP。详见[独立模式](docs/standalone.md)。
-
-Clash Verge Rev 通过订阅扩展一键接入。其他客户端需支持 Mihomo 控制 API、规则集和专用监听入口，已加入 FlClash、Clash Party、Sparkle、Clash Nyanpasu、ClashX.Meta 的发现逻辑；不满足时改用独立模式。如需自行安装扩展，可在**设置 → 导出扩展（可选）**复制覆写 JS 或 YAML 片段（不是完整订阅），更改 FDU 监听端口后需重新导出。
-
-**设置 → 高级设置**可调整服务器、认证方式、DNS、网卡、本地代理和端口转发，或导入 TOML 配置，含义见[配置参数](docs/config.md)。GUI 的 Clash 接入和独立分流均需要 aTrust；EasyConnect 可继续使用命令行核心；与 Clash 分流冲突的选项会在界面禁用或在启用前提示。自定义网关和复杂认证组合需自行验证。
-
-## 工作原理
-
-Clash 通过 TUN、系统代理或应用代理接收流量；FDU Bridge 负责 UIS 认证、aTrust 隧道和指定资源的转发，GUI 通过本机规则接口同步已启用的校园规则。启用时，GUI 向 Clash 加入 `FDU-ROUTER` 节点、校园规则和专用回流入口：Clash Verge Rev 先备份再写入订阅扩展；其他客户端通过控制接口加载内存覆写，不改订阅文件或私有配置，客户端重载后自动重新接入。GUI 不修改系统代理、绕过列表或 Clash TUN 开关。
-
-| Clash 模式 | 指定的校内资源 | 其他流量 |
+| 系统 | 下载 | 打开方式 |
 | --- | --- | --- |
-| 全局 | Clash → FDU Bridge → aTrust 隧道 → 校内资源 | Clash → FDU Bridge → Clash 专用回流入口 → `INTERNET` 所选出口 |
-| 规则 | Clash 校园规则 → FDU Bridge → aTrust 隧道 → 校内资源 | 沿用 Clash 原有规则与节点，可代理、直连或拒绝 |
+| Windows | `*-Windows-x64-setup.exe` | 运行安装向导，之后从开始菜单打开 **FDU Connect** |
+| macOS | `*-macOS-universal.zip` | 解压后打开 `FDU Connect.app`；首次需在 Finder 中右键选择「打开」 |
+| Linux | `*-linux-amd64.tar.gz` | 解压后运行 `fdu-connect-gui`，需要 GTK 4 和 WebKitGTK 6.0 |
 
-全局模式的回流入口固定使用 `INTERNET`，避免再次进入 `GLOBAL` 形成循环。FDU 使用用户态网络栈，不创建额外虚拟网卡；登录与 VPN 底层连接绑定物理网卡，避免被 Clash TUN 再次接管。独立模式由应用代理或 FDU TUN 接入同一路由器，不经过 Clash 回流入口；规则模式与 Clash 模式共用校园规则。
+Windows 安装包已内置 WebView2，无需另外下载。`*-Windows-x64.zip` 是应用内更新用的精简包，首次安装请用 `setup.exe`。
 
-## 注意事项
+### 第 2 步：绑定动态口令，拿到 TOTP 密钥
 
-- **覆盖范围**：开启 Clash TUN 可覆盖所有应用；不开时只接管使用 Clash 代理的应用，系统代理绕过的内网地址仍会直连，需自行调整绕过规则。访问失败时先查看首页的**覆盖范围**。
-- **TUN**：与 Clash TUN 配合时只开 Clash 的 TUN，FDU 的 `tun_mode` 和 `add_route` 保持关闭。独立模式可在首页开启 FDU TUN，使用前先关闭其他 VPN 的 TUN。
-- **回环**：手动配置分流时，需将 VPN 底层连接绑定到物理网卡，参考上游的[相关讨论](https://github.com/Mythologyli/zju-connect/issues/57)。
-- **权限**：规则只决定流量路径，不会扩大学校授予的资源权限。按域名分流需要应用或 Clash 提供域名，只有 IP 的连接请添加 IP 规则。
+学校的 UIS 登录需要二次验证。FDU Bridge 用 **TOTP 密钥** 自动生成验证码，所以需要先在 UIS 绑定一个动态口令：
+
+1. 打开 [UIS 个人中心 → 账号安全](https://id.fudan.edu.cn/uc/#/pc/userCenter/accountSecurity)，在「动态口令」中按提示绑定。
+2. 绑定页面会显示一个二维码和一串 **Base32 密钥**（类似 `JBSWY3DPEHPK3PXP`）。**把这串密钥复制保存下来**，这就是 TOTP 密钥。
+3. 同时用手机上的验证器（Microsoft Authenticator、Google Authenticator 等）扫描二维码，完成绑定确认，以后手动登录 UIS 也能用。
+
+> [!IMPORTANT]
+> 要填的是**绑定时的密钥**，不是验证器里每 30 秒变化一次的 6 位数字。如果已经绑定过但没保存密钥，需要在 UIS 解绑后重新绑定一次。
+
+### 第 3 步：填写登录信息
+
+打开 FDU Bridge，进入 **设置 → UIS 自动登录**，填写：
+
+| 项目 | 说明 | 示例 |
+| --- | --- | --- |
+| UIS 账号 | 学号或工号 | `22307130000` |
+| UIS 密码 | UIS 统一身份认证密码 | |
+| TOTP 密钥 | 第 2 步保存的 Base32 密钥，大小写和空格都能识别 | `JBSWY3DPEHPK3PXP` |
+
+每一项离开输入框后自动保存，卡片右上角显示「已就绪」即可。
+
+![设置：UIS 自动登录](docs/images/settings-uis.png)
+
+> [!TIP]
+> 三项全部留空时，会改用原来的网页登录：启用校内访问时弹出 UIS 登录页，在网页里完成验证。需要图形验证码、只能用短信验证、或暂时不想保存密码时可以这样用。只填一部分不行，首页会提示补全。
+
+### 第 4 步：选择使用方式
+
+回到 **首页**，在连接卡顶部选择使用方式：
+
+<details open>
+<summary><b>配合 Clash（已经在用 Clash 时推荐）</b></summary>
+
+1. 先打开你的 Clash 客户端，选好订阅和节点，全局或规则模式都可以。
+2. 在 FDU Bridge 的 **设置 → 代理接入** 确认识别到的客户端。同时开着多个客户端时，选定一个并保存。
+3. 回到首页，打开 **启用校内访问** 开关，确认首次接入提示。
+
+FDU Bridge 会向 Clash 加入校园规则和一个 `FDU-ROUTER` 节点，之后：
+
+- 切换节点：全局模式在本应用的 **外网节点** 页切换，规则模式在 Clash 里切换；
+- 模式和 TUN：在 Clash 里操作，FDU Bridge 会自动跟随；
+- 退出：先在首页关闭校内访问，再退出 Clash。关闭时会恢复 Clash 的外网出口；想彻底移除 FDU 写入 Clash 的内容，在 **设置 → 维护** 中操作。
+
+已支持 Clash Verge Rev（含便携版）一键接入，以及 FlClash、Clash Party、Sparkle、Clash Nyanpasu、ClashX.Meta 等 Mihomo 桌面客户端。
+
+</details>
+
+<details>
+<summary><b>独立使用（不用 Clash）</b></summary>
+
+![首页：独立使用](docs/images/home-standalone.png)
+
+1. 在首页选择 **独立使用**，再选分流模式和是否开启 TUN：
+
+   | 分流模式 | 效果 |
+   | --- | --- |
+   | 规则 | 校内资源列表中的网站走学校 VPN，其余直连 |
+   | 全局 | 所有接入的流量都走学校 VPN（局域网和本机地址除外），只能访问学校允许的目标 |
+
+2. 打开 **启用校内访问**。
+3. 让流量进入 FDU Bridge：
+   - **不开 TUN**：把浏览器或应用的代理设为首页显示的 SOCKS5／HTTP 地址（点地址旁的按钮可复制）。SOCKS5 建议选择「远程解析域名」（`socks5h`）。
+   - **开 TUN**：接管整台电脑的 TCP/UDP 流量，不用设置代理。需要以管理员或 root 身份运行，使用前先关闭其他 VPN 的 TUN。
+
+更多细节见 [独立模式](docs/standalone.md)。
+
+</details>
+
+使用方式和分流模式只能在关闭校内访问时切换，选择会自动保存。
+
+### 第 5 步：添加校内网站
+
+进入 **校内资源** 页，添加要走学校 VPN 的网站，逐条勾选启用后点 **保存**：
+
+| 类型 | 写法 | 匹配范围 |
+| --- | --- | --- |
+| 精确域名 | `library.fudan.edu.cn` | 只匹配这个域名 |
+| 域名后缀 | `fdu.edu.cn` | 这个域名及所有子域名 |
+| IPv4 网段 | `10.0.0.0/8` 或 `202.120.224.6` | 对应的 IP 地址 |
+
+保存后立即对新连接生效，已打开的连接保持原来的路径。列表可以导入／导出 JSON，方便在电脑之间同步。
+
+## 访问不了时
+
+1. **看首页的覆盖范围**。配合 Clash 且没开 Clash TUN 时，只有走 Clash 代理的应用才会被接管；系统代理里被设为「绕过」的内网地址会直连，需要自己调整绕过列表。
+2. **用诊断页检查**。在 **诊断** 页输入出问题的网址，会显示是否命中校内资源规则、登录和隧道状态，以及 DNS／TCP／TLS／HTTP 每一步的结果和处理建议。
+3. **需要反馈问题时**，在诊断结果下方点 **预览脱敏报告**，确认内容后复制或导出。报告不包含账号、Token、Cookie、个人路径和自定义的校园主机，可以放心附在 Issue 里。
+4. **登录过期**：首页会提示需要重新登录，点 **重新登录** 即可，规则和设置都会保留。网络暂时断开时会自动重连。
+
+> [!WARNING]
+> **合规与安全提示**
+>
+> - 本工具只用于你个人访问学校授权给你的资源，请遵守学校的网络与信息安全规定。不要用全局模式把学校 VPN 当作普通的翻墙或加速出口。
+> - 密码和 TOTP 密钥**以明文保存**在本机的 `client.toml` 中，接入 Clash 时生成的配置备份也会包含它们。不要分享这些文件；在公共电脑上使用后，请在设置中清空凭据，并删除下方「配置保存在哪里」所列的目录。
+> - TOTP 密钥等同于你的第二个登录因素，泄露后他人可以生成你的验证码。如果怀疑泄露，请在 UIS 解绑并重新绑定动态口令，同时修改密码。
 
 ## 常见问题
 
 <details>
-<summary>运行要求、自动登录、配置目录与升级</summary>
+<summary>填了 TOTP 密钥还是提示验证失败？</summary>
 
-- **运行要求**：Windows 的 `*-Windows-x64-setup.exe` 内置 WebView2 离线安装器，安装向导会按需安装依赖，无需另行下载。`*-Windows-x64.zip` 为应用内更新使用的精简包，需要已有运行库；若运行库被移除，请重新运行安装包修复。macOS 应用未经公证，首次打开需在 Finder 中右键选择“打开”；Linux 需要 GTK 4 和 WebKitGTK 6.0。
-- **Windows 启动失败**：启动准备或界面初始化失败时会显示原生错误提示，日志位于 `%LOCALAPPDATA%\FDU Connect\logs\startup.log`。日志不可写时仍会继续启动；后续失败会直接提示错误信息。
-- **自动登录**：复旦 UIS 使用账号密码和已绑定的 TOTP 密钥直接认证，无需安装登录浏览器。凭据以明文保存在 GUI 本机的 `client.toml`，与现有配置一起备份；可在断开后于设置中修改或清空。认证失败时提示检查凭据，不会弹出网页或重复提交错误验证码。三项凭据都留空时使用原有的网页登录，适用于需要图形验证码、只能短信验证或未绑定 TOTP 的账号。
-- **断线与登录过期**：Clash 分流连接会自动重试暂时性断线；会话过期时暂停重试，点击首页的**重新登录**重新认证。手动停用后停止重试，保留规则和设置。
-- **启动自动连接**：已确认接入并开启自动连接后，FDU 会等待 Clash 客户端及本机控制接口启动，再启用校内访问；等待时可在首页或托盘停用，也可退出。配置无效、目标不唯一或控制接口拒绝请求时会停止并显示错误；独立模式无需等待 Clash。
-- **自动识别失败**：改用手动接入；客户端不具备所需能力时改用独立模式。
-- **端口被占用**：自动／手动接入会在启用前改用空闲端口；独立模式需自行调整监听端口。其他错误见**诊断**页。
-- **配置目录**：Windows 通常在程序目录，不可写时使用 `%APPDATA%\FDU Connect`（已有用户目录继续沿用）；macOS 为 `~/Library/Application Support/FDU Connect`；Linux 为 `$XDG_CONFIG_HOME/fdu-connect`，未设置时为 `~/.config/fdu-connect`。
-- **升级**：保留上述目录即可保留配置和登录状态。关闭窗口后程序可能仍在托盘运行，覆盖程序前请先退出。
-- **Windows 卸载**：从系统“已安装的应用”卸载，配置、规则、登录状态和共享的 WebView2 Runtime 会保留。个人数据通常留在原安装目录（默认 `%LOCALAPPDATA%\Programs\FDU Connect`）；已有或回退的用户配置可能位于 `%APPDATA%\FDU Connect`。卸载向导会提示保留位置；使用公共电脑后，请手动清理这些位置中的个人数据。
-- **接入清理**：停用后在**设置 → 维护**移除当前接入记录对应客户端／订阅中可核验的 FDU 配置，保留订阅和个人设置；无法确认归属时保留文件及恢复记录。
-- **目录迁移**：在新目录的 GUI 中选择**设置 → 维护 → 选择旧目录**，预览后复制受管配置、规则和登录状态。旧目录须含 `gui-settings.json`，原文件保留，目标已有不同数据时不覆盖。
-- **托盘**：部分 Linux 桌面不显示托盘图标，因此 Linux 上关闭窗口默认直接退出，可在设置中改为最小化到托盘。
+- 确认填的是绑定时的 Base32 密钥，而不是 6 位验证码。
+- 验证码和时间有关，请检查电脑的系统时间是否准确（开启自动同步时间）。
+- 认证失败后，程序会停止自动重试，避免账号因多次错误被锁定。改好设置后，在首页点 **重新登录**。
 
 </details>
 
+<details>
+<summary>识别不到我的 Clash 客户端？</summary>
+
+- 确认 Clash 已经启动，并且开启了外部控制（External Controller）。
+- 在 **设置 → 代理接入** 改用 **手动接入**，选择客户端实际使用的完整运行配置（不是只含节点的订阅文件），按需填写控制接口地址和密钥。
+- 客户端不支持 Mihomo 控制接口、规则集或专用入口时，改用 **独立使用**。
+- 想自己写进订阅的，可以在 **设置 → 代理接入 → 导出扩展** 复制覆写脚本或 YAML 片段。修改 FDU 端口后需要重新导出。
+
+</details>
+
+<details>
+<summary>和 Clash TUN 能一起开吗？</summary>
+
+可以，也推荐这样做：配合 Clash 时只开 Clash 的 TUN，就能覆盖所有应用。FDU Bridge 自己不会再建虚拟网卡，登录和 VPN 连接会绑定物理网卡，避免被 Clash TUN 再次接管。独立使用时才使用 FDU 自己的 TUN，开之前先关掉其他 VPN 的 TUN。
+
+</details>
+
+<details>
+<summary>端口被占用？</summary>
+
+配合 Clash 时，启用前会自动换成空闲端口；独立使用时需要在 **设置 → 独立校园代理** 修改监听端口。
+
+</details>
+
+<details>
+<summary>开机后自动连接？</summary>
+
+在 **设置 → 外观与启动** 打开「开机自启」和「启动后启用校内访问」。配合 Clash 时，FDU Bridge 会等 Clash 和它的控制接口启动后再接入；等待期间可以在首页或托盘取消。
+
+</details>
+
+<details>
+<summary>配置保存在哪里？怎么升级、卸载？</summary>
+
+- **配置目录**
+  - Windows：通常是程序所在目录；该目录不可写时使用 `%APPDATA%\FDU Connect`
+  - macOS：`~/Library/Application Support/FDU Connect`
+  - Linux：`$XDG_CONFIG_HOME/fdu-connect`，未设置时为 `~/.config/fdu-connect`
+- **升级**：可以在应用内检查更新；手动升级时保留上述目录即可保留配置和登录状态。关闭窗口后程序可能仍在托盘运行，替换文件前先退出。
+- **换目录**：在新位置的 GUI 中打开 **设置 → 维护 → 选择旧目录**，预览后复制配置、规则和登录状态，旧文件会保留。
+- **移除 Clash 接入**：关闭校内访问后，在 **设置 → 维护** 中移除 FDU 写入 Clash 的配置，订阅和个人设置保留。
+- **Windows 卸载**：在系统「已安装的应用」中卸载。配置、规则和登录信息不会被删除（默认在 `%LOCALAPPDATA%\Programs\FDU Connect`），卸载向导会列出保留的位置，需要时请手动删除。
+- **Windows 启动失败**：会弹出错误提示，日志在 `%LOCALAPPDATA%\FDU Connect\logs\startup.log`。
+- **Linux 托盘**：部分桌面不显示托盘图标，因此 Linux 上关闭窗口默认直接退出，可以在设置中改为最小化到托盘。
+
+</details>
+
+<details>
+<summary>能用 EasyConnect 或其他学校的 VPN 吗？</summary>
+
+图形界面的 Clash 接入和独立分流只支持 aTrust（复旦目前使用的 VPN）。EasyConnect 可以继续使用命令行核心，见 [配置参数](docs/config.md)。**设置 → 高级设置** 可以修改服务器、认证方式、DNS、网卡和端口转发，或导入 TOML 配置；其他网关和复杂认证组合需要自行验证。
+
+</details>
+
+---
+
+## 工作原理
+
+> 以下内容面向想了解实现的读者，日常使用不需要阅读。
+
+FDU Bridge 负责 UIS 认证、aTrust 隧道和校内资源的转发；流量从哪里进来，取决于使用方式。
+
+**配合 Clash**：Clash 通过 TUN、系统代理或应用代理接收流量。启用时，GUI 向 Clash 加入 `FDU-ROUTER` 节点、校园规则和一个专用回流入口。Clash Verge Rev 会先备份，再写入订阅扩展；其他客户端通过控制接口加载内存中的覆写，不修改订阅文件，客户端重载后会自动重新接入。GUI 不修改系统代理、绕过列表或 Clash 的 TUN 开关。
+
+| Clash 模式 | 校内资源 | 其他流量 |
+| --- | --- | --- |
+| 全局 | Clash → FDU Bridge → aTrust 隧道 | Clash → FDU Bridge → Clash 回流入口 → `INTERNET` 所选出口 |
+| 规则 | Clash 校园规则 → FDU Bridge → aTrust 隧道 | 沿用 Clash 原有的规则和节点 |
+
+全局模式的回流入口固定使用 `INTERNET`，避免再次进入 `GLOBAL` 形成循环。
+
+**独立使用**：应用代理或 FDU 的 TUN 把流量交给同一个路由器，规则模式与 Clash 模式共用校内资源列表。TUN 模式会拦截发往公网解析器的 DNS 查询，用临时地址保留原始域名，以便按域名分流；发往局域网解析器的查询原样转发。
+
+两种方式下，FDU 都使用用户态网络栈；登录和 VPN 底层连接绑定物理网卡，不会被其他 TUN 再次接管。校内资源在隧道不可用时不会退回直连。
+
 ## 更多文档
 
+- [独立模式](docs/standalone.md)：四种组合、DNS 处理和限制
 - [配置参数](docs/config.md)：命令行与 TOML 配置项、选择性分流、FDU TUN
 - [从源码构建](docs/build.md)：GUI 构建与打包、命令行核心、服务与 Docker
 - [开发计划](docs/roadmap.md)
 
 ## 致谢
 
-- [Mythologyli/zju-connect](https://github.com/Mythologyli/zju-connect)：本分支的直接上游。
+- [Mythologyli/zju-connect](https://github.com/Mythologyli/zju-connect)：本项目的直接上游。
 - [AkiraSalvare/fdu-connect](https://github.com/AkiraSalvare/fdu-connect)：复旦适配的参考项目。
 - [EasierConnect](https://github.com/lyc8503/EasierConnect)（已停止维护）：ZJU Connect 的基础，作者 [lyc8503](https://github.com/lyc8503)。
 - [socks2http](https://github.com/zenhack/socks2http)
@@ -108,3 +240,7 @@ Clash 通过 TUN、系统代理或应用代理接收流量；FDU Bridge 负责 U
 <a href="https://github.com/mythologyli/zju-connect/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=mythologyli/zju-connect" />
 </a>
+
+## 许可证
+
+[AGPL-3.0](LICENSE)

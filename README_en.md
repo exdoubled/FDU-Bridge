@@ -1,109 +1,248 @@
 # FDU Bridge
 
-> 🚫 **Disclaimer**: This program is provided **as is**, and the author **does not guarantee its correctness or reliability**. Judge for yourself whether it suits your situation; **you bear any problems or consequences of using it**.
-
 [中文](README.md) | English
 
-A desktop campus-network tool for Fudan University. With a Clash/Mihomo client, selected campus resources use Fudan's aTrust tunnel while other traffic follows Clash's settings; standalone mode supports SOCKS5/HTTP, optional TUN, and global/rule routing. Built on [ZJU Connect](https://github.com/Mythologyli/zju-connect); see the acknowledgements at the end.
+A desktop campus-network tool for Fudan University. Open campus-only sites such as the library, eHall and iCourse from off campus, without disturbing your existing proxy or network setup.
 
-## Features
+Runs on Windows, macOS and Linux with a graphical interface. Built on [ZJU Connect](https://github.com/Mythologyli/zju-connect).
 
-- Sign in with the UIS account, password, and TOTP secret without opening a browser for second-factor verification.
-- Choose, entry by entry, which exact domains, domain suffixes, IPv4 addresses, or subnets use FDU. Saved rules reload automatically; new connections use them, existing connections keep their routes.
-- Connect to Clash Verge Rev (including portable installs) with one switch, or to other Mihomo desktop clients. Global/rule mode and subscription changes are followed, and the outside exit is restored when disabled.
-- Desktop GUI for Windows, macOS, and Linux with login, connection control, logs, Internet nodes, campus resources, and advanced settings.
+> [!NOTE]
+> This program is provided **as is**, without any guarantee of correctness or reliability. You are responsible for any consequences of using it. It only connects you to the university's aTrust VPN and does not extend the access the university grants you.
+
+![Home: with Clash](docs/images/home-clash.png)
+
+## What does it do?
+
+Say you normally browse through Clash and want to search a library database from off campus. FDU Bridge will:
+
+1. Sign in to the campus VPN with your UIS account and one-time-password key, so you no longer open a web page and type a code from your phone each time;
+2. Send only the campus sites you choose (for example `library.fudan.edu.cn` or `fdu.edu.cn`) through the campus VPN;
+3. Leave all other traffic on Clash, keeping your nodes, rules and global/rule mode unchanged;
+4. Restore Clash's outside exit when you turn campus access off.
+
+You can also skip Clash: choose **Standalone**, and FDU Bridge provides its own local proxies or captures the whole computer's traffic with TUN.
+
+The interface is currently in Chinese; the English labels below are followed by the Chinese text you will see.
 
 ## Quick start
 
-The **Diagnostics (诊断)** page accepts an HTTP/HTTPS URL or a bare domain and shows saved rule matches, proxy coverage, login/tunnel state, DNS/TCP/TLS/HTTP evidence, and actionable suggestions. The probe keeps the URL path, drops query strings and fragments, sends no login credentials, and does not follow redirects. It uses the selected Clash entry or the FDU HTTP entry in standalone mode; an unavailable entry never triggers a direct-system fallback. Expected routing is inferred from saved rules and synchronization state. DNS answers are candidates, and an HTTP response alone does not establish the browser's actual campus-tunnel path.
+### Step 1: Download and install
 
-After a diagnosis, click **Preview redacted report (预览脱敏报告)** below the result, review it, then copy or export the text. Export preserves the open preview exactly. Reports include the version, platform, integration mode, rule state, check status and timing, and safe suggestions; they exclude account identifiers, tokens, cookies, DNS addresses, personal paths, raw configuration, and full logs. Only built-in public campus hosts are retained; custom campus hosts and IPs are hidden, and URL paths, queries, and fragments are omitted. Unreadable rules are reported as unknown. **Export logs (导出日志)** at the top remains a separate action.
+Download the build for your system from [Releases](https://github.com/exdoubled/FDU-Bridge/releases):
 
-1. Download the version for your system from [Releases](https://github.com/exdoubled/FDU-Bridge/releases). On Windows, run `*-Windows-x64-setup.exe` and follow the installation wizard; on other systems, download and extract the archive.
-2. Open your Clash client, pick a subscription and outside node, and use global or rule mode.
-3. Launch the GUI (see the table) and confirm the target in **Settings → Proxy Integration (代理接入)**. If several clients are running, select one and save.
-4. Enter the **UIS account, password, and TOTP secret** under **Settings → UIS automatic login (UIS 自动登录)**. Each field saves automatically when it loses focus. Enable **campus access (校内访问)** and confirm the first-use prompt. Use the Base32 key from authenticator enrollment; subsequent logins generate fresh codes automatically.
-5. In **Campus Resources (校内资源)**, add domains or IPs, enable entries, and save.
-
-Campus Resources can import/export JSON with every entry and its enabled state. Preview an import, then merge or replace the current draft; click **Save (保存)** to apply it. Merge keeps the current draft's switches for existing entries. Export includes unsaved edits and excludes login information.
-
-| System | Program |
-| --- | --- |
-| Windows | **FDU Connect** in the Start menu after installation |
-| macOS | `FDU Connect.app` |
-| Linux | `fdu-connect-gui` |
-
-In global mode, switch the outside exit on this app's **Internet Nodes (外网节点)** page; in rule mode, switch it in Clash. Change the mode and TUN in Clash; FDU follows. To quit, disable campus access on Home first, then quit Clash.
-
-This README describes the current source; for downloaded packages, see the release notes of that version.
-
-## Integration methods
-
-Choose **With Clash / Standalone** on Home while disconnected. The choice is saved automatically, and switching back restores the previous Clash binding. In Clash mode, select the client under **Settings → Proxy Integration (代理接入)**.
-
-- **Automatic (自动接入)** (default): discover running clients and their local controllers. Integration pauses when the target cannot be identified uniquely.
-- **Manual (手动接入)**: select the complete runtime YAML the client actually uses (a node-only subscription does not qualify) and optionally its controller and secret. The binding is reused, and mode changes and updates to that file are followed while connected.
-- **Standalone (独立使用)**: no Clash needed. Rule mode shares the campus rules and sends other traffic directly. Global mode sends all captured traffic through the campus tunnel, subject to campus permissions. Point applications at the SOCKS5/HTTP addresses on Home, or enable TUN to capture system TCP/UDP with administrator/root privileges. See [standalone mode](docs/standalone.md) for current DNS and platform limitations.
-
-Clash Verge Rev connects through its subscription extensions. Other clients need the Mihomo control API, rule providers, and dedicated listeners; discovery covers FlClash, Clash Party, Sparkle, Clash Nyanpasu, and ClashX.Meta. Otherwise use standalone mode. To install an extension yourself, copy the override script or YAML fragment (not a complete subscription) from **Settings → Export Extension (Optional) (导出扩展（可选）)**, and export again after changing FDU's listening ports.
-
-**Settings → Advanced Settings (高级设置)** adjusts the server, authentication, DNS, network interface, local proxies, and port forwarding, or imports a TOML configuration; see the [configuration reference](docs/config_en.md). Both GUI modes require aTrust; EasyConnect remains available through the command-line core. Options that conflict with Clash routing are disabled in the interface or rejected before enabling. Custom gateways and complex authentication combinations need your own verification.
-
-## How it works
-
-Clash receives traffic through TUN, the system proxy, or per-application proxies; FDU Bridge handles UIS authentication, the aTrust tunnel, and forwarding for selected resources, and the GUI syncs enabled campus rules through a local rule endpoint. When enabled, the GUI adds the `FDU-ROUTER` node, campus rules, and a dedicated return listener to Clash: for Clash Verge Rev it backs up and writes subscription extensions; for other clients it loads an in-memory overlay through the controller, leaving subscription files and private configuration untouched, and reconnects after the client reloads. The GUI does not change the system proxy, bypass lists, or the Clash TUN switch.
-
-| Clash mode | Selected campus resources | Other traffic |
+| System | Download | How to open |
 | --- | --- | --- |
-| Global | Clash → FDU Bridge → aTrust tunnel → campus resource | Clash → FDU Bridge → dedicated Clash return listener → exit selected in `INTERNET` |
-| Rule | Clash campus rules → FDU Bridge → aTrust tunnel → campus resource | Existing Clash rules and node selections, including proxy, direct, or reject |
+| Windows | `*-Windows-x64-setup.exe` | Run the installer, then open **FDU Connect** from the Start menu |
+| macOS | `*-macOS-universal.zip` | Unzip and open `FDU Connect.app`; the first time, right-click it in Finder and choose Open |
+| Linux | `*-linux-amd64.tar.gz` | Extract and run `fdu-connect-gui`; requires GTK 4 and WebKitGTK 6.0 |
 
-In global mode, the return listener is pinned to `INTERNET` to avoid looping back through `GLOBAL`. FDU uses a userspace network stack without an extra virtual adapter; login and VPN underlay connections are bound to a physical interface so Clash TUN does not capture them again. Standalone proxy and TUN traffic share one router and the same campus rules, without the Clash return listener.
+The Windows installer bundles WebView2, so nothing else needs downloading. `*-Windows-x64.zip` is the lightweight package used for in-app updates; use `setup.exe` for the first install.
 
-## Notes
+### Step 2: Bind an authenticator and keep the TOTP key
 
-- **Coverage**: Clash TUN covers all applications. Without it, only applications using Clash's proxy are covered, and campus addresses bypassed by the system proxy still connect directly; adjust those bypass rules yourself. Check **Coverage (覆盖范围)** on Home if access fails.
-- **TUN**: with Clash TUN, enable only Clash's TUN and keep FDU's `tun_mode` and `add_route` off. Standalone mode exposes its own TUN switch on Home; disable other VPN TUN adapters first.
-- **Loops**: when configuring routing manually, bind VPN underlay connections to a physical interface; see the upstream [discussion](https://github.com/Mythologyli/zju-connect/issues/57).
-- **Permissions**: rules only choose traffic routes and do not extend campus resource permissions. Domain routing needs the application or Clash to provide the domain name; add IP rules for connections that use only IP addresses.
+UIS sign-in requires a second factor. FDU Bridge generates the codes from a **TOTP key**, so you first need to bind a one-time password in UIS:
+
+1. Open [UIS user center → Account security](https://id.fudan.edu.cn/uc/#/pc/userCenter/accountSecurity) and bind a one-time password (动态口令).
+2. The binding page shows a QR code and a **Base32 key** (something like `JBSWY3DPEHPK3PXP`). **Copy and keep this key**; it is your TOTP key.
+3. Also scan the QR code with an authenticator app (Microsoft Authenticator, Google Authenticator, etc.) to finish binding, so you can still sign in to UIS manually.
+
+> [!IMPORTANT]
+> Enter the **key shown during binding**, not the six-digit code that changes every 30 seconds. If you bound an authenticator before but did not keep the key, unbind it in UIS and bind again.
+
+### Step 3: Enter your sign-in details
+
+Open FDU Bridge and go to **Settings → UIS automatic login (设置 → UIS 自动登录)**:
+
+| Field | Description | Example |
+| --- | --- | --- |
+| UIS account (UIS 账号) | Student or staff ID | `22307130000` |
+| UIS password (UIS 密码) | Your UIS password | |
+| TOTP key (TOTP 密钥) | The Base32 key from step 2; case and spaces are ignored | `JBSWY3DPEHPK3PXP` |
+
+Each field saves automatically when it loses focus. The card shows **Ready (已就绪)** once everything is saved.
+
+![Settings: UIS automatic login](docs/images/settings-uis.png)
+
+> [!TIP]
+> Leave all three fields empty to use the web login instead: enabling campus access opens the UIS page, and you complete verification there. Use this if your account needs a captcha, only offers SMS verification, or you prefer not to store the password. Partly filled fields are not accepted; Home asks you to complete them.
+
+### Step 4: Choose how to use it
+
+Back on **Home (首页)**, pick a mode at the top of the connection card:
+
+<details open>
+<summary><b>With Clash (配合 Clash) — recommended if you already use Clash</b></summary>
+
+1. Start your Clash client and pick a subscription and node; global or rule mode both work.
+2. In FDU Bridge, confirm the detected client under **Settings → Proxy integration (设置 → 代理接入)**. If several clients are running, select one and save.
+3. Back on Home, turn on **Enable campus access (启用校内访问)** and accept the first-use prompt.
+
+FDU Bridge adds campus rules and an `FDU-ROUTER` node to Clash. After that:
+
+- Switch nodes on this app's **Internet nodes (外网节点)** page in global mode, or in Clash in rule mode;
+- Change mode and TUN in Clash; FDU Bridge follows automatically;
+- To quit, turn off campus access on Home first, then quit Clash. Turning it off restores Clash's outside exit; to remove everything FDU wrote into Clash, use **Settings → Maintenance (设置 → 维护)**.
+
+Clash Verge Rev (including portable installs) connects in one click. FlClash, Clash Party, Sparkle, Clash Nyanpasu, ClashX.Meta and other Mihomo desktop clients are also supported.
+
+</details>
+
+<details>
+<summary><b>Standalone (独立使用) — without Clash</b></summary>
+
+![Home: standalone](docs/images/home-standalone.png)
+
+1. On Home, choose **Standalone**, then pick a routing mode and whether to enable TUN:
+
+   | Routing mode | Effect |
+   | --- | --- |
+   | Rule (规则) | Sites in your campus resource list use the campus VPN; everything else goes direct |
+   | Global (全局) | All captured traffic uses the campus VPN (except LAN and local addresses), so only destinations the university allows will work |
+
+2. Turn on **Enable campus access**.
+3. Send traffic into FDU Bridge:
+   - **Without TUN**: set your browser or app proxy to the SOCKS5/HTTP address shown on Home (use the button next to it to copy). For SOCKS5, enable remote DNS resolution (`socks5h`).
+   - **With TUN**: captures the whole computer's TCP/UDP traffic, no proxy settings needed. Run as administrator or root, and turn off other VPNs' TUN first.
+
+See [standalone mode](docs/standalone.md) for details.
+
+</details>
+
+The mode and routing choice can only be changed while campus access is off, and are saved automatically.
+
+### Step 5: Add campus sites
+
+On the **Campus resources (校内资源)** page, add the sites that should use the campus VPN, tick each one you want enabled, and click **Save (保存)**:
+
+| Type | Example | Matches |
+| --- | --- | --- |
+| Exact domain | `library.fudan.edu.cn` | That domain only |
+| Domain suffix | `fdu.edu.cn` | The domain and all its subdomains |
+| IPv4 subnet | `10.0.0.0/8` or `202.120.224.6` | Those IP addresses |
+
+Saved rules apply to new connections immediately; existing connections keep their route. The list can be imported and exported as JSON to sync between computers.
+
+## When something does not work
+
+1. **Check coverage on Home (覆盖范围).** With Clash and without Clash TUN, only applications that use Clash's proxy are captured. Campus addresses bypassed by your system proxy still connect directly, so adjust the bypass list yourself.
+2. **Use the Diagnostics page (诊断).** Enter the URL that fails to see whether it matches a campus rule, the login and tunnel state, and the result of each DNS/TCP/TLS/HTTP step with suggestions.
+3. **To report a problem**, click **Preview redacted report (预览脱敏报告)** under the result, review it, then copy or export it. The report excludes account details, tokens, cookies, personal paths and custom campus hosts, so it is safe to attach to an issue.
+4. **Expired login:** Home tells you to sign in again; click **Relogin (重新登录)**. Rules and settings are kept. Temporary network drops reconnect automatically.
+
+> [!WARNING]
+> **Compliance and security**
+>
+> - Use this tool only to reach resources the university has granted you, and follow the university's network and information-security rules. Do not use global mode to turn the campus VPN into a general-purpose exit.
+> - The password and TOTP key are **stored in plain text** in the local `client.toml`, and in the configuration backups made when connecting to Clash. Do not share these files. After using a shared computer, clear the credentials in Settings and delete the directories listed under "Where is the configuration stored?" below.
+> - The TOTP key is your second sign-in factor; anyone who has it can generate your codes. If you suspect it leaked, unbind and rebind the one-time password in UIS and change your password.
 
 ## FAQ
 
 <details>
-<summary>Requirements, automatic login, data directories, and upgrades</summary>
+<summary>I entered the TOTP key but verification still fails</summary>
 
-- **Requirements**: the Windows `*-Windows-x64-setup.exe` includes the WebView2 offline installer, and the setup wizard installs the dependency when needed without another download. The lightweight `*-Windows-x64.zip` package is used for in-app updates and requires an existing Runtime; rerun setup to repair it if the Runtime is removed. The macOS app is not notarized; open it the first time by right-clicking it in Finder and choosing Open. Linux needs GTK 4 and WebKitGTK 6.0.
-- **Windows startup failures**: startup preparation and interface initialization failures display a native error message. The log is at `%LOCALAPPDATA%\FDU Connect\logs\startup.log`. An unwritable log does not prevent startup; any later fatal error is still shown directly.
-- **Automatic login**: Fudan UIS uses the account password and bound TOTP secret directly, without a browser. Credentials are saved in the GUI's local `client.toml` and its configuration backups; disconnect to edit or clear them in Settings. Failed authentication reports an error without opening a webpage or repeatedly submitting rejected codes.
-- **Recovery and expired login**: selective Clash connections retry transient failures automatically. An expired session pauses retries; click **Relogin (重新登录)** on Home to authenticate again. Disabling campus access stops retries and keeps rules and settings.
-- **Automatic connection on startup**: after integration consent and auto-connect are enabled, FDU waits for the Clash client and local controller to start before enabling campus access. Disable access from Home or the tray, or quit, to cancel the wait. Invalid settings, ambiguous targets, and rejected controller requests stop the attempt and display an error. Standalone mode does not wait for Clash.
-- **Discovery fails**: use manual integration, or standalone mode if the client lacks the required capabilities.
-- **Port in use**: automatic/manual integration switches to free ports before enabling; in standalone mode, adjust the listening ports yourself. See **Diagnostics (诊断)** for other errors.
-- **Data directories**: Windows normally uses the program directory, falling back to `%APPDATA%\FDU Connect` when it is not writable (an existing per-user directory keeps being used). macOS uses `~/Library/Application Support/FDU Connect`. Linux uses `$XDG_CONFIG_HOME/fdu-connect`, or `~/.config/fdu-connect` when unset.
-- **Upgrades**: keep those directories to keep your configuration and login state. Closing the window may leave the program in the tray; quit it before replacing the files.
-- **Windows uninstall**: uninstall from the system's Installed apps list. Configuration, rules, login state, and the shared WebView2 Runtime are preserved. Personal data normally remains in the former installation folder (by default `%LOCALAPPDATA%\Programs\FDU Connect`); an existing or fallback per-user configuration may be in `%APPDATA%\FDU Connect`. The uninstall wizard lists the retained locations. After using a shared computer, manually remove your personal data from these locations.
-- **Remove integration**: after disconnecting, use **Settings → Maintenance (维护)** to remove verifiable FDU entries for the client/subscription in the current integration record, preserving subscriptions and personal settings. Uncertain ownership leaves files and recovery records intact.
-- **Directory migration**: in the GUI using the new directory, choose **Settings → Maintenance → Select Old Directory (选择旧目录)**, preview, then copy managed settings, rules, and login state. The source must contain `gui-settings.json`; original files remain, and differing destination data is never overwritten.
-- **Tray**: some Linux desktops hide tray icons, so closing the window quits by default on Linux; enable minimize to tray in Settings to change this.
+- Make sure you entered the Base32 key from binding, not a six-digit code.
+- Codes depend on the clock; check that your system time is correct (enable automatic time sync).
+- After a failed sign-in the app stops retrying so your account does not get locked by repeated errors. Fix the settings, then click **Relogin** on Home.
 
 </details>
 
+<details>
+<summary>My Clash client is not detected</summary>
+
+- Make sure Clash is running with its external controller enabled.
+- Under **Settings → Proxy integration**, switch to **Manual (手动接入)** and select the complete runtime configuration the client actually uses (not a node-only subscription), plus the controller address and secret if needed.
+- If the client lacks the Mihomo controller API, rule providers or dedicated listeners, use **Standalone**.
+- To add it to your subscription yourself, copy the override script or YAML fragment from **Settings → Proxy integration → Export extension (导出扩展)**. Export again after changing FDU's ports.
+
+</details>
+
+<details>
+<summary>Can I use it together with Clash TUN?</summary>
+
+Yes, and that is recommended: with Clash, enable only Clash's TUN to cover every application. FDU Bridge does not create another virtual adapter; its login and VPN connections are bound to the physical interface so Clash TUN does not capture them again. Use FDU's own TUN only in standalone mode, and turn off other VPNs' TUN first.
+
+</details>
+
+<details>
+<summary>A port is already in use</summary>
+
+With Clash, free ports are chosen automatically before enabling. In standalone mode, change the listening ports under **Settings → Standalone campus proxy (设置 → 独立校园代理)**.
+
+</details>
+
+<details>
+<summary>Connect automatically at startup</summary>
+
+Under **Settings → Appearance and startup (设置 → 外观与启动)**, turn on start at login and enable campus access after launch. With Clash, FDU Bridge waits for Clash and its controller before connecting; cancel the wait from Home or the tray.
+
+</details>
+
+<details>
+<summary>Where is the configuration stored? How do I upgrade or uninstall?</summary>
+
+- **Configuration directory**
+  - Windows: normally the program directory; `%APPDATA%\FDU Connect` when that is not writable
+  - macOS: `~/Library/Application Support/FDU Connect`
+  - Linux: `$XDG_CONFIG_HOME/fdu-connect`, or `~/.config/fdu-connect` when unset
+- **Upgrade**: check for updates in the app, or keep the directory above when upgrading manually to keep your configuration and login. Closing the window may leave the app in the tray; quit it before replacing files.
+- **Move to a new directory**: in the GUI at the new location, open **Settings → Maintenance → Select old directory**, preview, then copy configuration, rules and login state. The old files are kept.
+- **Remove the Clash integration**: with campus access off, remove what FDU wrote into Clash under **Settings → Maintenance**. Subscriptions and personal settings are kept.
+- **Uninstall on Windows**: uninstall from the system's Installed apps list. Configuration, rules and login data are not deleted (by default in `%LOCALAPPDATA%\Programs\FDU Connect`); the uninstaller lists what it kept, so delete it manually if needed.
+- **Windows fails to start**: an error dialog is shown, and the log is at `%LOCALAPPDATA%\FDU Connect\logs\startup.log`.
+- **Linux tray**: some desktops hide tray icons, so on Linux closing the window quits by default; change this in Settings.
+
+</details>
+
+<details>
+<summary>Does it work with EasyConnect or other universities' VPNs?</summary>
+
+The GUI's Clash integration and standalone routing support aTrust only (the VPN Fudan currently uses). EasyConnect remains available through the command-line core; see the [configuration reference](docs/config_en.md). **Settings → Advanced (设置 → 高级设置)** adjusts the server, authentication, DNS, network interface and port forwarding, or imports a TOML configuration. Other gateways and complex authentication combinations need your own verification.
+
+</details>
+
+---
+
+## How it works
+
+> This section is for readers interested in the implementation; you do not need it for everyday use.
+
+FDU Bridge handles UIS authentication, the aTrust tunnel and forwarding of campus resources; where traffic comes from depends on the mode.
+
+**With Clash**: Clash receives traffic through TUN, the system proxy or per-application proxies. When enabled, the GUI adds an `FDU-ROUTER` node, campus rules and a dedicated return listener to Clash. Clash Verge Rev is backed up before its subscription extensions are written; other clients load an in-memory override through their controller without touching subscription files, and reconnect automatically after the client reloads. The GUI does not change the system proxy, bypass list or Clash's TUN switch.
+
+| Clash mode | Campus resources | Other traffic |
+| --- | --- | --- |
+| Global | Clash → FDU Bridge → aTrust tunnel | Clash → FDU Bridge → Clash return listener → exit selected in `INTERNET` |
+| Rule | Clash campus rules → FDU Bridge → aTrust tunnel | Clash's existing rules and nodes |
+
+In global mode, the return listener is pinned to `INTERNET` to avoid looping back through `GLOBAL`.
+
+**Standalone**: application proxies or FDU's TUN feed the same router, and rule mode shares the campus resource list with Clash mode. In TUN mode, DNS queries sent to public resolvers are intercepted and answered with temporary addresses that keep the original domain for routing; queries sent to LAN resolvers are forwarded unchanged.
+
+In both modes FDU uses a userspace network stack, and its login and VPN connections are bound to the physical interface so another TUN does not capture them again. Campus destinations never fall back to a direct connection when the tunnel is unavailable.
+
 ## More documentation
 
+- [Standalone mode](docs/standalone.md) (Chinese): the four combinations, DNS handling and limitations
 - [Configuration reference](docs/config_en.md): command-line and TOML options, selective routing, FDU TUN
-- [Build from source](docs/build_en.md): GUI builds and packages, command-line core, service, and Docker
+- [Building from source](docs/build_en.md): GUI build and packaging, command-line core, services and Docker
 - [Roadmap](docs/roadmap_en.md)
 
 ## Acknowledgements
 
-- [Mythologyli/zju-connect](https://github.com/Mythologyli/zju-connect): direct upstream of this fork.
+- [Mythologyli/zju-connect](https://github.com/Mythologyli/zju-connect): the direct upstream of this project.
 - [AkiraSalvare/fdu-connect](https://github.com/AkiraSalvare/fdu-connect): reference project for the Fudan adaptation.
-- [EasierConnect](https://github.com/lyc8503/EasierConnect) (no longer maintained): the basis of ZJU Connect, by [lyc8503](https://github.com/lyc8503).
+- [EasierConnect](https://github.com/lyc8503/EasierConnect) (no longer maintained): the foundation of ZJU Connect, by [lyc8503](https://github.com/lyc8503).
 - [socks2http](https://github.com/zenhack/socks2http)
 - [![image](docs/yxvm.png)](https://yxvm.com/) [NodeSupport](https://github.com/NodeSeekDev/NodeSupport) sponsored the upstream project.
 
-Thanks to all contributors to the upstream and original projects:
+Thanks to all contributors of the upstream and original projects:
 
 <a href="https://github.com/mythologyli/zju-connect/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=mythologyli/zju-connect" />
 </a>
+
+## License
+
+[AGPL-3.0](LICENSE)

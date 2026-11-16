@@ -110,7 +110,7 @@ export function UISLogin({ values, saved, disabled, onChange, onSave }: {
         <div className="uis-note">
           <KeyRound size={14} />
           <span>
-            密码和 TOTP 密钥以明文保存在本机 <code>client.toml</code>，导出日志和配置备份也会包含它们，请勿分享这些文件。
+            密码和 TOTP 密钥以明文保存在本机 <code>client.toml</code>，接入 Clash 时生成的配置备份也会包含它们，请勿分享这些文件。
           </span>
         </div>
         {error && <div className="field-error uis-error" role="alert"><CircleAlert size={14} />{error}</div>}
