@@ -11,6 +11,7 @@ server_address = "vpn.fudan.edu.cn"
 server_port = 443
 username = "" # Fudan UIS account (student/staff ID).
 password = ""
+totp_secret = "" # Bound Base32 authenticator key, not a six-digit code. Required for Fudan UIS; the GUI autosaves it locally.
 disable_zju_config = true # Only affects EasyConnect.
 disable_remote_dns = false
 socks_bind = "127.0.0.1:1080"
@@ -49,7 +50,6 @@ custom_dns = [
 
 
 # EasyConnect specific settings
-totp_secret = "" # Bound Base32 authenticator key, not a six-digit code. GUI autosaves it locally.
 cert_file = ""
 cert_password = ""
 disable_server_config = false

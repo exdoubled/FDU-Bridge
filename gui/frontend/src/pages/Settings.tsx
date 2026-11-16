@@ -172,7 +172,7 @@ export function Settings() {
         <div className="stack">
           {uisLogin && view && <>
             {active && <Banner tone="info">关闭校内访问后可修改 UIS 登录信息</Banner>}
-            <UISLogin values={values} saved={view.values} disabled={locked || status.external} onChange={change} onSave={saveUISCredential} />
+            <UISLogin values={values} saved={view.values} disabled={active || status.external} onChange={change} onSave={saveUISCredential} />
           </>}
 
           {standalone ? <section className="card section" id="proxy" style={{ padding: 0 }}>

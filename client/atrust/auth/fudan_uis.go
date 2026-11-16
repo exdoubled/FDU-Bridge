@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -38,6 +39,16 @@ type uisReply struct {
 	LoginToken    string          `json:"loginToken"`
 }
 
+// ErrUISRejected marks a terminal UIS failure: rejected or unusable credentials.
+// Callers must not retry it automatically, or the account may be locked.
+var ErrUISRejected = errors.New("UIS rejected the credentials")
+
+type uisRejection string
+
+func (e uisRejection) Error() string { return string(e) }
+
+func (uisRejection) Is(target error) bool { return target == ErrUISRejected }
+
 func isFudanUISURL(u *url.URL) bool {
 	return u.Scheme == "https" && u.Hostname() == "id.fudan.edu.cn" &&
 		(u.Port() == "" || u.Port() == "443") && u.User == nil
@@ -56,15 +67,32 @@ func (s *Session) loginFudanUIS(loginURL, username, password string) (string, er
 	if username == "" || password == "" {
 		return "", fmt.Errorf("请在设置中填写 UIS 账号、密码和 TOTP 密钥；命令行请配置 username、password、totp_secret")
 	}
+	// The second factor is mandatory. Validate the key before any request so a
+	// missing or malformed secret never costs a login attempt.
+	if strings.TrimSpace(s.totpSecret) == "" {
+		return "", uisRejection("请在设置中填写 TOTP 密钥；命令行请配置 totp_secret")
+	}
+	secret, err := configs.NormalizeTOTPSecret(s.totpSecret)
+	if err != nil {
+		return "", uisRejection(err.Error())
+	}
 	jar, _ := cookiejar.New(nil)
-	uis := &http.Client{Transport: s.client.Transport, Jar: jar, Timeout: 60 * time.Second}
+	uis := &http.Client{Jar: jar, Timeout: 60 * time.Second}
 	// UIS receives the account credentials, so verify its certificate even when
-	// the aTrust gateway uses a self-signed certificate. Preserve the underlay.
-	if transport, ok := s.client.Transport.(*http.Transport); ok {
+	// the aTrust gateway uses a self-signed certificate. Preserve the underlay,
+	// and refuse to send credentials when it cannot be cloned and hardened.
+	if s.uisTransport != nil {
+		uis.Transport = s.uisTransport
+	} else {
+		transport, ok := s.client.Transport.(*http.Transport)
+		if !ok {
+			return "", fmt.Errorf("UIS 登录需要可校验证书的 HTTPS 传输，已拒绝提交凭据")
+		}
 		secure := transport.Clone()
-		secure.TLSClientConfig = secure.TLSClientConfig.Clone()
 		if secure.TLSClientConfig == nil {
 			secure.TLSClientConfig = &tls.Config{}
+		} else {
+			secure.TLSClientConfig = secure.TLSClientConfig.Clone()
 		}
 		secure.TLSClientConfig.InsecureSkipVerify = false
 		uis.Transport = secure
@@ -153,37 +181,35 @@ func (s *Session) loginFudanUIS(loginURL, username, password string) (string, er
 		return "", err
 	}
 	if authenticated.Code != "200" {
-		return "", fmt.Errorf("UIS 账号密码认证失败，请检查账号、密码或账户验证要求")
+		return "", uisRejection("UIS 账号密码认证失败，请检查账号、密码或账户验证要求；已停止自动重试")
 	}
-	if authenticated.Second {
-		if !slices.Contains(authenticated.ModuleCodes, "userAndOtp") {
-			return "", fmt.Errorf("UIS 要求二次验证，但未提供 TOTP 方式")
-		}
-		if authenticated.RequestNumber == "" || authenticated.AuthChainCode == "" {
-			return "", fmt.Errorf("UIS TOTP 认证上下文不完整")
-		}
-		secret, err := configs.NormalizeTOTPSecret(s.totpSecret)
-		if err != nil {
-			return "", err
-		}
-		code, err := totp.GenerateCode(secret, time.Now())
-		if err != nil {
-			return "", fmt.Errorf("UIS TOTP 生成失败，请检查密钥")
-		}
-		if authenticated.UserName != "" {
-			username = authenticated.UserName
-		}
-		payload["authModuleCode"], payload["authChainCode"] = "userAndOtp", authenticated.AuthChainCode
-		payload["requestNumber"] = authenticated.RequestNumber
-		payload["authPara"] = map[string]string{"loginName": username, "otpCode": code}
-		log.Println("UIS TOTP 自动验证")
-		authenticated = uisReply{}
-		if err := s.uisJSON(uis, "/idp/authn/authExecute", payload, &authenticated); err != nil {
-			return "", err
-		}
-		if authenticated.Code != "200" || authenticated.Second || authenticated.LoginToken == "" {
-			return "", fmt.Errorf("UIS TOTP 验证失败，请检查绑定密钥和系统时间；已停止自动重试")
-		}
+	// The second factor is mandatory: never accept a login that skipped TOTP.
+	if !authenticated.Second {
+		return "", uisRejection("UIS 未要求二次验证，已拒绝继续登录；已停止自动重试")
+	}
+	if !slices.Contains(authenticated.ModuleCodes, "userAndOtp") {
+		return "", uisRejection("UIS 要求二次验证，但未提供 TOTP 方式")
+	}
+	if authenticated.RequestNumber == "" || authenticated.AuthChainCode == "" {
+		return "", fmt.Errorf("UIS TOTP 认证上下文不完整")
+	}
+	code, err := totp.GenerateCode(secret, time.Now())
+	if err != nil {
+		return "", uisRejection("UIS TOTP 生成失败，请检查密钥")
+	}
+	if authenticated.UserName != "" {
+		username = authenticated.UserName
+	}
+	payload["authModuleCode"], payload["authChainCode"] = "userAndOtp", authenticated.AuthChainCode
+	payload["requestNumber"] = authenticated.RequestNumber
+	payload["authPara"] = map[string]string{"loginName": username, "otpCode": code}
+	log.Println("UIS TOTP 自动验证")
+	authenticated = uisReply{}
+	if err := s.uisJSON(uis, "/idp/authn/authExecute", payload, &authenticated); err != nil {
+		return "", err
+	}
+	if authenticated.Code != "200" || authenticated.Second || authenticated.LoginToken == "" {
+		return "", uisRejection("UIS TOTP 验证失败，请检查绑定密钥和系统时间；已停止自动重试")
 	}
 	if authenticated.LoginToken == "" {
 		return "", fmt.Errorf("UIS 未返回登录令牌")

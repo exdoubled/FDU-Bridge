@@ -39,12 +39,12 @@ func TestFudanUISAuthentication(t *testing.T) {
 	}{
 		{name: "totp", otpCalls: 1, engineCalls: 1},
 		{name: "header-callback", otpCalls: 1, engineCalls: 1, header: true},
-		{name: "no-second-factor", passwordReply: `{"code":200,"loginToken":"login-token"}`, engineCalls: 1},
+		{name: "no-second-factor", passwordReply: `{"code":200,"loginToken":"login-token"}`, wantError: "未要求二次验证"},
 		{name: "password-rejected", passwordReply: `{"code":401,"message":"private-password"}`, wantError: "账号密码认证失败"},
 		{name: "totp-unavailable", passwordReply: `{"code":200,"second":true,"moduleCodes":["sms"]}`, wantError: "未提供 TOTP"},
 		{name: "missing-context", passwordReply: `{"code":200,"second":true,"moduleCodes":["userAndOtp"]}`, wantError: "上下文不完整"},
 		{name: "code-is-not-secret", secret: "123456", wantError: "Base32"},
-		{name: "missing-secret", secret: " ", wantError: "Base32"},
+		{name: "missing-secret", secret: " ", wantError: "TOTP 密钥"},
 		{name: "totp-rejected", otpCalls: 1, otpReply: `{"code":401}`, wantError: "TOTP 验证失败"},
 		{name: "additional-factor", otpCalls: 1, otpReply: `{"code":200,"second":true,"loginToken":"login-token"}`, wantError: "TOTP 验证失败"},
 		{name: "missing-token", otpCalls: 1, otpReply: `{"code":200}`, wantError: "TOTP 验证失败"},
@@ -141,7 +141,7 @@ func TestFudanUISAuthentication(t *testing.T) {
 			if tc.secret != "" {
 				s.totpSecret = tc.secret
 			}
-			s.client.Transport = uisTestTransport(func(req *http.Request) (*http.Response, error) {
+			s.uisTransport = uisTestTransport(func(req *http.Request) (*http.Response, error) {
 				if !isFudanUISURL(req.URL) {
 					t.Fatal("visited OAuth callback instead of returning it")
 				}
@@ -164,7 +164,7 @@ func TestFudanUISAuthentication(t *testing.T) {
 			if err != nil && (strings.Contains(err.Error(), "private-password") || strings.Contains(err.Error(), "private-code")) {
 				t.Fatal("error exposed credentials")
 			}
-			if passwordCalls != 1 || otpCalls != tc.otpCalls || engineCalls != tc.engineCalls {
+			if passwordCalls != map[bool]int{true: 0, false: 1}[tc.secret == "123456" || tc.secret == " "] || otpCalls != tc.otpCalls || engineCalls != tc.engineCalls {
 				t.Fatalf("request counts = %d, %d, %d", passwordCalls, otpCalls, engineCalls)
 			}
 		})
@@ -174,7 +174,7 @@ func TestFudanUISAuthentication(t *testing.T) {
 func TestFudanUISRejectsUntrustedLoginAndDoesNotOpenBrowser(t *testing.T) {
 	for _, login := range []string{"http://id.fudan.edu.cn/?client_id=x", "https://other.example/?client_id=x", "https://id.fudan.edu.cn:444/?client_id=x", "https://user@id.fudan.edu.cn/?client_id=x", "https://id.fudan.edu.cn/"} {
 		s := NewSession("vpn.example.com", nil)
-		s.client.Transport = uisTestTransport(func(*http.Request) (*http.Response, error) { t.Fatal("unexpected request"); return nil, nil })
+		s.uisTransport = uisTestTransport(func(*http.Request) (*http.Response, error) { t.Fatal("unexpected request"); return nil, nil })
 		if _, err := s.loginFudanUIS(login, "student", "password"); err == nil {
 			t.Fatal("accepted invalid login URL")
 		}
@@ -200,15 +200,22 @@ func TestFudanUISRejectsUntrustedLoginAndDoesNotOpenBrowser(t *testing.T) {
 func TestFudanUISCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := NewSessionContext(ctx, "vpn.example.com", nil)
+	s.totpSecret = "JBSWY3DPEHPK3PXP"
 	entered := make(chan struct{})
-	s.client.Transport = uisTestTransport(func(r *http.Request) (*http.Response, error) {
+	s.uisTransport = uisTestTransport(func(r *http.Request) (*http.Response, error) {
 		close(entered)
 		<-r.Context().Done()
 		return nil, r.Context().Err()
 	})
 	done := make(chan error, 1)
 	go func() { _, err := s.loginFudanUIS(fudanUISOrigin+"/?client_id=x", "student", "password"); done <- err }()
-	<-entered
+	select {
+	case <-entered:
+	case err := <-done:
+		t.Fatalf("login returned before sending a request: %v", err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("UIS request was never sent")
+	}
 	cancel()
 	select {
 	case err := <-done:

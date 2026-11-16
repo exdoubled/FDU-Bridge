@@ -113,6 +113,7 @@ type Session struct {
 	response         map[string]json.RawMessage
 	challengeHandler authchallenge.Handler
 	dialContext      client.DialContextFunc
+	uisTransport     http.RoundTripper // tests only: replaces the hardened UIS transport
 }
 
 func NewSession(server string, tlsKeyLogWriter io.Writer, dialContext ...client.DialContextFunc) *Session {

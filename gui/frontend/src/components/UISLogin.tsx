@@ -16,7 +16,7 @@ export function UISLogin({ values, saved, disabled, onChange, onSave }: {
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const complete = fields.every(({ key }) => !!values[key] && values[key] === saved[key]);
+  const complete = fields.every(({ key }) => !!values[key] && String(values[key] ?? "") === String(saved[key] ?? ""));
   const ready = complete && !pending && !error;
 
   useEffect(() => { setError(""); }, [saved]);
