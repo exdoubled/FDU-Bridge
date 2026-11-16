@@ -14,6 +14,8 @@ type HTTPSOauth2Login struct {
 	Domain   string
 	Code     string
 	Callback string
+	Username string
+	Password string
 }
 
 func (m HTTPSOauth2Login) AuthType() string {
@@ -25,7 +27,15 @@ func (m HTTPSOauth2Login) LoginDomain() string {
 }
 
 func (m HTTPSOauth2Login) login(s *Session, authInfo AuthInfo) error {
-	return s.loginAuthHttpsOauth2(authInfo.LoginURL, m.Domain, m.Code, m.Callback)
+	callback := m.Callback
+	if m.Domain == "id.fudan.edu.cn" && callback == "" && m.Code == "" {
+		var err error
+		callback, err = s.loginFudanUIS(authInfo.LoginURL, m.Username, m.Password)
+		if err != nil {
+			return err
+		}
+	}
+	return s.loginAuthHttpsOauth2(authInfo.LoginURL, m.Domain, m.Code, callback)
 }
 
 func (s *Session) loginAuthHttpsOauth2(loginURL, loginDomain, code, callback string) error {
