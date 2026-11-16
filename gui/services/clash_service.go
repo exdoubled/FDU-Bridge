@@ -65,7 +65,7 @@ func overview(root, config string, plan *clash.Plan, err error) ClashOverview {
 
 func (s *ClashService) inspect() (ClashOverview, *clash.Plan) {
 	if s.b.proxyOnly() {
-		return ClashOverview{Ready: true, Profile: "仅本地代理", Mode: "proxy", FduConfig: s.b.workspace.Target, Files: []string{}}, nil
+		return ClashOverview{Ready: true, Profile: "独立校园代理", Mode: "proxy", FduConfig: s.b.workspace.Target, Files: []string{}}, nil
 	}
 	root, config, pathErr := s.paths()
 	if pathErr != nil {
@@ -94,7 +94,7 @@ func (s *ClashService) Nodes() (clash.NodeState, error) {
 	s.b.clashBusy.Lock()
 	defer s.b.clashBusy.Unlock()
 	if s.b.proxyOnly() {
-		return clash.NodeState{Choices: []string{}, Types: map[string]string{}, Problem: "仅本地代理：请在外部客户端选择出口"}, nil
+		return clash.NodeState{Choices: []string{}, Types: map[string]string{}, Problem: "独立模式使用本机直连或校园隧道，无外网节点可选"}, nil
 	}
 	picker, err := s.b.picker()
 	if err != nil {
@@ -109,7 +109,7 @@ func (s *ClashService) SelectNode(name string) (clash.NodeState, error) {
 	}
 	defer s.b.clashBusy.Unlock()
 	if s.b.proxyOnly() {
-		return clash.NodeState{}, errors.New("仅本地代理：请在外部客户端选择出口")
+		return clash.NodeState{}, errors.New("独立模式使用本机直连或校园隧道，无外网节点可选")
 	}
 	picker, err := s.b.picker()
 	if err != nil {
@@ -164,7 +164,7 @@ func (s *ClashService) Cached() ClashOverview {
 	s.b.clashBusy.Lock()
 	defer s.b.clashBusy.Unlock()
 	if s.b.proxyOnly() {
-		return ClashOverview{Ready: true, Profile: "仅本地代理", Mode: "proxy", FduConfig: s.b.workspace.Target, Files: []string{}}
+		return ClashOverview{Ready: true, Profile: "独立校园代理", Mode: "proxy", FduConfig: s.b.workspace.Target, Files: []string{}}
 	}
 	root, config, err := s.paths()
 	if err != nil {

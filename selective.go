@@ -24,6 +24,7 @@ import (
 	"github.com/mythologyli/zju-connect/configs"
 	"github.com/mythologyli/zju-connect/dial"
 	"github.com/mythologyli/zju-connect/internal/keylog"
+	"github.com/mythologyli/zju-connect/internal/standalonetun"
 	"github.com/mythologyli/zju-connect/log"
 	"github.com/mythologyli/zju-connect/resolve"
 	"github.com/mythologyli/zju-connect/routing"
@@ -41,7 +42,11 @@ func runSelective(c configs.Config) error {
 		return err
 	}
 	defer router.Close()
-	u, err := underlay.New(underlay.Options{InterfaceName: c.BindInterface, AutoDetect: c.AutoDetectInterface, DebugPCAPFile: c.DebugPCAPFile, LocalDNSServer: c.LocalDNSServer})
+	localDNS := c.LocalDNSServer
+	if c.TUNMode && localDNS == "" {
+		localDNS = "223.5.5.5:53"
+	}
+	u, err := underlay.New(underlay.Options{InterfaceName: c.BindInterface, AutoDetect: c.AutoDetectInterface, DebugPCAPFile: c.DebugPCAPFile, LocalDNSServer: localDNS})
 	if err != nil {
 		return err
 	}
@@ -57,6 +62,27 @@ func runSelective(c configs.Config) error {
 	defer signal.Stop(done)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	tunFailure := make(chan error, 1)
+	if c.TUNMode {
+		// Select a physical interface before installing default TUN routes.
+		u.ExcludeIP(net.ParseIP("198.18.0.1"))
+		if err := u.Prepare(net.JoinHostPort(c.ServerAddress, strconv.Itoa(c.ServerPort))); err != nil {
+			return err
+		}
+		tunSession, err := standalonetun.Start(ctx, router.Dial)
+		if err != nil {
+			return fmt.Errorf("start standalone TUN: %w", err)
+		}
+		defer tunSession.Close()
+		go func() {
+			select {
+			case err := <-tunSession.Failure():
+				tunFailure <- err
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+	}
 	stopTraffic := startSelectiveTraffic(ctx, router)
 	defer stopTraffic()
 	go func() {
@@ -76,9 +102,15 @@ func runSelective(c configs.Config) error {
 		defer watcher.Close()
 	}
 	var sessionData selectiveSessionData
-	return serveSelectiveRecovery(ctx, c, router.Dial, func(ctx context.Context, mode selectiveSessionMode, ready func()) error {
+	err = serveSelectiveRecovery(ctx, c, router.Dial, func(ctx context.Context, mode selectiveSessionMode, ready func()) error {
 		return runSelectiveVPNWithMode(ctx, c, u, router, mode, ready, &sessionData)
 	})
+	select {
+	case failure := <-tunFailure:
+		return errors.Join(err, fmt.Errorf("TUN stopped: %w", failure))
+	default:
+		return err
+	}
 }
 
 func startSelectiveTraffic(parent context.Context, router *routing.Router) func() {
@@ -123,7 +155,7 @@ func serveSelectiveRecovery(ctx context.Context, c configs.Config, dial client.D
 		return err
 	}
 	defer proxies.Close()
-	log.Printf("Selective router ready: SOCKS=%s HTTP=%s; ordinary traffic uses the configured Clash upstream", proxies.SocksAddr(), proxies.HTTPAddr())
+	log.Printf("Router ready: SOCKS=%s HTTP=%s; outbound=%s mode=%s", proxies.SocksAddr(), proxies.HTTPAddr(), c.Routing.UpstreamProxy, c.Routing.Mode)
 	runSelectiveSessions(ctx, connect, authchallenge.GUIRelogin(), authchallenge.GUIState, time.Second)
 	return nil
 }

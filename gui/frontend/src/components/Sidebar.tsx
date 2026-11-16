@@ -13,7 +13,7 @@ const items: { page: Page; label: string; icon: typeof House }[] = [
 ];
 
 export function Sidebar() {
-  const { page, navigate, status, dirty } = useStore();
+  const { page, navigate, status, dirty, config } = useStore();
   const tone = stateTone(status);
   return (
     <nav className="sidebar" aria-label="主导航">
@@ -21,7 +21,7 @@ export function Sidebar() {
         <div className="brand-mark">F</div>
         FDU Connect
       </div>
-      {items.map(({ page: target, label, icon: Icon }) => (
+      {items.filter((item) => item.page !== "nodes" || config?.integration.mode !== "proxy").map(({ page: target, label, icon: Icon }) => (
         <button key={target} className={`nav-item${page === target ? " active" : ""}`} onClick={() => navigate(target)}
           aria-current={page === target ? "page" : undefined}>
           <Icon size={18} />

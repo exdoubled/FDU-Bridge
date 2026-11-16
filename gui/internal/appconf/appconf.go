@@ -21,9 +21,12 @@ type Config struct {
 	// FduConfig is the core config Clash integration targets; it may live outside the GUI directory.
 	FduConfig string `json:"fduConfig"`
 	// ConfigPath is the GUI-owned config the settings page saves and connections use.
-	ConfigPath    string      `json:"configPath"`
-	CampusConsent bool        `json:"campusConsent"`
-	Integration   Integration `json:"integration"`
+	ConfigPath       string      `json:"configPath"`
+	CampusConsent    bool        `json:"campusConsent"`
+	Integration      Integration `json:"integration"`
+	ClashIntegration Integration `json:"clashIntegration"`
+	StandaloneMode   string      `json:"standaloneMode"`
+	StandaloneTUN    bool        `json:"standaloneTun"`
 }
 
 // Integration remembers a local client binding; empty Mode keeps the existing automatic setup.
@@ -105,6 +108,12 @@ func Decode(data []byte) (Config, error) {
 	}
 	if c.ClashDir == "" {
 		c.ClashDir = DefaultClashDir()
+	}
+	// Before standalone routing modes existed, "proxy" sent every flow through the VPN and
+	// left the splitting to an external client. Keep that behavior and ask for consent again.
+	if c.Integration.Mode == "proxy" && c.StandaloneMode == "" {
+		c.StandaloneMode = "global"
+		c.CampusConsent = false
 	}
 	return c, err
 }

@@ -75,9 +75,18 @@ func (b *Backend) previewConnect() (ConnectPreview, error) {
 	}
 	if b.proxyOnly() {
 		b.mu.Lock()
-		consent := b.config.CampusConsent
+		consent, tun, mode := b.config.CampusConsent, b.config.StandaloneTUN, b.config.StandaloneMode
 		b.mu.Unlock()
-		return ConnectPreview{NeedsConsent: !consent, Profile: "本地代理", Message: "启动本地校园代理，不操作其他客户端。请在应用或代理客户端中设置 SOCKS5/HTTP 代理与分流规则。"}, nil
+		message := "校园规则走 FDU，其余流量直连。"
+		if mode == "global" {
+			message = "所有接入流量走校园隧道，学校未授权的目标可能无法访问。"
+		}
+		if tun {
+			message += "开启 TUN 接管系统 TCP/UDP 流量，停用时移除虚拟网卡和路由。请先关闭其他 VPN 的 TUN。"
+		} else {
+			message += "请将应用代理设为首页显示的 SOCKS5/HTTP 地址。"
+		}
+		return ConnectPreview{NeedsConsent: !consent, Profile: "独立校园代理", Message: message}, nil
 	}
 	root, err := b.campusRoot()
 	if err != nil {
@@ -368,6 +377,9 @@ func (b *Backend) waitForCampus(ctx context.Context) error {
 		if b.proxyOnly() {
 			b.mu.Lock()
 			b.enabled, b.state, b.problem, b.coverage = true, "connected", "", "设置了 FDU 本地代理的应用"
+			if b.config.StandaloneTUN {
+				b.coverage = "FDU TUN 接管的系统 TCP/UDP 流量"
+			}
 			b.connectedAt = time.Now()
 			b.mu.Unlock()
 			return nil

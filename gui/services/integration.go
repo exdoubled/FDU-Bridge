@@ -9,6 +9,7 @@ import (
 
 	"github.com/mythologyli/zju-connect/gui/internal/appconf"
 	"github.com/mythologyli/zju-connect/gui/internal/clash"
+	"github.com/mythologyli/zju-connect/gui/internal/settings"
 	"gopkg.in/yaml.v3"
 )
 
@@ -33,6 +34,51 @@ func (s *ClashService) Integration() appconf.Integration {
 }
 
 func (s *ClashService) Clients() ([]clash.ClientTarget, error) { return clash.DiscoverClients() }
+
+// SaveUsage changes only preferences; connection setup applies them after consent.
+func (s *ClashService) SaveUsage(mode, routingMode string, tun bool) (appconf.Config, error) {
+	s.b.clashBusy.Lock()
+	defer s.b.clashBusy.Unlock()
+	if err := NewSettingsService(s.b).editable(); err != nil {
+		return appconf.Config{}, err
+	}
+	if s.b.runtime.ExternalRunning() {
+		return appconf.Config{}, errors.New("请先关闭其他 FDU")
+	}
+	if mode != "clash" && mode != "proxy" {
+		return appconf.Config{}, errors.New("未知使用方式")
+	}
+	if routingMode != "rule" && routingMode != "global" {
+		return appconf.Config{}, errors.New("请选择规则或全局模式")
+	}
+	if (mode == "proxy") != s.b.proxyOnly() {
+		if a := s.b.campusAttachment(); (a != nil && a.Active) || s.b.ownsCampus() {
+			return appconf.Config{}, errors.New("上次 Clash 接入尚未恢复，请先启用后停用")
+		}
+	}
+	err := s.b.saveConfig(func(c *appconf.Config) {
+		if mode == "proxy" && c.Integration.Mode != "proxy" {
+			c.ClashIntegration = c.Integration
+			c.Integration = appconf.Integration{Mode: "proxy"}
+			c.CampusConsent = false
+		} else if mode == "clash" && c.Integration.Mode == "proxy" {
+			c.Integration = c.ClashIntegration
+			if c.Integration.Mode != "manual" {
+				c.Integration.Mode = "auto"
+			}
+			c.CampusConsent = false
+		}
+		if c.StandaloneMode != routingMode || c.StandaloneTUN != tun {
+			c.CampusConsent = false
+		}
+		c.StandaloneMode, c.StandaloneTUN = routingMode, tun
+	})
+	if err != nil {
+		return appconf.Config{}, err
+	}
+	s.b.emit(EventChanged, "clash")
+	return NewAppService(s.b).Config(), nil
+}
 
 // A running session follows its original client, never whichever app appears first.
 func followingClient(previous clash.ClientTarget, clients []clash.ClientTarget) (clash.ClientTarget, error) {
@@ -176,7 +222,7 @@ func (s *ClashService) ExportIntegration() (IntegrationExport, error) {
 	}
 	result := IntegrationExport{Socks: text(view.Values, "socks_bind"), HTTP: text(view.Values, "http_bind")}
 	if s.b.proxyOnly() {
-		result.Message = "在外部客户端添加本地代理并设置分流；此方式不自动切换节点或恢复出口。"
+		result.Message = "应用使用本地代理；规则模式下校园规则走 FDU，其余直连。"
 		result.YAML = "SOCKS5: " + result.Socks + "\nHTTP: " + result.HTTP + "\n"
 		return result, nil
 	}
@@ -194,46 +240,10 @@ func (s *ClashService) ExportIntegration() (IntegrationExport, error) {
 }
 
 func (b *Backend) prepareProxy(ctx context.Context, approved bool) error {
-	if a := b.campusAttachment(); (a != nil && a.Active) || b.ownsCampus() {
-		return errors.New("仍有未恢复的客户端接入，请先恢复原接入")
-	}
-	view := b.currentView()
-	if view == nil {
-		return errors.New("未找到 VPN 配置")
-	}
-	// Round-trip the draft so connection defaults never mutate an unsaved settings view.
-	raw, err := yaml.Marshal(view.Values)
+	saved, err := b.saveProxyConfig(ctx)
 	if err != nil {
 		return err
 	}
-	var values map[string]any
-	if err = yaml.Unmarshal(raw, &values); err != nil {
-		return err
-	}
-	if values["socks_bind"] == "" && values["http_bind"] == "" {
-		values["socks_bind"], values["http_bind"] = "127.0.0.1:1080", "127.0.0.1:1081"
-	}
-	for _, key := range []string{"socks_bind", "http_bind"} {
-		if address := text(values, key); address != "" && !clash.LocalProxyAddress(address) {
-			return errors.New("本地代理需监听本机 IP 和有效端口")
-		}
-	}
-	route, _ := values["routing"].(map[string]any)
-	if route == nil {
-		route = map[string]any{}
-		values["routing"] = route
-	}
-	route["enabled"] = false
-	values["tun_mode"], values["add_route"], values["dns_hijack"], values["fake_ip"] = false, false, false, false
-	if err = ctx.Err(); err != nil {
-		return err
-	}
-	saved, err := b.workspace.Save(values)
-	if err != nil {
-		return err
-	}
-	b.setView(saved)
-	b.refreshSaved()
 	if err = b.saveConfig(func(c *appconf.Config) {
 		c.CampusConsent = approved || c.CampusConsent
 		c.ConfigPath, c.FduConfig = saved.Path, saved.Path
@@ -243,10 +253,81 @@ func (b *Backend) prepareProxy(ctx context.Context, approved bool) error {
 	b.mu.Lock()
 	b.campus, b.plan = nil, nil
 	b.mu.Unlock()
-	// A stale inactive journal must not be loaded as an owned session on next launch.
 	if err = os.Remove(filepath.Join(b.Dir, "campus-session.json")); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	b.emit(EventChanged, "settings")
 	return b.startVPN(saved.Path, saved.Values)
+}
+
+func (b *Backend) saveProxyConfig(ctx context.Context) (settings.View, error) {
+	if a := b.campusAttachment(); (a != nil && a.Active) || b.ownsCampus() {
+		return settings.View{}, errors.New("仍有未恢复的客户端接入，请先恢复原接入")
+	}
+	view := b.currentView()
+	if view == nil {
+		return settings.View{}, errors.New("未找到 VPN 配置")
+	}
+	// Round-trip the draft so connection defaults never mutate an unsaved settings view.
+	raw, err := yaml.Marshal(view.Values)
+	if err != nil {
+		return settings.View{}, err
+	}
+	var values map[string]any
+	if err = yaml.Unmarshal(raw, &values); err != nil {
+		return settings.View{}, err
+	}
+	if values["socks_bind"] == "" && values["http_bind"] == "" {
+		values["socks_bind"], values["http_bind"] = "127.0.0.1:1080", "127.0.0.1:1081"
+	}
+	for _, key := range []string{"socks_bind", "http_bind"} {
+		if address := text(values, key); address != "" && !clash.LocalProxyAddress(address) {
+			return settings.View{}, errors.New("本地代理需监听本机 IP 和有效端口")
+		}
+	}
+	route, _ := values["routing"].(map[string]any)
+	if route == nil {
+		route = map[string]any{}
+		values["routing"] = route
+	}
+	b.mu.Lock()
+	mode, tun := b.config.StandaloneMode, b.config.StandaloneTUN
+	b.mu.Unlock()
+	if mode == "" {
+		mode = "rule"
+	}
+	rulesService := NewRulesService(b)
+	ruleView, err := rulesService.Load()
+	if err != nil {
+		return settings.View{}, err
+	}
+	route["enabled"], route["upstream_proxy"], route["mode"], route["rules_file"] = true, "direct", mode, ruleView.Path
+	values["tun_mode"], values["add_route"], values["dns_hijack"], values["fake_ip"] = tun, false, false, false
+	if text(values, "bind_interface") == "" {
+		values["auto_detect_interface"] = true
+	}
+	if err = ctx.Err(); err != nil {
+		return settings.View{}, err
+	}
+	saved, err := b.workspace.Save(values)
+	if err != nil {
+		return settings.View{}, err
+	}
+	b.setView(saved)
+	b.refreshSaved()
+	// Save may materialize imported rules; never overwrite those with the draft seed.
+	store, err := rulesService.store()
+	if err != nil {
+		return settings.View{}, err
+	}
+	snapshot, err := store.Load()
+	if err != nil {
+		return settings.View{}, err
+	}
+	if snapshot.Missing {
+		if _, err = store.Save(ruleView.Snapshot.Document, ""); err != nil {
+			return settings.View{}, err
+		}
+	}
+	return saved, nil
 }

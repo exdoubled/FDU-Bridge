@@ -6,7 +6,7 @@ import { CardTitle, Hint, Spinner } from "./ui";
 import { DiagnosisReport } from "./DiagnosisReport";
 
 const diagnosisHelp = "只访问网址本身（去掉 ? 和 # 之后的部分），不带登录信息，不改任何设置。";
-const integrationNames: Record<string, string> = { auto: "自动接入 Clash", manual: "手动接入 Clash", proxy: "仅本地代理" };
+const integrationNames: Record<string, string> = { auto: "自动接入 Clash", manual: "手动接入 Clash", proxy: "独立校园代理" };
 const ruleNames: Record<string, string> = { domain: "精确域名", suffix: "域名及子域名", cidr: "IPv4 网段" };
 
 // The input already shows the diagnosed URL; repeat it only once the input has been edited.
@@ -27,7 +27,7 @@ export function CampusDiagnosticResult({ diagnosis: d, input }: { diagnosis: Cam
           </dl>
         </section>
         <section aria-label="实测证据">
-          <h3>实测证据<Hint text="从 Clash 当前入口发起访问；浏览器也走 Clash 时，结果与浏览器一致。" /></h3>
+          <h3>实测证据<Hint text={d.integration === "proxy" ? "从 FDU 本地代理入口发起访问，用于验证当前路由。" : "从 Clash 当前入口发起访问；浏览器也走 Clash 时，结果与浏览器一致。"} /></h3>
           {d.probe ? <ProbeDetails report={d.probe} /> : <div className="muted">未执行网络探测</div>}
           {d.problem && <p className="field-error selectable">{d.problem}</p>}
         </section>

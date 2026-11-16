@@ -3,8 +3,8 @@
 [中文](roadmap.md) | English
 
 - [X] Provide one-click Clash Verge Rev integration with global/rule mode and subscription following.
-- [ ] Improve standalone Fudan campus access through local SOCKS5/HTTP proxies, sharing login and campus rules with Clash integration.
-- [ ] Add a Home connection-card selector for “With Clash / Standalone,” defaulting to Clash; allow switching while disconnected, remember the choice, and show settings for the selected mode.
+- [X] Provide standalone SOCKS5/HTTP campus access with shared login and rules, global/rule routing, and optional TUN.
+- [X] Add a Home connection-card selector for “With Clash / Standalone,” defaulting to Clash; allow switching while disconnected, remember the choice, and show settings for the selected mode.
 - [X] Improve upgrades and directory migration, handle conflicts with existing configurations, and support removing the FDU integration.
 - [X] Add campus URL checks to show matching rules and access results through Clash.
 - [X] Verify and improve connection recovery after outages, network changes, and waking from sleep.

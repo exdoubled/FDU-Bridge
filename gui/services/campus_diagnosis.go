@@ -6,6 +6,7 @@ type CampusDiagnosis struct {
 	Target       string              `json:"target"`
 	Host         string              `json:"host"`
 	Integration  string              `json:"integration"`
+	RoutingMode  string              `json:"routingMode"`
 	State        string              `json:"state"`
 	Connected    bool                `json:"connected"`
 	AuthRequired bool                `json:"authRequired"`

@@ -26,12 +26,13 @@ func (s *NetworkService) DiagnoseCampus(input string) (CampusDiagnosis, error) {
 	status := s.b.Status()
 	s.b.mu.Lock()
 	mode := s.b.config.Integration.Mode
+	routingMode := text(s.b.saved, "routing.mode")
 	s.b.mu.Unlock()
 	if mode == "" {
 		mode = "auto"
 	}
 	diagnosis := CampusDiagnosis{CheckedAt: time.Now().UnixMilli(), Target: target.URL, Host: target.Host,
-		Integration: mode, State: status.State, Connected: status.Connected, AuthRequired: status.AuthRequired,
+		Integration: mode, RoutingMode: routingMode, State: status.State, Connected: status.Connected, AuthRequired: status.AuthRequired,
 		Coverage: status.Coverage, Problem: status.Problem, Suggestions: []string{}}
 	diagnosis.Rule = s.diagnoseRule(target.Host)
 	diagnosis.ExpectedPath = "没有命中启用的规则，不经过校园 VPN"
@@ -48,7 +49,13 @@ func (s *NetworkService) DiagnoseCampus(input string) (CampusDiagnosis, error) {
 		}
 	}
 	if mode == "proxy" {
-		diagnosis.ExpectedPath = "经 FDU 本地 HTTP 代理检测；分流由外部客户端决定"
+		if routingMode == "global" {
+			diagnosis.ExpectedPath = "全局模式：FDU → 校园隧道（仍受学校授权范围限制）"
+		} else if diagnosis.Rule.Known && diagnosis.Rule.Enabled {
+			diagnosis.ExpectedPath = "FDU 校园规则 → 校园隧道"
+		} else if diagnosis.Rule.Known {
+			diagnosis.ExpectedPath = "未命中启用的校园规则，由本机网络直连"
+		}
 	}
 	if !diagnosis.Connected {
 		diagnosis.ExpectedPath += "；隧道未就绪"
@@ -151,7 +158,7 @@ func campusSuggestions(d CampusDiagnosis) []string {
 	} else if !d.Connected {
 		suggestions = append(suggestions, "先在首页开启校内访问，连接就绪后再检测。")
 	}
-	if d.Integration != "proxy" {
+	if d.Integration != "proxy" || d.RoutingMode != "global" {
 		if !d.Rule.Known {
 			suggestions = append(suggestions, "到校内资源页重新读取规则。")
 		} else if !d.Rule.Matched {
@@ -180,7 +187,11 @@ func campusSuggestions(d CampusDiagnosis) []string {
 			}
 			suggestions = append(suggestions, "看是哪一步失败；前面几步都通过时，多半是网站本身不可用。")
 		case check.Kind == "http" && check.Status == "ok":
-			suggestions = append(suggestions, "网站可以访问；浏览器仍打不开时，确认浏览器走 Clash。")
+			if d.Integration == "proxy" {
+				suggestions = append(suggestions, "网站可以访问；浏览器仍打不开时，检查 FDU TUN 或浏览器的本地代理设置。")
+			} else {
+				suggestions = append(suggestions, "网站可以访问；浏览器仍打不开时，确认浏览器走 Clash。")
+			}
 		}
 	}
 	return suggestions

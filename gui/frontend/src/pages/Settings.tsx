@@ -40,6 +40,7 @@ export function Settings() {
   const [maintenanceVersion, setMaintenanceVersion] = useState(0);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const locked = status.running || status.starting || status.stopping;
+  const standalone = config?.integration.mode === "proxy";
   // Only real edits block navigation; an untouched draft stays in the backend until saved.
   const edited = !!view && JSON.stringify(values) !== baseline;
   const dirty = edited || !!view?.dirty;
@@ -151,7 +152,15 @@ export function Settings() {
       </header>
       <div className="page-body">
         <div className="stack">
-          <IntegrationSettings key={maintenanceVersion} onDirtyChange={setIntegrationDirty} />
+          {standalone ? <section className="card section" id="proxy" style={{ padding: 0 }}>
+            <div className="section-head">独立校园代理</div>
+            <div style={{ padding: "0 20px 16px" }} className="row">
+              <span className="muted">{config?.standaloneMode === "global" ? "全局模式" : "规则模式"} · {config?.standaloneTun ? "TUN 已选择" : "本地 SOCKS5／HTTP"}</span>
+              <button className="link" onClick={() => navigate("home")}>在首页切换</button>
+            </div>
+            {fields.filter((field) => ["socks_bind", "http_bind", "socks_user", "socks_passwd"].includes(field.key)).map((field) =>
+              <SettingRow key={field.key} field={field} values={values} locked={locked} onChange={change} />)}
+          </section> : <IntegrationSettings key={maintenanceVersion} onDirtyChange={setIntegrationDirty} />}
 
           <section className="card section" style={{ padding: 0 }}>
             <div className="section-head"><Palette size={16} />外观与启动</div>
@@ -192,7 +201,8 @@ export function Settings() {
               ) : <>
                 <PathSetting label="VPN 配置文件" path={overview?.fduConfig} onBrowse={pickConfig} disabled={!overview || locked} />
                 {[...primaryGroups.map(({ group }) => group), ...advancedOrder].map((group) => {
-                  const groupFields = fieldsOf(fields, group).filter((field) => field.key !== "tun_mode" && field.key !== "routing.enabled");
+                  const groupFields = fieldsOf(fields, group).filter((field) => !["tun_mode", "routing.enabled", "routing.mode"].includes(field.key)
+                    && !(standalone && ["routing.upstream_proxy", "add_route", "dns_hijack", "fake_ip", "socks_bind", "http_bind", "socks_user", "socks_passwd"].includes(field.key)));
                   if (!groupFields.length) return null;
                   const reason = availability(groupFields[0], values);
                   const expanded = !!open[group];
@@ -224,7 +234,7 @@ export function Settings() {
           }} />
         </div>
       </div>
-      {dirty && open.advanced && (
+      {dirty && (open.advanced || standalone) && (
         <footer className="savebar">
           <span className="grow" style={{ color: "var(--warning)" }}>有未保存的修改</span>
           <button className="btn" onClick={discard} disabled={saving || locked || !view?.saved}>放弃</button>

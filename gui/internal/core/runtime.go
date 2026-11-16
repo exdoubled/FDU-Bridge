@@ -159,7 +159,8 @@ func (r *Runtime) preflight(values map[string]any) error {
 			}
 			return errors.New("FDU TUN 需要 root 权限，请用 sudo 启动本程序或关闭 TUN")
 		}
-		if runtime.GOOS == "windows" {
+		selective, _ := lookup(values, "routing.enabled").(bool)
+		if runtime.GOOS == "windows" && !selective {
 			if _, err := os.Stat(filepath.Join(filepath.Dir(r.Core), "wintun.dll")); err != nil {
 				return errors.New("FDU TUN 需要与程序同目录的 wintun.dll")
 			}

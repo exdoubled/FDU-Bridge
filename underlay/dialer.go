@@ -90,6 +90,14 @@ func (d *Dialer) InterfaceName() string {
 	return d.interfaceName
 }
 
+// Prepare selects the physical interface before a system TUN changes routes.
+func (d *Dialer) Prepare(address string) error {
+	if d.ensureInterface(address) == "" {
+		return fmt.Errorf("no usable physical interface before starting TUN")
+	}
+	return nil
+}
+
 // ExcludeIP prevents an interface carrying ip from being selected as the
 // underlay. VPN clients use this to exclude their own TUN interface.
 func (d *Dialer) ExcludeIP(ip net.IP) {

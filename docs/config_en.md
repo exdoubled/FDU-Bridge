@@ -140,7 +140,7 @@ The following settings belong to the `[routing]` section of the TOML configurati
 
 The GUI generates the dedicated listener and rules file and automatically detects the underlay interface. Manage destinations in Campus resources. The settings below are for using the command-line core manually.
 
-+ `enabled`: Enable selective routing, disabled by default. Requires aTrust and either `bind_interface` or `auto_detect_interface`. Keep `tun_mode`, `add_route`, `dns_hijack`, and `fake_ip` disabled
++ `enabled`: Enable selective routing, disabled by default. Requires aTrust and either `bind_interface` or `auto_detect_interface`. For Clash integration, keep `tun_mode`, `add_route`, `dns_hijack`, and `fake_ip` disabled. Standalone `upstream_proxy = "direct"` also supports `tun_mode`
 
 + `domains`: Exact domain names, without a scheme, port, or path
 
@@ -148,13 +148,15 @@ The GUI generates the dedicated listener and rules file and automatically detect
 
 + `ip_cidrs`: IPv4 subnets for resources that should use FDU. Use `/32` for a single IP in inline rules; GUI rules files also accept individual IPv4 addresses
 
-+ `upstream_proxy`: Required when selective routing is enabled. Use your own dedicated Clash SOCKS5 listener with a literal loopback IP and its actual port, pinned to an Internet group. Empty by default
++ `upstream_proxy`: Required when selective routing is enabled. Use your own dedicated Clash SOCKS5 listener with a literal loopback IP and its actual port, pinned to an Internet group. Empty by default; set to `"direct"` for standalone routing through the physical interface.
+
++ `mode`: `"rule"` (default) routes by campus rules; `"global"` sends all captured traffic through the campus tunnel and requires standalone mode.
 
 + `rules_file`: Optional path to a JSON rules file. When set, it replaces the three inline rule lists above and reloads automatically after saving. Use the desktop GUI to enable or disable individual rules. Updated rules apply to new connections
 
 ## FDU TUN mode
 
 1. **When routing with Clash TUN, enable only Clash's system TUN and keep FDU's `tun_mode` and `add_route` disabled.** This fork uses a userspace network stack to access campus resources without creating another FDU virtual adapter.
-2. The following notes apply to ordinary mode with FDU's own TUN enabled. This mode cannot be combined with this fork's selective routing.
+2. GUI standalone mode supports `routing.enabled = true`, `routing.upstream_proxy = "direct"`, and `tun_mode = true`; see [standalone mode](standalone.md). The following legacy TUN notes apply only when `routing.enabled = false`.
 3. FDU TUN requires administrator privileges. On Windows, download `wintun.dll` from the [Wintun website](https://www.wintun.net) and place it next to the executable.
 4. When using aTrust with FDU's own TUN, enable `dns-hijack` and `fake-ip` to handle domain resources correctly.

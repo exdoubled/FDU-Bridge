@@ -129,6 +129,10 @@ input, textarea, select, button { font: inherit; color: inherit; }
 .hint:hover .hint-tip, .hint:focus-visible .hint-tip { display: block; }
 
 /* Home */
+.connection-card { padding: 0; overflow: hidden; }
+.connection-options { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 16px 24px; border-bottom: 1px solid var(--border); }
+.usage-selector { width: 250px; max-width: 100%; margin-right: auto; }
+.connection-help { padding: 0 24px 18px; font-size: 13px; line-height: 1.8; }
 .hero { position: relative; overflow: hidden; display: flex; align-items: center; gap: 18px; padding: 22px 24px; transition: border-color 0.2s; }
 .hero::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: transparent; transition: background 0.2s; }
 .hero.on { background: linear-gradient(100deg, color-mix(in srgb, var(--success) 8%, var(--card)), var(--card) 60%); border-color: color-mix(in srgb, var(--success) 24%, var(--border)); }

@@ -200,6 +200,9 @@ func PreviewMigration(source, destination string, autoStart bool) (*Migration, e
 	if file := p.preferences.Integration.RuntimeFile; file != "" && (old.Private(file) || strings.EqualFold(filepath.Clean(file), source)) {
 		p.preferences.Integration = appconf.Integration{Mode: "auto"}
 	}
+	if file := p.preferences.ClashIntegration.RuntimeFile; file != "" && (old.Private(file) || strings.EqualFold(filepath.Clean(file), source)) {
+		p.preferences.ClashIntegration = appconf.Integration{Mode: "auto"}
+	}
 	if root := p.preferences.ClashDir; root != "" && (old.Private(root) || strings.EqualFold(filepath.Clean(root), source)) {
 		p.preferences.ClashDir = appconf.DefaultClashDir()
 	}
