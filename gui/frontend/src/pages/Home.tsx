@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { ArrowRight, Globe, LoaderCircle, Route, Shield, ShieldAlert, ShieldCheck } from "lucide-react";
-import { ClashService, CoreService, RulesService, errorText, type ApplyState, type NodeState } from "../lib/api";
+import { ClashService, CoreService, RulesService, SettingsService, errorText, type ApplyState, type NodeState } from "../lib/api";
 import { counts, type Draft } from "../lib/rulesDraft";
 import { formatUptime, stateLabel, stateTone } from "../lib/status";
 import { useStore } from "../store";
 import { Banner, CardTitle, Segmented, Spinner, Switch } from "../components/ui";
 import { CampusChecks, TrafficCards } from "../components/NetworkTools";
+import { missingUISCredentials } from "../lib/settingsForm";
 
 function useNow(active: boolean) {
   const [now, setNow] = useState(Date.now());
@@ -25,6 +26,8 @@ export function Home() {
   const [nodesError, setNodesError] = useState("");
   const [rules, setRules] = useState<{ enabled: number; disabled: number; status: ApplyState; hash: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loginMessage, setLoginMessage] = useState<string | null>(null);
+  const loginReady = loginMessage === "";
   const now = useNow(status.connected);
   const tone = stateTone(status);
   const HeroIcon = heroIcons[tone];
@@ -33,6 +36,16 @@ export function Home() {
   const routeMode = config?.standaloneMode || "rule";
   const tun = !!config?.standaloneTun;
   const locked = busy || active || status.stopping || status.external || !config;
+
+  useEffect(() => {
+    let cancelled = false;
+    SettingsService.Current().then((view) => {
+      if (cancelled) return;
+      if (!view) { setLoginMessage("请先在设置中导入 VPN 配置"); return; }
+      setLoginMessage(missingUISCredentials(view.values) ? "UIS 自动登录需要同时填写账号、密码和 TOTP 密钥" : "");
+    }).catch(() => { if (!cancelled) setLoginMessage("无法读取登录配置，请前往设置检查"); });
+    return () => { cancelled = true; };
+  }, [versions.settings]);
 
   const saveUsage = async (mode: string, routingMode = routeMode, enableTUN = tun) => {
     setBusy(true);
@@ -82,7 +95,7 @@ export function Home() {
   const relogin = async () => {
     setBusy(true);
     try {
-      if (!(await confirm({ title: "重新登录", message: status.state === "authentication" ? "结束当前登录并重新打开登录窗口，保留配置和校园规则。" : "重新认证，保留配置和校园规则。校内连接可能暂时中断。", confirm: "重新登录" }))) return;
+      if (!(await confirm({ title: "重新登录", message: status.state === "authentication" ? "结束当前认证并重新登录，保留配置和校园规则。" : "重新认证，保留配置和校园规则。校内连接可能暂时中断。", confirm: "重新登录" }))) return;
       await CoreService.Relogin();
     } catch (e) {
       fail(e);
@@ -137,11 +150,11 @@ export function Home() {
             {busy && <Spinner size={18} />}
             {canRelogin && (
               <button className={`btn sm ${status.authRequired ? "primary" : "ghost hero-relogin"}`} onClick={relogin}
-                disabled={busy || status.stopping || (status.starting && !status.authRequired && !["campus-unavailable", "authentication"].includes(status.state))}>
+                disabled={busy || !loginReady || status.stopping || (status.starting && !status.authRequired && !["campus-unavailable", "authentication"].includes(status.state))}>
                 重新登录
               </button>
             )}
-            <Switch large checked={active} disabled={busy || status.stopping || (!active && status.external)} onChange={togglePower} label="启用校内访问" />
+            <Switch large checked={active} disabled={busy || status.stopping || (!active && (status.external || !loginReady))} onChange={togglePower} label="启用校内访问" />
           </div>
           {standalone && <div className="connection-help">
             <div>{routeMode === "global" ? "所有接入流量走校园隧道，学校未授权的目标可能无法访问。" : "校园规则走 FDU，其余流量直连。"}</div>
@@ -149,6 +162,10 @@ export function Home() {
             {tun && !status.admin && <div className="note warning-text">开启 TUN 需要以管理员或 root 身份运行。</div>}
           </div>}
           </section>
+
+          {loginMessage && <Banner tone="info">
+            {loginMessage} <button className="link" onClick={() => navigate("settings", "uis-login")}>前往设置 <ArrowRight size={14} /></button>
+          </Banner>}
 
           <div className="grid-2">
             {standalone ? <section className="card">

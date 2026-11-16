@@ -9,6 +9,18 @@ export interface Field {
 
 export type Values = { [key: string]: unknown };
 
+export function usesUISLogin(values: Values): boolean {
+  return values.protocol === "atrust" && values.auth_type === "auth/httpsOauth2"
+    && values.login_domain === "id.fudan.edu.cn" && !values.oauth2_code;
+}
+
+/** True when UIS credentials are partly filled. All blank falls back to browser login. */
+export function missingUISCredentials(values: Values): boolean {
+  if (!usesUISLogin(values)) return false;
+  const filled = ["username", "password", "totp_secret"].map((key) => !!String(values[key] ?? "").trim());
+  return filled.includes(true) && filled.includes(false);
+}
+
 /** Groups with their own section; the rest fold into 高级. */
 export const primaryGroups: { group: string; title: string }[] = [
   { group: "登录", title: "账户与服务器" },

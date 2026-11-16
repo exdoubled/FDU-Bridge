@@ -12,13 +12,13 @@ This page lists the command-line core arguments, for running the core manually o
 
 + `port`: VPN server port, default is `443`
 
-+ `username`: Network account, such as a student ID. Leave blank for Fudan UIS browser login
++ `username`: Network account, such as a student ID. Required for automatic Fudan UIS login; the field under Settings → UIS automatic login saves automatically on blur
 
-+ `password`: Network account password. Leave blank for Fudan UIS browser login. For other password-based authentication, use the `ZJU_CONNECT_PASSWORD` environment variable
++ `password`: Network account password. Required for automatic Fudan UIS login. The CLI also accepts the `ZJU_CONNECT_PASSWORD` environment variable
 
 + `graph-code-file`: Graphic captcha file path, empty by default. In aTrust mode, leave blank to complete the captcha in a browser. If a path is set, the program saves the captcha image there and prompts for JSON input in the terminal
 
-+ `totp-secret`: TOTP secret, can be used to automatically complete TOTP verification. If the server doesn't require TOTP or you want to manually enter the code, leave blank. (Sensitive information is recommended to be provided via env `ZJU_CONNECT_TOTP_SECRET`)
++ `totp-secret`: The Base32 key from authenticator enrollment, not a six-digit code. Fudan UIS uses it to generate second-factor codes automatically. The GUI saves it locally on blur under Settings → UIS automatic login; lowercase, whitespace, and trailing padding are accepted. The CLI also accepts `ZJU_CONNECT_TOTP_SECRET`. Other gateways can still prompt for a code when this is empty
 
 + `disable-remote-dns`: Disable remote DNS and use local DNS instead, generally no need to add this argument
 
@@ -104,7 +104,7 @@ The old `disable_zju_dns` and `zju_dns_server` names, including their command-li
 
 ## aTrust arguments
 
-+ `auth-type`: aTrust authentication type. Supports `auth/psw` (password), `auth/cas` (CAS), `auth/smsCheckCode` (SMS verification), and `auth/httpsOauth2` (browser OAuth2 verification). Fudan UIS uses `auth/httpsOauth2`
++ `auth-type`: aTrust authentication type. Supports `auth/psw` (password), `auth/cas` (CAS), `auth/smsCheckCode` (SMS verification), and `auth/httpsOauth2` (OAuth2 verification). Fudan UIS uses `auth/httpsOauth2` with `login-domain=id.fudan.edu.cn` to submit the account password and TOTP directly; other OAuth2 domains retain browser login
 
 + `login-domain`: Login domain. The built-in default is `Radius`; the Fudan UIS configuration uses `id.fudan.edu.cn`
 

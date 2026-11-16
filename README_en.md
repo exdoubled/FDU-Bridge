@@ -8,7 +8,7 @@ A desktop campus-network tool for Fudan University. With a Clash/Mihomo client, 
 
 ## Features
 
-- Complete UIS login in a browser and capture the authentication callback automatically.
+- Sign in with the UIS account, password, and TOTP secret without opening a browser for second-factor verification.
 - Choose, entry by entry, which exact domains, domain suffixes, IPv4 addresses, or subnets use FDU. Saved rules reload automatically; new connections use them, existing connections keep their routes.
 - Connect to Clash Verge Rev (including portable installs) with one switch, or to other Mihomo desktop clients. Global/rule mode and subscription changes are followed, and the outside exit is restored when disabled.
 - Desktop GUI for Windows, macOS, and Linux with login, connection control, logs, Internet nodes, campus resources, and advanced settings.
@@ -22,7 +22,7 @@ After a diagnosis, click **Preview redacted report (预览脱敏报告)** below 
 1. Download the version for your system from [Releases](https://github.com/exdoubled/FDU-Bridge/releases). On Windows, run `*-Windows-x64-setup.exe` and follow the installation wizard; on other systems, download and extract the archive.
 2. Open your Clash client, pick a subscription and outside node, and use global or rule mode.
 3. Launch the GUI (see the table) and confirm the target in **Settings → Proxy Integration (代理接入)**. If several clients are running, select one and save.
-4. Enable **campus access (校内访问)** on Home, confirm the first-use prompt, and complete UIS login in the browser window.
+4. Enter the **UIS account, password, and TOTP secret** under **Settings → UIS automatic login (UIS 自动登录)**. Each field saves automatically when it loses focus. Enable **campus access (校内访问)** and confirm the first-use prompt. Use the Base32 key from authenticator enrollment; subsequent logins generate fresh codes automatically.
 5. In **Campus Resources (校内资源)**, add domains or IPs, enable entries, and save.
 
 Campus Resources can import/export JSON with every entry and its enabled state. Preview an import, then merge or replace the current draft; click **Save (保存)** to apply it. Merge keeps the current draft's switches for existing entries. Export includes unsaved edits and excludes login information.
@@ -70,11 +70,11 @@ In global mode, the return listener is pinned to `INTERNET` to avoid looping bac
 ## FAQ
 
 <details>
-<summary>Requirements, login browser, data directories, and upgrades</summary>
+<summary>Requirements, automatic login, data directories, and upgrades</summary>
 
 - **Requirements**: the Windows `*-Windows-x64-setup.exe` includes the WebView2 offline installer, and the setup wizard installs the dependency when needed without another download. The lightweight `*-Windows-x64.zip` package is used for in-app updates and requires an existing Runtime; rerun setup to repair it if the Runtime is removed. The macOS app is not notarized; open it the first time by right-clicking it in Finder and choosing Open. Linux needs GTK 4 and WebKitGTK 6.0.
 - **Windows startup failures**: startup preparation and interface initialization failures display a native error message. The log is at `%LOCALAPPDATA%\FDU Connect\logs\startup.log`. An unwritable log does not prevent startup; any later fatal error is still shown directly.
-- **Login browser**: automatic UIS login needs Edge, Chrome, Chromium, or Brave. A compatible default browser is preferred, and no callback URL needs pasting.
+- **Automatic login**: Fudan UIS uses the account password and bound TOTP secret directly, without a browser. Credentials are saved in the GUI's local `client.toml` and its configuration backups; disconnect to edit or clear them in Settings. Failed authentication reports an error without opening a webpage or repeatedly submitting rejected codes.
 - **Recovery and expired login**: selective Clash connections retry transient failures automatically. An expired session pauses retries; click **Relogin (重新登录)** on Home to authenticate again. Disabling campus access stops retries and keeps rules and settings.
 - **Automatic connection on startup**: after integration consent and auto-connect are enabled, FDU waits for the Clash client and local controller to start before enabling campus access. Disable access from Home or the tray, or quit, to cancel the wait. Invalid settings, ambiguous targets, and rejected controller requests stop the attempt and display an error. Standalone mode does not wait for Clash.
 - **Discovery fails**: use manual integration, or standalone mode if the client lacks the required capabilities.

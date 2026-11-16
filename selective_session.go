@@ -78,7 +78,8 @@ func runSelectiveSessions(ctx context.Context, connect selectiveConnectFunc, rel
 		var retry <-chan time.Time
 		var timer *time.Timer
 		switch {
-		case errors.Is(err, auth.ErrSessionInvalid):
+		case errors.Is(err, auth.ErrSessionInvalid), errors.Is(err, auth.ErrUISRejected):
+			// Rejected credentials are never retried automatically; wait for the user.
 			state("auth-required")
 		case selectiveTransientError(err):
 			state("reconnecting")
@@ -111,7 +112,7 @@ func runSelectiveSessions(ctx context.Context, connect selectiveConnectFunc, rel
 }
 
 func selectiveTransientError(err error) bool {
-	if err == nil || errors.Is(err, auth.ErrSessionInvalid) || errors.Is(err, context.Canceled) {
+	if err == nil || errors.Is(err, auth.ErrSessionInvalid) || errors.Is(err, auth.ErrUISRejected) || errors.Is(err, context.Canceled) {
 		return false
 	}
 	if errors.Is(err, atrustclient.ErrNoReachableNodes) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, net.ErrClosed) || errors.Is(err, context.DeadlineExceeded) {

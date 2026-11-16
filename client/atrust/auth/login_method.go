@@ -39,8 +39,10 @@ func NewLoginMethod(options LoginMethodOptions) (LoginMethod, error) {
 		}, nil
 	case "auth/httpsOauth2":
 		return HTTPSOauth2Login{
-			Domain: options.Domain,
-			Code:   options.OAuth2Code,
+			Domain:   options.Domain,
+			Code:     options.OAuth2Code,
+			Username: options.Username,
+			Password: options.Password,
 		}, nil
 	case "auth/smsCheckCode":
 		return SMSLogin{

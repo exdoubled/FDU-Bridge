@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/mythologyli/zju-connect/client/authchallenge"
 	"github.com/mythologyli/zju-connect/log"
@@ -14,6 +15,8 @@ type HTTPSOauth2Login struct {
 	Domain   string
 	Code     string
 	Callback string
+	Username string
+	Password string
 }
 
 func (m HTTPSOauth2Login) AuthType() string {
@@ -25,7 +28,21 @@ func (m HTTPSOauth2Login) LoginDomain() string {
 }
 
 func (m HTTPSOauth2Login) login(s *Session, authInfo AuthInfo) error {
-	return s.loginAuthHttpsOauth2(authInfo.LoginURL, m.Domain, m.Code, m.Callback)
+	callback := m.Callback
+	// Accounts without UIS credentials (CAPTCHA, SMS-only, unbound TOTP) keep
+	// the interactive browser login.
+	if m.Domain == "id.fudan.edu.cn" && callback == "" && m.Code == "" && m.hasUISCredentials(s) {
+		var err error
+		callback, err = s.loginFudanUIS(authInfo.LoginURL, m.Username, m.Password)
+		if err != nil {
+			return err
+		}
+	}
+	return s.loginAuthHttpsOauth2(authInfo.LoginURL, m.Domain, m.Code, callback)
+}
+
+func (m HTTPSOauth2Login) hasUISCredentials(s *Session) bool {
+	return strings.TrimSpace(m.Username) != "" || m.Password != "" || strings.TrimSpace(s.totpSecret) != ""
 }
 
 func (s *Session) loginAuthHttpsOauth2(loginURL, loginDomain, code, callback string) error {

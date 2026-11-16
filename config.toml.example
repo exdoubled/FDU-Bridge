@@ -2,15 +2,16 @@
 # Desktop: open Clash Verge Rev, launch FDU Connect, and enable campus access.
 # The GUI creates its own config and rules, detects Clash's ports, and starts UIS login.
 # Standalone CLI: copy to config.toml and run with -config config.toml.
-# Complete UIS login in the browser on Windows, or follow the terminal prompts elsewhere.
+# UIS signs in directly with the account password and bound TOTP secret, without a browser.
 # Set your application's proxy to the local SOCKS5 or HTTP address below.
 # Optional Clash selective routing is disabled until its prerequisites are configured.
 # CLI defaults and the ZJU_CONNECT_ environment variable prefix remain unchanged.
 protocol = "atrust" # "easyconnect" or "atrust"
 server_address = "vpn.fudan.edu.cn"
 server_port = 443
-username = "" # UIS OAuth2 uses the browser login flow, not these password fields.
+username = "" # Fudan UIS account (student/staff ID).
 password = ""
+totp_secret = "" # Bound Base32 authenticator key, not a six-digit code. Required for Fudan UIS; the GUI autosaves it locally.
 disable_zju_config = true # Only affects EasyConnect.
 disable_remote_dns = false
 socks_bind = "127.0.0.1:1080"
@@ -49,7 +50,6 @@ custom_dns = [
 
 
 # EasyConnect specific settings
-totp_secret = ""
 cert_file = ""
 cert_password = ""
 disable_server_config = false

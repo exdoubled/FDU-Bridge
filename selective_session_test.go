@@ -177,6 +177,32 @@ func TestSelectiveUnknownSetupFailureRetriesWithoutInteractiveLogin(t *testing.T
 	awaitSelective(t, done)
 }
 
+func TestSelectiveRejectedUISCredentialsAreNotRetried(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	attempts := make(chan selectiveSessionMode, 3)
+	states := make(chan string, 3)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		runSelectiveSessions(ctx, func(_ context.Context, mode selectiveSessionMode, _ func()) error {
+			attempts <- mode
+			return fmt.Errorf("login: %w", auth.ErrUISRejected)
+		}, nil, func(state string) { states <- state }, time.Millisecond)
+	}()
+	awaitSelective(t, attempts)
+	if got := awaitSelective(t, states); got != "auth-required" {
+		t.Fatalf("state = %q", got)
+	}
+	select {
+	case <-attempts:
+		t.Fatal("rejected UIS credentials were retried automatically")
+	case <-time.After(150 * time.Millisecond):
+	}
+	cancel()
+	awaitSelective(t, done)
+}
+
 func awaitSelective[T any](t *testing.T, ch <-chan T) T {
 	t.Helper()
 	select {
