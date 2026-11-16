@@ -6,7 +6,7 @@ import { formatUptime, stateLabel, stateTone } from "../lib/status";
 import { useStore } from "../store";
 import { Banner, CardTitle, Segmented, Spinner, Switch } from "../components/ui";
 import { CampusChecks, TrafficCards } from "../components/NetworkTools";
-import { usesUISLogin } from "../lib/settingsForm";
+import { missingUISCredentials } from "../lib/settingsForm";
 
 function useNow(active: boolean) {
   const [now, setNow] = useState(Date.now());
@@ -42,8 +42,7 @@ export function Home() {
     SettingsService.Current().then((view) => {
       if (cancelled) return;
       if (!view) { setLoginMessage("请先在设置中导入 VPN 配置"); return; }
-      const missing = usesUISLogin(view.values) && ["username", "password", "totp_secret"].some((key) => !String(view.values[key] ?? "").trim());
-      setLoginMessage(missing ? "请先在设置中填写 UIS 账号、密码和 TOTP 密钥" : "");
+      setLoginMessage(missingUISCredentials(view.values) ? "请先在设置中填写 UIS 账号、密码和 TOTP 密钥" : "");
     }).catch(() => { if (!cancelled) setLoginMessage("无法读取登录配置，请前往设置检查"); });
     return () => { cancelled = true; };
   }, [versions.settings]);

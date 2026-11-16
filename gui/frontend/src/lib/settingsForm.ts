@@ -14,6 +14,11 @@ export function usesUISLogin(values: Values): boolean {
     && values.login_domain === "id.fudan.edu.cn" && !values.oauth2_code;
 }
 
+/** True when UIS login applies but a credential it needs is still blank. */
+export function missingUISCredentials(values: Values): boolean {
+  return usesUISLogin(values) && ["username", "password", "totp_secret"].some((key) => !String(values[key] ?? "").trim());
+}
+
 /** Groups with their own section; the rest fold into 高级. */
 export const primaryGroups: { group: string; title: string }[] = [
   { group: "登录", title: "账户与服务器" },
