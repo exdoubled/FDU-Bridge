@@ -7,20 +7,20 @@ A desktop campus-network tool for Fudan University. Open campus-only sites such 
 Runs on Windows, macOS and Linux with a graphical interface. Built on [ZJU Connect](https://github.com/Mythologyli/zju-connect).
 
 > [!NOTE]
-> This program is provided **as is**, without any guarantee of correctness or reliability. You are responsible for any consequences of using it. It only connects you to the university's aTrust VPN and does not extend the access the university grants you.
+> This program is provided **as is**, without any guarantee of correctness or reliability. You are responsible for any consequences of using it.
 
 ![Home: with Clash](docs/images/home-clash.png)
 
 ## What does it do?
 
-Say you normally browse through Clash and want to search a library database from off campus. FDU Bridge will:
+Say you browse through Clash with a virtual network adapter (TUN) enabled. When you try to search a library database from off campus, that setup can conflict with the campus VPN. FDU Bridge will:
 
 1. Sign in to the campus VPN with your UIS account and one-time-password key, so you no longer open a web page and type a code from your phone each time;
 2. Send only the campus sites you choose (for example `library.fudan.edu.cn` or `fdu.edu.cn`) through the campus VPN;
 3. Leave all other traffic on Clash, keeping your nodes, rules and global/rule mode unchanged;
 4. Restore Clash's outside exit when you turn campus access off.
 
-You can also skip Clash: choose **Standalone**, and FDU Bridge provides its own local proxies or captures the whole computer's traffic with TUN.
+To use FDU Bridge without Clash, choose **Standalone**. It provides its own local proxies or captures the whole computer's traffic with TUN. For specialized setups, you can also use the command-line core.
 
 The interface is currently in Chinese; the English labels below are followed by the Chinese text you will see.
 
@@ -32,22 +32,21 @@ Download the build for your system from [Releases](https://github.com/exdoubled/
 
 | System | Download | How to open |
 | --- | --- | --- |
-| Windows | `*-Windows-x64-setup.exe` | Run the installer, then open **FDU Connect** from the Start menu |
+| Windows | `*-Windows-x64-setup.exe` | Run the installer, then open **FDU Connect** |
 | macOS | `*-macOS-universal.zip` | Unzip and open `FDU Connect.app`; the first time, right-click it in Finder and choose Open |
 | Linux | `*-linux-amd64.tar.gz` | Extract and run `fdu-connect-gui`; requires GTK 4 and WebKitGTK 6.0 |
 
 The Windows installer bundles WebView2, so nothing else needs downloading. `*-Windows-x64.zip` is the lightweight package used for in-app updates; use `setup.exe` for the first install.
 
-### Step 2: Bind an authenticator and keep the TOTP key
+### Step 2: Set up one-time passwords and save the TOTP key
 
 UIS sign-in requires a second factor. FDU Bridge generates the codes from a **TOTP key**, so you first need to bind a one-time password in UIS:
 
 1. Open [UIS user center → Account security](https://id.fudan.edu.cn/uc/#/pc/userCenter/accountSecurity) and bind a one-time password (动态口令).
 2. The binding page shows a QR code and a **Base32 key** (something like `JBSWY3DPEHPK3PXP`). **Copy and keep this key**; it is your TOTP key.
-3. Also scan the QR code with an authenticator app (Microsoft Authenticator, Google Authenticator, etc.) to finish binding, so you can still sign in to UIS manually.
 
 > [!IMPORTANT]
-> Enter the **key shown during binding**, not the six-digit code that changes every 30 seconds. If you bound an authenticator before but did not keep the key, unbind it in UIS and bind again.
+> Enter the **Base32 key shown on the UIS setup page**. The six-digit code in your authenticator changes every 30 seconds and cannot be used in this field.
 
 ### Step 3: Enter your sign-in details
 
@@ -64,7 +63,7 @@ Each field saves automatically when it loses focus. The card shows **Ready (已�
 ![Settings: UIS automatic login](docs/images/settings-uis.png)
 
 > [!TIP]
-> Leave all three fields empty to use the web login instead: enabling campus access opens the UIS page, and you complete verification there. Use this if your account needs a captcha, only offers SMS verification, or you prefer not to store the password. Partly filled fields are not accepted; Home asks you to complete them.
+> Leave all three fields empty to use web login. When you enable campus access, the UIS sign-in page opens so you can complete verification. If you fill in only some fields, the Home page prompts you to complete the rest.
 
 ### Step 4: Choose how to use it
 
@@ -126,13 +125,13 @@ Saved rules apply to new connections immediately; existing connections keep thei
 
 1. **Check coverage on Home (覆盖范围).** With Clash and without Clash TUN, only applications that use Clash's proxy are captured. Campus addresses bypassed by your system proxy still connect directly, so adjust the bypass list yourself.
 2. **Use the Diagnostics page (诊断).** Enter the URL that fails to see whether it matches a campus rule, the login and tunnel state, and the result of each DNS/TCP/TLS/HTTP step with suggestions.
-3. **To report a problem**, click **Preview redacted report (预览脱敏报告)** under the result, review it, then copy or export it. The report excludes account details, tokens, cookies, personal paths and custom campus hosts, so it is safe to attach to an issue.
+3. **To report a problem**, click **Preview redacted report (预览脱敏报告)** under the result, review it, then copy or export it. The report excludes account details, tokens, cookies, personal paths and custom campus hosts, so you can attach it directly to an issue.
 4. **Expired login:** Home tells you to sign in again; click **Relogin (重新登录)**. Rules and settings are kept. Temporary network drops reconnect automatically.
 
 > [!WARNING]
 > **Compliance and security**
 >
-> - Use this tool only to reach resources the university has granted you, and follow the university's network and information-security rules. Do not use global mode to turn the campus VPN into a general-purpose exit.
+> - Use this tool only for personal access to resources the university has authorized you to use. Follow the university's network and information-security rules.
 > - The password and TOTP key are **stored in plain text** in the local `client.toml`, and in the configuration backups made when connecting to Clash. Do not share these files. After using a shared computer, clear the credentials in Settings and delete the directories listed under "Where is the configuration stored?" below.
 > - The TOTP key is your second sign-in factor; anyone who has it can generate your codes. If you suspect it leaked, unbind and rebind the one-time password in UIS and change your password.
 
@@ -160,7 +159,7 @@ Saved rules apply to new connections immediately; existing connections keep thei
 <details>
 <summary>Can I use it together with Clash TUN?</summary>
 
-Yes, and that is recommended: with Clash, enable only Clash's TUN to cover every application. FDU Bridge does not create another virtual adapter; its login and VPN connections are bound to the physical interface so Clash TUN does not capture them again. Use FDU's own TUN only in standalone mode, and turn off other VPNs' TUN first.
+Yes. FDU Bridge was originally built to work with Clash TUN, and this is the recommended setup. Enable only Clash's TUN to cover every application. FDU Bridge does not create another virtual adapter. It binds its sign-in and VPN connections to the physical network interface so Clash TUN does not capture them again. Use FDU's own TUN only in standalone mode, and turn off other VPNs' TUN first.
 
 </details>
 
